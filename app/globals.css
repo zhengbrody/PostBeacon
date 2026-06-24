@@ -1,0 +1,58 @@
+@import "tailwindcss";
+
+/*
+ * PostBeacon design tokens. The accent scale is the single source of brand color —
+ * components reference `accent-*` (not raw violet) so the brand can be retuned here.
+ */
+@theme {
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+
+  --color-ink: #07070b; /* page background */
+  --color-surface: #0f0f16; /* cards */
+  --color-surface-2: #16161f; /* inputs, raised */
+  --color-line: #23232e; /* borders */
+
+  --color-accent-300: #c4b5fd;
+  --color-accent-400: #a78bfa;
+  --color-accent-500: #8b5cf6;
+  --color-accent-600: #7c3aed;
+  --color-accent-700: #6d28d9;
+}
+
+@layer base {
+  html {
+    color-scheme: dark;
+    scroll-behavior: smooth;
+  }
+  body {
+    background: var(--color-ink);
+    color: #e9e9ee;
+    -webkit-font-smoothing: antialiased;
+  }
+  /* Consistent, accessible focus ring everywhere. */
+  :focus-visible {
+    outline: 2px solid var(--color-accent-500);
+    outline-offset: 2px;
+  }
+}
+
+@layer utilities {
+  .bg-grid {
+    background-image: radial-gradient(
+      circle at 1px 1px,
+      rgba(255, 255, 255, 0.04) 1px,
+      transparent 0
+    );
+    background-size: 28px 28px;
+  }
+  .text-gradient {
+    background: linear-gradient(
+      90deg,
+      var(--color-accent-300),
+      var(--color-accent-500)
+    );
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+}
