@@ -12,6 +12,7 @@ export default function LandingPage() {
       <Hero />
       <HowItWorks />
       <PlatformShowcase />
+      {/* Pricing hidden during beta — everything is free/open. Re-add <Pricing /> to monetize. */}
       <FAQ />
       <Footer />
     </>

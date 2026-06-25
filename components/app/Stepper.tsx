@@ -1,10 +1,10 @@
 import type { Step } from "@/hooks/useLaunchFlow";
 
 const STEPS: { id: Step; label: string }[] = [
-  { id: "input", label: "URL" },
-  { id: "profile", label: "Profile" },
+  { id: "input", label: "Analyze" },
+  { id: "profile", label: "Diagnose" },
   { id: "strategy", label: "Strategy" },
-  { id: "results", label: "Content & plan" },
+  { id: "results", label: "Launch plan" },
 ];
 
 export function Stepper({ step }: { step: Step }) {

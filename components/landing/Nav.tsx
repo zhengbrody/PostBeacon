@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ButtonLink } from "@/components/ui/Button";
+import { SignIn } from "@/components/app/SignIn";
 
 export function Nav() {
   return (
@@ -18,6 +19,9 @@ export function Nav() {
           <a href="#faq" className="hidden rounded-lg px-3 py-2 text-neutral-300 hover:text-white sm:block">
             FAQ
           </a>
+          <div className="ml-1 hidden md:block">
+            <SignIn />
+          </div>
           <ButtonLink href="/app" size="sm" className="ml-2">
             Launch app →
           </ButtonLink>

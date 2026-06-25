@@ -1,4 +1,4 @@
-# CLAUDE.md — PostBeacon
+# AGENTS.md — PostBeacon
 
 > Living architecture + status doc. Keep this updated as the project evolves.
 
@@ -14,7 +14,7 @@ specific product, then generates **ready-to-post** native content + a launch cal
 
 ## Stack
 Next.js 15 (App Router) · React 19 · Tailwind v4 · TypeScript (strict) ·
-Claude/OpenAI (switchable) · Supabase (optional accounts) · cheerio (scraping). Deploys to Vercel.
+Claude/OpenAI (switchable) · Supabase (optional accounts) · cheerio + Firecrawl (scraping). Deploys to Vercel.
 
 ## Data flow
 ```
@@ -42,8 +42,7 @@ lib/
   types.ts              All shared types (Provider, ProductProfile, MarketingStrategy, ...)
   platforms.ts          THE platform universe (catalog + per-platform voice rules). Most-tuned file.
   llm.ts                Claude/OpenAI abstraction → generateJson()
-  generate.ts           Per-platform content+playbook prompt (generatePlatformPosts) — shared by generate+regenerate
-  voice.ts              ANTI_AI_RULES — house rules injected into content prompts to kill AI tells
+  generate.ts           Per-platform content prompt (generatePlatformPosts) — shared by generate+regenerate
   export.ts             Launch plan → Markdown / JSON; downloadFile helper
   dates.ts              scheduleDate(launchDate, day) for the calendar
   auth.ts               bearer(req) — read the Supabase token from a request
@@ -61,8 +60,7 @@ hooks/
   useAutosave.ts        Debounced persist: localStorage (anon) / Supabase upsert (signed-in)
 components/
   ui/                   Button, Card, Badge, Spinner, Field (design system primitives)
-  app/                  Stepper, UrlStep, ProfileForm, StrategyView, ResultsView (operating dashboard),
-                        PlanSummary (shared plan-section cards), ProjectBar, SignIn, Paywall, UsageBadge
+  app/                  Stepper, UrlStep, ProfileForm, StrategyView, ResultsView, ProjectBar, SignIn, Paywall, UsageBadge
   landing/              Nav, Hero, HowItWorks, PlatformShowcase, Pricing, FAQ, Footer
 supabase/schema.sql     projects table + row-level security
 ```
@@ -99,22 +97,6 @@ left unset → accounts off (anon + localStorage), generation open/unmetered, `P
 Redeploy: `npx vercel --prod --yes`. Push env from `.env.local`: `~/push-env.sh`.
 
 ## Status / changelog
-- **2026-06-24**: **M7 — AI-CMO operating system.** Upgraded from "content generator" to a full 0→1
-  launch plan, distributed across the existing 3 LLM calls (no new endpoints, keeps JSON reliable):
-  • **analyze** now forms a business *diagnosis* (`whatItIs`/`whyCare`/`useCase`/`confidence`).
-  • **strategy** is the full CMO plan: `executiveSummary`, `positioning`+`antiPositioning`,
-    `audienceSegments` (primary/secondary/early), `coldStart`+GTM `phases`, `founderChecklist`,
-    `risks`, `iterationLoop`, plus ranked channels enriched with `effort`/`confidence`/`bestMove`
-    (maxTokens 4000→8000). • **generate** emits a per-platform `playbook`
-    (whyThisPlatform/howToPost/whatToAvoid/firstReplies/postingWindow) alongside posts.
-  Anti-AI writing: new `lib/voice.ts` `ANTI_AI_RULES` + per-platform `persona` (HN restrained,
-  Reddit community-member, X hook-not-hype, LinkedIn earned-not-performed, PH maker-not-PR) with a
-  silent "would a native smell marketing?" self-check. UI: Stepper relabel (Analyze/Diagnose/
-  Strategy/Launch plan); Diagnosis read-out on the profile step; richer StrategyView; Results is now
-  a sectioned **operating dashboard** (Summary·Audience·Channels·Plan·Calendar·Content·Checklist·
-  Risks·Iterate) via new `components/app/PlanSummary.tsx` + per-channel playbook panels. All new
-  types optional in `lib/types.ts` (saved projects stay compatible); export.ts + autosave carry the
-  new fields for free. Build green.
 - **2026-06-24**: **DEPLOYED to production** — live at https://postbeacon.app (+ www) on Vercel.
   Beta posture: no Supabase / service-role / Polar configured → fully open & free, no payment UI.
 - **2026-06-24**: All platform `blurb`s translated to English (they surface in the launch-calendar

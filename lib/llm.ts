@@ -33,8 +33,12 @@ function resolveProvider(requested?: Provider): Provider {
   return avail[0];
 }
 
-/** Pull the first balanced JSON object/array out of a model response. */
-function extractJson(text: string): any {
+/**
+ * Slice the first balanced JSON object/array out of a model response, ignoring
+ * any prose/fences around it. Returns the raw substring — parsing is the
+ * caller's job so it can attempt a repair on failure.
+ */
+function sliceJson(text: string): string {
   const trimmed = text.trim().replace(/^```(?:json)?/i, "").replace(/```$/i, "");
   const start = trimmed.search(/[[{]/);
   if (start === -1) throw new Error("Model returned no JSON: " + text.slice(0, 200));
@@ -53,39 +57,48 @@ function extractJson(text: string): any {
     else if (c === open) depth++;
     else if (c === close) {
       depth--;
-      if (depth === 0) return JSON.parse(trimmed.slice(start, i + 1));
+      if (depth === 0) return trimmed.slice(start, i + 1);
     }
   }
-  throw new Error("Could not parse JSON from model output.");
+  // Unbalanced (e.g. truncated) — hand back what we have so repair can try.
+  return trimmed.slice(start);
 }
 
-/**
- * Single entry point. Sends a system + user prompt, returns parsed JSON.
- * Works across Claude and OpenAI so the rest of the app is provider-agnostic.
- */
-export async function generateJson(opts: {
-  provider?: Provider;
-  system: string;
-  user: string;
-  maxTokens?: number;
-}): Promise<any> {
-  const provider = resolveProvider(opts.provider);
-  const maxTokens = opts.maxTokens ?? 4000;
+/** Parse model output into JSON, with a cheap, always-safe local repair pass. */
+function extractJson(text: string): any {
+  const sliced = sliceJson(text);
+  try {
+    return JSON.parse(sliced);
+  } catch {
+    // The only structural fix that can never corrupt content: drop trailing
+    // commas before a closing } or ]. Anything else (e.g. an unescaped inner
+    // quote) is left to the model repair retry in generateJson.
+    return JSON.parse(sliced.replace(/,(\s*[}\]])/g, "$1"));
+  }
+}
 
+const JSON_GUARD =
+  "\n\nReturn ONLY valid JSON — no prose, no markdown fences. Inside string values, escape any double quote as \\\" and never use a raw newline (use \\n).";
+
+/** One raw model round-trip. Returns the model's text (JSON not yet parsed). */
+async function callRaw(
+  provider: Provider,
+  system: string,
+  user: string,
+  maxTokens: number
+): Promise<string> {
   if (provider === "claude") {
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
     const msg = await client.messages.create({
       model: ANTHROPIC_MODEL,
       max_tokens: maxTokens,
-      system: opts.system + "\n\nReturn ONLY valid JSON. No prose, no markdown fences.",
+      system: system + JSON_GUARD,
       messages: [
-        { role: "user", content: opts.user },
+        { role: "user", content: user },
         { role: "assistant", content: "{" }, // prefill nudges clean JSON
       ],
     });
-    const text =
-      "{" + msg.content.map((b) => (b.type === "text" ? b.text : "")).join("");
-    return extractJson(text);
+    return "{" + msg.content.map((b) => (b.type === "text" ? b.text : "")).join("");
   }
 
   // OpenAI and DeepSeek share the OpenAI SDK + chat-completions shape; DeepSeek
@@ -102,9 +115,39 @@ export async function generateJson(opts: {
     max_tokens: maxTokens,
     response_format: { type: "json_object" },
     messages: [
-      { role: "system", content: opts.system },
-      { role: "user", content: opts.user },
+      { role: "system", content: system + JSON_GUARD },
+      { role: "user", content: user },
     ],
   });
-  return extractJson(res.choices[0].message.content || "");
+  return res.choices[0].message.content || "";
+}
+
+/**
+ * Single entry point. Sends a system + user prompt, returns parsed JSON.
+ * Provider-agnostic. If the model emits malformed JSON (most commonly an
+ * unescaped quote inside a long prose value), one repair round-trip asks the
+ * model to return strictly valid JSON before we give up.
+ */
+export async function generateJson(opts: {
+  provider?: Provider;
+  system: string;
+  user: string;
+  maxTokens?: number;
+}): Promise<any> {
+  const provider = resolveProvider(opts.provider);
+  const maxTokens = opts.maxTokens ?? 4000;
+
+  const raw = await callRaw(provider, opts.system, opts.user, maxTokens);
+  try {
+    return extractJson(raw);
+  } catch {
+    // Repair pass: hand the broken text back and ask only for valid JSON.
+    const fixed = await callRaw(
+      provider,
+      "You fix malformed JSON. Output ONLY the corrected, strictly valid JSON — same data, properly escaped quotes, no trailing commas, no truncation.",
+      `This was meant to be a single JSON value but does not parse. Return the corrected JSON only:\n\n${raw}`,
+      maxTokens
+    );
+    return extractJson(fixed);
+  }
 }

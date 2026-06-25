@@ -2,24 +2,37 @@
 
 import Link from "next/link";
 import { useLaunchFlow } from "@/hooks/useLaunchFlow";
+import { useAutosave } from "@/hooks/useAutosave";
 import { Stepper } from "@/components/app/Stepper";
 import { UrlStep } from "@/components/app/UrlStep";
 import { ProfileForm } from "@/components/app/ProfileForm";
 import { StrategyView } from "@/components/app/StrategyView";
 import { ResultsView } from "@/components/app/ResultsView";
 import { ProjectBar } from "@/components/app/ProjectBar";
+import { Paywall } from "@/components/app/Paywall";
+import { UsageBadge } from "@/components/app/UsageBadge";
 import { Spinner } from "@/components/ui/Spinner";
 
 export default function AppPage() {
   const f = useLaunchFlow();
+  const { lastSaved, saving, saveNow } = useAutosave(f);
 
   return (
     <main className="mx-auto max-w-4xl px-5 py-8">
       <header className="mb-8 flex items-start justify-between gap-4">
-        <Link href="/" className="text-xl font-bold tracking-tight">
-          Post<span className="text-accent-400">Beacon</span>
-        </Link>
-        <ProjectBar snapshot={f.snapshot} onLoad={f.loadProject} />
+        <div className="flex items-center gap-3">
+          <Link href="/" className="text-xl font-bold tracking-tight">
+            Post<span className="text-accent-400">Beacon</span>
+          </Link>
+          <UsageBadge refreshKey={f.generations} />
+        </div>
+        <ProjectBar
+          snapshot={f.snapshot}
+          onLoad={f.loadProject}
+          lastSaved={lastSaved}
+          saving={saving}
+          onSaveNow={saveNow}
+        />
       </header>
 
       <Stepper step={f.step} />
@@ -80,10 +93,21 @@ export default function AppPage() {
       {f.step === "results" && f.result && (
         <ResultsView
           result={f.result}
+          strategy={f.strategy}
+          profile={f.profile}
           posted={f.posted}
           onTogglePosted={f.togglePosted}
+          onRegenerate={f.regeneratePost}
+          onUpdatePost={f.updatePost}
+          launchDate={f.launchDate}
+          setLaunchDate={f.setLaunchDate}
+          loading={f.loading}
           onReset={f.reset}
         />
+      )}
+
+      {f.paywall && (
+        <Paywall reason={f.paywall} onClose={() => f.setPaywall(null)} />
       )}
     </main>
   );

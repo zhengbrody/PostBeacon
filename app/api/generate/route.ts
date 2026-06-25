@@ -1,6 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { generateJson } from "@/lib/llm";
+import { generatePlatformPosts } from "@/lib/generate";
 import { getPlatforms } from "@/lib/platforms";
+import { meteringEnabled } from "@/lib/supabase/server";
+import {
+  getUserFromRequest,
+  getEntitlement,
+  canLaunch,
+  incrementLaunch,
+  FREE_LAUNCHES,
+} from "@/lib/usage";
 import type {
   Provider,
   ProductProfile,
@@ -25,34 +33,40 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Server-enforced metering (only when a service-role key is configured).
+    let userId: string | null = null;
+    if (meteringEnabled()) {
+      const user = await getUserFromRequest(req);
+      if (!user) {
+        return NextResponse.json(
+          { error: "Sign in to generate your launch content.", code: "auth" },
+          { status: 401 }
+        );
+      }
+      const ent = await getEntitlement(user.id);
+      if (!canLaunch(ent)) {
+        return NextResponse.json(
+          {
+            error: `You've used your ${FREE_LAUNCHES} free launches. Upgrade to Pro for unlimited.`,
+            code: "paywall",
+          },
+          { status: 402 }
+        );
+      }
+      userId = user.id;
+    }
+
     const platforms = getPlatforms(platformIds);
-    const profileBlock = JSON.stringify(profile, null, 2);
 
     // Generate content per platform in parallel — each platform has its own voice.
     const content: PlatformContent[] = await Promise.all(
       platforms.map(async (p) => {
-        const data = await generateJson({
-          provider,
-          maxTokens: 2500,
-          system: `You are a Chief Marketing Officer writing launch content for ${p.name}. Match the platform's native voice exactly. ${p.guidance}`,
-          user: `Product profile:
-${profileBlock}
-
-Write ${p.postCount} ready-to-post piece(s) for ${p.name}. Each must feel native to the platform and be copy-paste ready.
-
-Return JSON: { "posts": [ { "hook": string, "body": string, "imageSuggestion": string, "bestTime": string, "caveats": string } ] }
-- "hook": the headline / first line / tagline (whatever leads on this platform)
-- "body": the full post, ready to paste
-- "imageSuggestion": what visual to attach
-- "bestTime": ideal posting time (default to "${p.bestTime}")
-- "caveats": the #1 platform-specific thing to NOT do`,
-        });
-
-        return {
-          platformId: p.id,
-          platformName: p.name,
-          posts: Array.isArray(data.posts) ? data.posts : [],
-        };
+        const { posts, playbook } = await generatePlatformPosts(
+          profile,
+          p,
+          provider
+        );
+        return { platformId: p.id, platformName: p.name, posts, playbook };
       })
     );
 
@@ -65,6 +79,8 @@ Return JSON: { "posts": [ { "hook": string, "body": string, "imageSuggestion": s
         action: `Post to ${p.name} — ${p.blurb} (${p.bestTime})`,
       }))
       .sort((a, b) => a.day - b.day);
+
+    if (userId) await incrementLaunch(userId);
 
     const result: GenerateResult = { content, schedule };
     return NextResponse.json(result);

@@ -1,7 +1,18 @@
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { PriorityBadge } from "@/components/ui/Badge";
+import {
+  AudienceCard,
+  LaunchPlanCard,
+  PositioningCard,
+} from "@/components/app/PlanSummary";
 import type { MarketingStrategy, PlatformRecommendation } from "@/lib/types";
+
+const effortLabel: Record<NonNullable<PlatformRecommendation["effort"]>, string> = {
+  low: "Low effort",
+  medium: "Medium effort",
+  high: "High effort",
+};
 
 export function StrategyView({
   strategy,
@@ -20,22 +31,23 @@ export function StrategyView({
 }) {
   return (
     <div className="space-y-6">
-      <Card className="border-accent-700/50 bg-accent-600/10 p-6">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-accent-300">
-          Positioning
-        </h2>
-        <p className="mt-1.5 text-sm text-neutral-100">{strategy.positioning}</p>
-        <h2 className="mt-5 text-sm font-semibold uppercase tracking-wide text-accent-300">
-          The play
-        </h2>
-        <p className="mt-1.5 text-sm text-neutral-100">{strategy.overallStrategy}</p>
-      </Card>
+      <PositioningCard strategy={strategy} />
+
+      {strategy.audienceSegments && (
+        <AudienceCard segments={strategy.audienceSegments} />
+      )}
+
+      {strategy.phases && <LaunchPlanCard phases={strategy.phases} />}
 
       <Card className="p-6">
-        <div className="mb-4 flex items-center justify-between">
+        <div className="mb-1 flex items-center justify-between">
           <h2 className="text-lg font-semibold">Channels, ranked for your product</h2>
           <span className="text-xs text-neutral-500">{selected.length} selected</span>
         </div>
+        <p className="mb-4 text-xs text-neutral-500">
+          Pick where to spend your limited time. We only write content for the
+          channels you keep.
+        </p>
         <div className="space-y-2">
           {strategy.recommendations.map((r) => (
             <RecRow
@@ -51,15 +63,21 @@ export function StrategyView({
       {strategy.discoveries && strategy.discoveries.length > 0 && (
         <Card className="p-6">
           <h2 className="text-lg font-semibold">🔎 Niche channels to check out</h2>
-          <p className="mb-3 text-xs text-neutral-500">
-            AI-suggested — verify each link before posting (community invites can change).
-          </p>
+          {strategy.discoveries.some((d) => !d.validated) && (
+            <p className="mb-3 text-xs text-neutral-500">
+              Unchecked links are AI-suggested — verify before posting (community
+              invites can change).
+            </p>
+          )}
           <ul className="space-y-2 text-sm">
             {strategy.discoveries.map((d, i) => (
               <li key={i} className="rounded-lg bg-surface-2 px-3 py-2">
                 <a href={d.url} target="_blank" rel="noreferrer" className="font-medium text-accent-300">
                   {d.name}
                 </a>
+                {d.validated && (
+                  <span className="ml-2 align-middle text-xs text-emerald-400">✓ link checked</span>
+                )}
                 <span className="text-neutral-400"> — {d.why}</span>
               </li>
             ))}
@@ -104,9 +122,14 @@ function RecRow({
         {on ? "✓" : ""}
       </span>
       <span className="min-w-0 flex-1">
-        <span className="flex items-center gap-2">
+        <span className="flex flex-wrap items-center gap-2">
           <span className="text-sm font-medium">{rec.platformName}</span>
           <PriorityBadge priority={rec.priority} />
+          {rec.effort && (
+            <span className="text-[10px] uppercase tracking-wide text-neutral-500">
+              {effortLabel[rec.effort]}
+            </span>
+          )}
           <span className="ml-auto font-mono text-xs text-neutral-400">{rec.score}</span>
         </span>
         <span className="mt-1.5 block h-1 w-full overflow-hidden rounded bg-neutral-800">
@@ -114,6 +137,11 @@ function RecRow({
         </span>
         <span className="mt-1.5 block text-xs text-neutral-400">{rec.rationale}</span>
         {rec.angle && <span className="mt-1 block text-xs text-accent-300">↳ {rec.angle}</span>}
+        {rec.bestMove && (
+          <span className="mt-1 block text-xs text-neutral-400">
+            <span className="text-neutral-500">Best move:</span> {rec.bestMove}
+          </span>
+        )}
       </span>
     </button>
   );

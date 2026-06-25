@@ -19,6 +19,9 @@ export interface PlatformDef {
   defaultDay: number; // day offset in the launch sequence (1 = launch day)
   bestTime: string;
   guidance: string; // voice/format rules for content generation
+  persona?: string; // "who you are writing as" — grounds the anti-AI voice
+  longForm?: boolean; // ask the model for a full draft, not an outline
+  maxTokens?: number; // per-platform generation budget (defaults to 2500)
 }
 
 // English-first platform universe. The strategist scores ALL of these for a
@@ -29,7 +32,7 @@ export const PLATFORMS: PlatformDef[] = [
     id: "producthunt",
     name: "Product Hunt",
     category: "launch",
-    blurb: "Tagline + maker 首条评论",
+    blurb: "Tagline + maker's first comment",
     reaches: "early adopters, makers, tech press scouting new tools",
     effort: "high",
     postCount: 2,
@@ -37,12 +40,14 @@ export const PLATFORMS: PlatformDef[] = [
     bestTime: "12:01am PT launch day",
     guidance:
       "Produce (1) a tagline (<60 chars) and (2) the maker's first comment: who you are, why you built it, what's different, a question to spark discussion. Humble, specific, no hype words.",
+    persona:
+      "a maker posting their own thing, not a company doing PR. Tell the real reason you built it — the specific itch. Mention what it does NOT do yet. Ask makers a genuine question.",
   },
   {
     id: "hackernews",
     name: "Hacker News",
     category: "launch",
-    blurb: "Show HN 技术诚实贴",
+    blurb: "Show HN — honest technical post",
     reaches: "senior engineers, founders, deeply technical skeptics",
     effort: "high",
     postCount: 1,
@@ -50,12 +55,14 @@ export const PLATFORMS: PlatformDef[] = [
     bestTime: "Weekday 8–10am ET",
     guidance:
       "'Show HN: <name> – <what it does>' title + plain body. Radically de-marketed, technically honest: what it does, how built, the hard part, limitations. No adjectives. Comments are where it's won.",
+    persona:
+      "an engineer showing peers something you made. Restrained and technically honest. State limitations up front. Zero adjectives, zero marketing. Assume the reader is smarter and more skeptical than you. Bragging or hype will get you buried.",
   },
   {
     id: "betalist",
     name: "BetaList / launch dirs",
     category: "launch",
-    blurb: "Beta 目录冷启动",
+    blurb: "Beta directory cold-start",
     reaches: "early-adopter newsletter audiences hunting new startups",
     effort: "low",
     postCount: 1,
@@ -70,7 +77,7 @@ export const PLATFORMS: PlatformDef[] = [
     id: "devto",
     name: "Dev.to",
     category: "dev-community",
-    blurb: "技术教程式软文",
+    blurb: "How-I-built tutorial",
     reaches: "web/app developers who learn by reading tutorials",
     effort: "medium",
     postCount: 1,
@@ -83,7 +90,7 @@ export const PLATFORMS: PlatformDef[] = [
     id: "indiehackers",
     name: "Indie Hackers",
     category: "dev-community",
-    blurb: "Milestone / 经验贴",
+    blurb: "Milestone / lessons-learned",
     reaches: "bootstrapped founders & solo builders",
     effort: "medium",
     postCount: 1,
@@ -91,6 +98,8 @@ export const PLATFORMS: PlatformDef[] = [
     bestTime: "Weekday mornings",
     guidance:
       "Milestone or lessons-learned post. Lead with a number or hard-won lesson. Transparent about revenue/users/process. Soft product mention at the end.",
+    persona:
+      "a builder talking shop with other builders. Lead with a real number or a thing that went wrong. Be specific about what you tried. The product is a footnote, not the point.",
   },
   {
     id: "github",
@@ -109,7 +118,7 @@ export const PLATFORMS: PlatformDef[] = [
     id: "stackoverflow",
     name: "Stack Overflow / Q&A",
     category: "dev-community",
-    blurb: "答疑式自然引流",
+    blurb: "Helpful-answer organic reach",
     reaches: "developers actively searching for a solution you solve",
     effort: "medium",
     postCount: 1,
@@ -132,12 +141,14 @@ export const PLATFORMS: PlatformDef[] = [
     bestTime: "Tue–Thu 9–11am ET",
     guidance:
       "One punchy build-in-public post AND one thread (3-5 tweets). First line is everything — lead with a result, surprising claim, or pain. 0-1 hashtags. Soft CTA + link. Suggest a demo GIF.",
+    persona:
+      "someone building in public who's good at a tight hook but allergic to motivational-speaker energy. Strong first line, concrete, a little dry. No 'hustle' tone, no thread-bro 'a 🧵' theatrics, no engagement-bait.",
   },
   {
     id: "linkedin",
     name: "LinkedIn",
     category: "social",
-    blurb: "专业叙事/创始人故事",
+    blurb: "Founder story / pro narrative",
     reaches: "professionals, B2B buyers, hiring/partnership audience",
     effort: "medium",
     postCount: 1,
@@ -145,12 +156,14 @@ export const PLATFORMS: PlatformDef[] = [
     bestTime: "Tue–Thu 8–10am",
     guidance:
       "A founder-voice narrative post. Hook on line 1, short paragraphs, a story or insight, then the product as the payoff. Professional but human. End with a question.",
+    persona:
+      "a founder who is professional but not a LinkedIn-influencer. A real story or insight, plainly told. No '𝗯𝗼𝗹𝗱 𝘂𝗻𝗶𝗰𝗼𝗱𝗲', no one-line-per-paragraph 'broetry', no 'Agree?' bait. Earned, not performed.",
   },
   {
     id: "reddit",
     name: "Reddit",
     category: "social",
-    blurb: "分 subreddit 定制",
+    blurb: "Per-subreddit tailored posts",
     reaches: "highly specific niche communities by interest",
     effort: "high",
     postCount: 2,
@@ -158,12 +171,14 @@ export const PLATFORMS: PlatformDef[] = [
     bestTime: "Weekday mornings (per subreddit)",
     guidance:
       "Posts for 2 relevant subreddits (pick by product, e.g. r/SideProject, r/webdev). Lead with value/story, not product. Title + body per subreddit + reminder to read the rules. Never sound like an ad.",
+    persona:
+      "a regular member of the subreddit who happens to have built something — not a marketer parachuting in. Talk about the problem and what you learned. Link only if it genuinely helps. Reddit detects and punishes ads instantly; write like you'd actually comment there.",
   },
   {
     id: "threads",
     name: "Threads / Bluesky / Mastodon",
     category: "social",
-    blurb: "新社交去中心化",
+    blurb: "Decentralized-social newcomers",
     reaches: "tech-forward early movers leaving/avoiding X",
     effort: "low",
     postCount: 1,
@@ -178,27 +193,31 @@ export const PLATFORMS: PlatformDef[] = [
     id: "medium",
     name: "Medium / Substack",
     category: "content",
-    blurb: "深度长文/Newsletter",
+    blurb: "Long-form deep dive",
     reaches: "readers who follow thinking, not just tools",
     effort: "high",
     postCount: 1,
     defaultDay: 14,
     bestTime: "Tue/Wed morning",
+    longForm: true,
+    maxTokens: 3500,
     guidance:
-      "Long-form article outline + a strong intro. Frame around a problem/insight the audience cares about; product appears as the embodied solution. Include a suggested title + subtitle.",
+      "A COMPLETE long-form article (not an outline): a suggested title + subtitle, a strong opening, 4-7 fleshed-out sections with real substance, and a closing. Frame around a problem/insight the audience cares about; the product appears as the embodied solution.",
   },
   {
     id: "ph-blog",
     name: "Your blog / SEO",
     category: "content",
-    blurb: "SEO 长尾内容",
+    blurb: "SEO long-tail content",
     reaches: "people Googling the problem for months/years to come",
     effort: "high",
     postCount: 1,
     defaultDay: 10,
     bestTime: "N/A (evergreen)",
+    longForm: true,
+    maxTokens: 3500,
     guidance:
-      "An SEO-targeted article: suggest a primary keyword, title, H2 outline, and intro. Answer the searcher's intent fully; product is one recommended path.",
+      "A COMPLETE SEO article draft (not an outline): a primary keyword, a title, and the full body written out under clear H2s that fully answers the searcher's intent. The product is one recommended path, not the whole piece.",
   },
 
   // ---- Video ----
@@ -206,20 +225,22 @@ export const PLATFORMS: PlatformDef[] = [
     id: "youtube",
     name: "YouTube",
     category: "video",
-    blurb: "Demo/教程视频",
+    blurb: "Demo / tutorial video",
     reaches: "people who want to see it work before trying",
     effort: "high",
     postCount: 1,
     defaultDay: 11,
     bestTime: "Weekend or Tue/Thu",
+    longForm: true,
+    maxTokens: 3000,
     guidance:
-      "A demo/tutorial video script outline: hook (first 8s), the problem, the build/demo, the payoff, CTA. Plus a click-worthy title + description with timestamps.",
+      "A COMPLETE demo/tutorial video script (not an outline): the hook (first 8s) written out, then the full spoken script through problem → build/demo → payoff → CTA, with light shot directions. Plus a click-worthy title + a description with timestamps.",
   },
   {
     id: "tiktok",
     name: "TikTok / Shorts / Reels",
     category: "video",
-    blurb: "短视频钩子",
+    blurb: "Short-form video hook",
     reaches: "broad, younger, discovery-driven audience",
     effort: "high",
     postCount: 1,
@@ -234,7 +255,7 @@ export const PLATFORMS: PlatformDef[] = [
     id: "discord-slack",
     name: "Discord / Slack communities",
     category: "forum-niche",
-    blurb: "社区软植入",
+    blurb: "Community soft intro",
     reaches: "tight-knit communities where your users already hang out",
     effort: "medium",
     postCount: 1,
@@ -247,7 +268,7 @@ export const PLATFORMS: PlatformDef[] = [
     id: "lobsters",
     name: "Lobsters / specialist forums",
     category: "forum-niche",
-    blurb: "硬核技术论坛",
+    blurb: "Hardcore tech forum",
     reaches: "very technical, low-tolerance-for-marketing audiences",
     effort: "medium",
     postCount: 1,
@@ -262,7 +283,7 @@ export const PLATFORMS: PlatformDef[] = [
     id: "newsletters",
     name: "Dev/startup newsletters",
     category: "newsletter",
-    blurb: "投稿到Newsletter",
+    blurb: "Pitch to newsletters",
     reaches: "curated audiences via trusted curators (TLDR, etc.)",
     effort: "low",
     postCount: 1,
@@ -275,7 +296,7 @@ export const PLATFORMS: PlatformDef[] = [
     id: "communities-aggregators",
     name: "Niche aggregators",
     category: "aggregator",
-    blurb: "垂直聚合站",
+    blurb: "Niche aggregator / directory",
     reaches: "audiences on tool directories & 'awesome' lists in your niche",
     effort: "low",
     postCount: 1,

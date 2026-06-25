@@ -23,3 +23,20 @@ create policy "own projects" on public.projects
   for all
   using (auth.uid() = user_id)
   with check (auth.uid() = user_id);
+
+-- Plan + usage meter. Written by the SERVER (service role) only; users read their own.
+create table if not exists public.entitlements (
+  user_id uuid primary key references auth.users (id) on delete cascade,
+  plan text not null default 'free',
+  launches_used int not null default 0,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+alter table public.entitlements enable row level security;
+
+-- Users may READ their own entitlement; writes go through the service role (bypasses RLS).
+drop policy if exists "read own entitlement" on public.entitlements;
+create policy "read own entitlement" on public.entitlements
+  for select
+  using (auth.uid() = user_id);

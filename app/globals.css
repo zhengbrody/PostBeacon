@@ -56,3 +56,16 @@
     color: transparent;
   }
 }
+
+/* Print / "Save as PDF": drop interactive chrome and ink the content for paper. */
+@media print {
+  nav,
+  .no-print {
+    display: none !important;
+  }
+  html,
+  body {
+    background: #fff !important;
+    color: #111 !important;
+  }
+}
