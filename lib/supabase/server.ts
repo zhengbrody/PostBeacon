@@ -15,9 +15,15 @@ export function authConfigured(): boolean {
   return !!(URL && ANON);
 }
 
-/** Metering/billing is only enforced when the server has a service-role key. */
+/** Usage metering (daily cap + counters) needs the service-role key. */
 export function meteringEnabled(): boolean {
   return !!(URL && SERVICE);
+}
+
+/** The paid-plan paywall only fires once billing (Polar) is configured — until
+ *  then the beta stays free even with metering on. */
+export function billingEnabled(): boolean {
+  return meteringEnabled() && !!process.env.POLAR_ACCESS_TOKEN;
 }
 
 export function getServiceSupabase(): SupabaseClient | null {

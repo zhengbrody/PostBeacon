@@ -1,22 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { scrapeUrl } from "@/lib/scrape";
 import { generateJson } from "@/lib/llm";
-import { authConfigured } from "@/lib/supabase/server";
-import { getUserFromRequest } from "@/lib/usage";
+import { guardRoute } from "@/lib/usage";
 import type { Provider } from "@/lib/types";
 
 export const maxDuration = 60;
 
 export async function POST(req: NextRequest) {
   try {
-    // Require sign-in once accounts are configured (protects the model budget;
-    // the UI gate alone wouldn't stop a direct API call).
-    if (authConfigured() && !(await getUserFromRequest(req))) {
-      return NextResponse.json(
-        { error: "Sign in to continue.", code: "auth" },
-        { status: 401 }
-      );
-    }
+    // Require sign-in + enforce the daily cap (protects the model budget; the UI
+    // gate alone wouldn't stop a direct API call).
+    const guard = await guardRoute(req);
+    if ("response" in guard) return guard.response;
 
     const { url, provider } = (await req.json()) as {
       url?: string;

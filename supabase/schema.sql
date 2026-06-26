@@ -25,13 +25,21 @@ create policy "own projects" on public.projects
   with check (auth.uid() = user_id);
 
 -- Plan + usage meter. Written by the SERVER (service role) only; users read their own.
+-- launches_used = lifetime (billing); calls_today/calls_date = daily abuse cap.
 create table if not exists public.entitlements (
   user_id uuid primary key references auth.users (id) on delete cascade,
   plan text not null default 'free',
   launches_used int not null default 0,
+  calls_today int not null default 0,
+  calls_date date,
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
+
+-- Migration for existing installs (safe to re-run):
+alter table public.entitlements
+  add column if not exists calls_today int not null default 0,
+  add column if not exists calls_date date;
 
 alter table public.entitlements enable row level security;
 

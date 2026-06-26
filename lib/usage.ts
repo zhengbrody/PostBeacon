@@ -1,9 +1,18 @@
-import type { NextRequest } from "next/server";
-import { getServiceSupabase, getTokenVerifier } from "./supabase/server";
+import { NextRequest, NextResponse } from "next/server";
+import {
+  authConfigured,
+  getServiceSupabase,
+  getTokenVerifier,
+  meteringEnabled,
+} from "./supabase/server";
 import { bearer } from "./auth";
 
 // One "full launch" = one successful /api/generate. Free plan gets this many.
-export const FREE_LAUNCHES = 3;
+export const FREE_LAUNCHES = Number(process.env.FREE_LAUNCHES) || 3;
+
+// Anti-abuse: max expensive LLM-route calls (analyze/strategy/generate/regenerate)
+// per user per day. Generous for real use, blocks scripted budget drain.
+export const DAILY_LIMIT = Number(process.env.DAILY_LIMIT) || 30;
 
 export interface Entitlement {
   plan: string; // "free" | "pro"
@@ -22,6 +31,69 @@ export async function getUserFromToken(token?: string | null) {
 /** Verify the caller from a request's bearer token. The auth seam for routes. */
 export async function getUserFromRequest(req: NextRequest) {
   return getUserFromToken(bearer(req));
+}
+
+/**
+ * One guard for every expensive route: requires sign-in (when accounts are
+ * configured) and enforces the per-user daily cap (when metering is on). Returns
+ * `{ userId }` on success (userId null when auth is unconfigured → open), or
+ * `{ response }` — a ready 401/429 to return immediately.
+ */
+export async function guardRoute(
+  req: NextRequest
+): Promise<{ userId: string | null } | { response: NextResponse }> {
+  if (!authConfigured()) return { userId: null };
+  const user = await getUserFromRequest(req);
+  if (!user) {
+    return {
+      response: NextResponse.json(
+        { error: "Sign in to continue.", code: "auth" },
+        { status: 401 }
+      ),
+    };
+  }
+  if (meteringEnabled() && !(await allowCall(user.id))) {
+    return {
+      response: NextResponse.json(
+        {
+          error: `You've hit today's limit of ${DAILY_LIMIT} runs. Try again tomorrow.`,
+          code: "limit",
+        },
+        { status: 429 }
+      ),
+    };
+  }
+  return { userId: user.id };
+}
+
+/**
+ * Per-user daily rate limit across the expensive routes. Returns true and counts
+ * the call when allowed; false when the user is over today's cap. No-ops to `true`
+ * when there's no service-role store (so the keyless app isn't blocked). Pro plan
+ * is unmetered.
+ */
+export async function allowCall(userId: string): Promise<boolean> {
+  const sb = getServiceSupabase();
+  if (!sb) return true;
+  const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD (UTC)
+  const { data } = await sb
+    .from("entitlements")
+    .select("plan, calls_today, calls_date")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if ((data?.plan || "free") === "pro") return true;
+  const used = data?.calls_date === today ? data?.calls_today ?? 0 : 0;
+  if (used >= DAILY_LIMIT) return false;
+  await sb.from("entitlements").upsert(
+    {
+      user_id: userId,
+      calls_today: used + 1,
+      calls_date: today,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "user_id" }
+  );
+  return true;
 }
 
 export async function getEntitlement(userId: string): Promise<Entitlement> {

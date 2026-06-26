@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generatePlatformPosts } from "@/lib/generate";
 import { getPlatforms } from "@/lib/platforms";
-import { authConfigured } from "@/lib/supabase/server";
-import { getUserFromRequest } from "@/lib/usage";
+import { guardRoute } from "@/lib/usage";
 import type { Provider, ProductProfile } from "@/lib/types";
 
 export const maxDuration = 120;
@@ -23,12 +22,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (authConfigured() && !(await getUserFromRequest(req))) {
-      return NextResponse.json(
-        { error: "Sign in to regenerate.", code: "auth" },
-        { status: 401 }
-      );
-    }
+    const guard = await guardRoute(req);
+    if ("response" in guard) return guard.response;
 
     const [p] = getPlatforms([platformId]);
     if (!p) {

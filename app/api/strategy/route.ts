@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { generateJson } from "@/lib/llm";
 import { platformCatalogForStrategist, PLATFORMS } from "@/lib/platforms";
 import { discoverChannels } from "@/lib/discovery";
-import { authConfigured } from "@/lib/supabase/server";
-import { getUserFromRequest } from "@/lib/usage";
+import { guardRoute } from "@/lib/usage";
 import type {
   Provider,
   ProductProfile,
@@ -28,12 +27,8 @@ export const maxDuration = 90;
 
 export async function POST(req: NextRequest) {
   try {
-    if (authConfigured() && !(await getUserFromRequest(req))) {
-      return NextResponse.json(
-        { error: "Sign in to continue.", code: "auth" },
-        { status: 401 }
-      );
-    }
+    const guard = await guardRoute(req);
+    if ("response" in guard) return guard.response;
 
     const { profile, provider } = (await req.json()) as {
       profile?: ProductProfile;

@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generatePlatformPosts } from "@/lib/generate";
 import { getPlatforms } from "@/lib/platforms";
-import { authConfigured, meteringEnabled } from "@/lib/supabase/server";
+import { billingEnabled } from "@/lib/supabase/server";
 import {
-  getUserFromRequest,
+  guardRoute,
   getEntitlement,
   canLaunch,
   incrementLaunch,
@@ -53,30 +53,24 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Require sign-in once accounts are configured (protects the model budget).
-    // Meter the free-launch limit only when a service-role key is present. Both
-    // are no-ops when Supabase is unconfigured, so the keyless app stays open.
-    let userId: string | null = null;
-    if (authConfigured()) {
-      const user = await getUserFromRequest(req);
-      if (!user) {
+    // Require sign-in + daily cap (protects the model budget). No-ops when
+    // Supabase is unconfigured, so the keyless app stays open.
+    const guard = await guardRoute(req);
+    if ("response" in guard) return guard.response;
+    const userId = guard.userId;
+
+    // Lifetime free-launch paywall — only once billing (Polar) is wired up, so
+    // the free beta isn't paywalled by merely turning metering on.
+    if (userId && billingEnabled()) {
+      const ent = await getEntitlement(userId);
+      if (!canLaunch(ent)) {
         return NextResponse.json(
-          { error: "Sign in to generate your launch content.", code: "auth" },
-          { status: 401 }
+          {
+            error: `You've used your ${FREE_LAUNCHES} free launches. Upgrade to Pro for unlimited.`,
+            code: "paywall",
+          },
+          { status: 402 }
         );
-      }
-      userId = user.id;
-      if (meteringEnabled()) {
-        const ent = await getEntitlement(user.id);
-        if (!canLaunch(ent)) {
-          return NextResponse.json(
-            {
-              error: `You've used your ${FREE_LAUNCHES} free launches. Upgrade to Pro for unlimited.`,
-              code: "paywall",
-            },
-            { status: 402 }
-          );
-        }
       }
     }
 
@@ -99,7 +93,7 @@ export async function POST(req: NextRequest) {
       }))
       .sort((a, b) => a.day - b.day);
 
-    if (userId && meteringEnabled()) await incrementLaunch(userId);
+    if (userId && billingEnabled()) await incrementLaunch(userId);
 
     const result: GenerateResult = { content, schedule };
     return NextResponse.json(result);
