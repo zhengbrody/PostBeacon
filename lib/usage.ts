@@ -1,5 +1,5 @@
 import type { NextRequest } from "next/server";
-import { getServiceSupabase } from "./supabase/server";
+import { getServiceSupabase, getTokenVerifier } from "./supabase/server";
 import { bearer } from "./auth";
 
 // One "full launch" = one successful /api/generate. Free plan gets this many.
@@ -10,9 +10,10 @@ export interface Entitlement {
   launchesUsed: number;
 }
 
-/** Verify a Supabase access token and return the user (or null). */
+/** Verify a Supabase access token and return the user (or null). Works with the
+ *  anon key, so login is enforceable even without a service-role key. */
 export async function getUserFromToken(token?: string | null) {
-  const sb = getServiceSupabase();
+  const sb = getTokenVerifier();
   if (!sb || !token) return null;
   const { data } = await sb.auth.getUser(token);
   return data.user ?? null;

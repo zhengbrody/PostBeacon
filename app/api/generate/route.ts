@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generatePlatformPosts } from "@/lib/generate";
 import { getPlatforms } from "@/lib/platforms";
-import { meteringEnabled } from "@/lib/supabase/server";
+import { authConfigured, meteringEnabled } from "@/lib/supabase/server";
 import {
   getUserFromRequest,
   getEntitlement,
@@ -53,9 +53,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Server-enforced metering (only when a service-role key is configured).
+    // Require sign-in once accounts are configured (protects the model budget).
+    // Meter the free-launch limit only when a service-role key is present. Both
+    // are no-ops when Supabase is unconfigured, so the keyless app stays open.
     let userId: string | null = null;
-    if (meteringEnabled()) {
+    if (authConfigured()) {
       const user = await getUserFromRequest(req);
       if (!user) {
         return NextResponse.json(
@@ -63,17 +65,19 @@ export async function POST(req: NextRequest) {
           { status: 401 }
         );
       }
-      const ent = await getEntitlement(user.id);
-      if (!canLaunch(ent)) {
-        return NextResponse.json(
-          {
-            error: `You've used your ${FREE_LAUNCHES} free launches. Upgrade to Pro for unlimited.`,
-            code: "paywall",
-          },
-          { status: 402 }
-        );
-      }
       userId = user.id;
+      if (meteringEnabled()) {
+        const ent = await getEntitlement(user.id);
+        if (!canLaunch(ent)) {
+          return NextResponse.json(
+            {
+              error: `You've used your ${FREE_LAUNCHES} free launches. Upgrade to Pro for unlimited.`,
+              code: "paywall",
+            },
+            { status: 402 }
+          );
+        }
+      }
     }
 
     const platforms = getPlatforms(platformIds);
@@ -95,7 +99,7 @@ export async function POST(req: NextRequest) {
       }))
       .sort((a, b) => a.day - b.day);
 
-    if (userId) await incrementLaunch(userId);
+    if (userId && meteringEnabled()) await incrementLaunch(userId);
 
     const result: GenerateResult = { content, schedule };
     return NextResponse.json(result);

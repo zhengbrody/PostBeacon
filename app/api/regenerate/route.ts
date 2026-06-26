@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generatePlatformPosts } from "@/lib/generate";
 import { getPlatforms } from "@/lib/platforms";
-import { meteringEnabled } from "@/lib/supabase/server";
+import { authConfigured } from "@/lib/supabase/server";
 import { getUserFromRequest } from "@/lib/usage";
 import type { Provider, ProductProfile } from "@/lib/types";
 
@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (meteringEnabled() && !(await getUserFromRequest(req))) {
+    if (authConfigured() && !(await getUserFromRequest(req))) {
       return NextResponse.json(
         { error: "Sign in to regenerate.", code: "auth" },
         { status: 401 }
