@@ -15,6 +15,7 @@ interface AutosaveFlow {
   launchDate: string;
   projectId: string;
   setProjectId: (id: string) => void;
+  demo?: boolean; // when viewing the example plan, never persist it
 }
 
 function timeNow() {
@@ -40,8 +41,9 @@ export function useAutosave(f: AutosaveFlow) {
   ref.current = { ...f, userEmail, supabase };
 
   const persist = useCallback(async () => {
-    const { snapshot: snap, launchDate, projectId, setProjectId, userEmail, supabase } =
+    const { snapshot: snap, launchDate, projectId, setProjectId, userEmail, supabase, demo } =
       ref.current;
+    if (demo) return; // the example plan is read-only — don't save it
     if (!(snap.profile || snap.url)) return;
 
     let id = projectId;

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import { loadDraft } from "@/lib/storage";
+import { DEMO_PROJECT } from "@/lib/demo";
 import type {
   Provider,
   ProductProfile,
@@ -35,6 +36,8 @@ export function useLaunchFlow() {
   const [projectId, setProjectId] = useState(""); // stable id of the current project (for autosave upsert)
   const [paywall, setPaywall] = useState<"auth" | "limit" | null>(null);
   const [generations, setGenerations] = useState(0); // bumps once per successful generate (usage refetch trigger)
+  const [demo, setDemo] = useState(false); // viewing the baked-in example (autosave is paused)
+  const [pendingDraft, setPendingDraft] = useState<any>(null); // saved draft offered for resume on mount
 
   useEffect(() => {
     api
@@ -64,6 +67,7 @@ export function useLaunchFlow() {
 
   const analyze = () =>
     run(async () => {
+      setDemo(false);
       const { profile } = await api.analyze(url, provider);
       setProfile(profile);
       setStep("profile");
@@ -155,7 +159,9 @@ export function useLaunchFlow() {
     setPosted((p) => ({ ...p, [id]: !p[id] }));
 
   const reset = () => {
+    setDemo(false);
     setStep("input");
+    setUrl("");
     setProfile(null);
     setStrategy(null);
     setResult(null);
@@ -186,11 +192,36 @@ export function useLaunchFlow() {
     );
   };
 
-  // Hydrate an in-progress draft on mount (anonymous work survives a refresh; on
-  // sign-in, autosave migrates it to the account and clears the local copy).
+  // Load the baked-in example plan (no API call, works with zero keys). Marked
+  // as `demo` so autosave skips it and it never overwrites the user's own draft.
+  const loadDemo = useCallback(() => {
+    setError("");
+    setDemo(true);
+    loadProject(DEMO_PROJECT);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Resume / discard the in-progress draft surfaced on mount.
+  const resumeDraft = () => {
+    if (pendingDraft) loadProject(pendingDraft);
+    setPendingDraft(null);
+  };
+  const dismissDraft = () => setPendingDraft(null);
+
+  // On mount: a `?demo=1` deep link opens the example; otherwise we *offer* to
+  // resume any in-progress draft (a banner on the input step) rather than
+  // silently dropping the user into their last project — opening /app should
+  // feel like a fresh start unless they choose to continue.
   useEffect(() => {
+    if (
+      typeof window !== "undefined" &&
+      new URLSearchParams(window.location.search).get("demo") === "1"
+    ) {
+      loadDemo();
+      return;
+    }
     const draft = loadDraft();
-    if (draft && (draft.profile || draft.url)) loadProject(draft);
+    if (draft && (draft.profile || draft.url)) setPendingDraft(draft);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -229,6 +260,11 @@ export function useLaunchFlow() {
     paywall,
     setPaywall,
     generations,
+    demo,
+    loadDemo,
+    pendingDraft,
+    resumeDraft,
+    dismissDraft,
     analyze,
     buildStrategy,
     generate,

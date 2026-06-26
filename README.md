@@ -1,104 +1,100 @@
-<div align="center">
-
 # PostBeacon
 
-### Your AI CMO. Paste a product URL, get a complete 0→1 launch plan.
+**Paste your product URL. Get a launch plan you can actually run today.**
 
-PostBeacon reads your landing page, forms a real point of view on what you're selling and who should
-care, scores 20+ channels for *your* product, and hands you a founder-grade go-to-market plan —
-including ready-to-post content written to **not** sound like AI.
+I built PostBeacon because I can ship a product in a weekend and then completely stall on the part that decides whether anyone sees it. Writing the Show HN, picking the right subreddits, figuring out the order to post things in, making the copy not sound like a press release — that work is real, and "use AI to write a tweet" doesn't cover it.
 
-No auto-posting. Everything is copy-paste ready, by design — which keeps you off every platform's
-ban radar.
+So this isn't a caption generator. You give it a URL; it reads the page, works out what the product actually is and who'd care, scores 20+ channels for *that* product, and hands back a full go-to-market plan — positioning, audience, a phased calendar, a founder checklist, and copy-paste content written to read like a person, not a model.
 
-[Live → postbeacon.app](https://postbeacon.app) · [Architecture & conventions → CLAUDE.md](./CLAUDE.md)
+**It never posts for you.** Everything is copy-paste, on purpose — you stay in control, and you stay off every platform's automation ban radar.
 
-</div>
+→ **[See a full example plan](https://postbeacon.app/app?demo=1)** (no signup, no API key — it's a real, complete plan for a sample product)
 
 ---
 
-## What you get
+## What it gives you
 
-Paste one URL and PostBeacon returns a single operating plan, not a pile of disconnected posts:
+One URL in, one operating plan out:
 
-| Section | What's in it |
-| --- | --- |
-| **Diagnosis** | What the product *actually* is, why anyone cares, the moment it's used — with a confidence flag when the page is thin. |
-| **Positioning** | The one narrative to lead with everywhere, plus an **anti-positioning** ("don't say it like this") to avoid. |
-| **Audience** | Primary / secondary / early-adopter segments, and where each already hangs out. |
-| **Channel ranking** | All 20+ platforms scored 0–100 for *your* product, with effort, confidence, rationale, and the single best move per channel. |
-| **GTM plan** | A cold-start path (0 → first users) and a sequenced, phased 14/30-day plan. |
-| **Content library** | Native, copy-paste-ready posts per channel — with a per-platform playbook (why this platform, how to post, what to avoid, and the first replies to seed the thread). |
-| **Launch calendar** | A dated action sequence from a launch-day picker. |
-| **Founder checklist** | What the founder personally does, by cadence. |
-| **Risks & iteration** | Where launches go sideways (and how to dodge it), plus what to measure after posting and how to react. |
+- **Diagnosis** — what the product really is, why anyone cares, the moment they reach for it
+- **Positioning** — the line to lead with everywhere, plus the framing to *avoid*
+- **Audience** — primary / secondary / early-adopter, and where each already hangs out
+- **Channel ranking** — every platform scored 0–100 for *your* product, with effort, rationale, and the one best move per channel
+- **GTM plan** — a cold-start path and a sequenced 14/30-day calendar
+- **Content library** — native, ready-to-post drafts per channel, each with a playbook: why this platform, how to post, what gets you flagged, and the first replies to seed the thread
+- **Founder checklist + risks + iteration loop** — what to do, what'll go sideways, and what to measure after
 
-Export the whole thing to **Markdown / JSON**, or print to PDF.
+Export the whole thing to Markdown / JSON or print to PDF.
 
-## Content that doesn't read like AI
+## Why it doesn't read like AI
 
-The fastest way to get ignored — or flagged — on Hacker News, Reddit, and Lobsters is to sound like a
-marketing bot. PostBeacon ships a house style (`lib/voice.ts`) that bans the usual tells
-("game-changer", triadic cadence, em-dash summaries, emoji spam) and writes in a **per-platform
-persona** instead:
+The fastest way to get buried on Hacker News, Reddit, or Lobsters is to sound like marketing. PostBeacon ships a house style (`lib/voice.ts`) that bans the usual tells — "game-changer," triadic cadence, "I'm excited to announce," emoji spam — and writes in a per-platform voice instead:
 
-- **Hacker News** — restrained, technically honest, limitations up front.
-- **Reddit** — a community member who happens to have built something, not a marketer.
-- **X / Twitter** — a strong hook without the hustle-bro energy.
-- **LinkedIn** — earned, not performed; no broetry.
-- **Product Hunt** — a maker sharing the real itch, not a company doing PR.
+- **Hacker News** — restrained, technically honest, limitations stated up front
+- **Reddit** — a community member who happens to have built something, not a vendor
+- **X** — a real hook without the hustle-bro energy
+- **LinkedIn** — earned, not performed
+- **Product Hunt** — a maker sharing the actual itch, not a company doing PR
 
-Every piece passes a silent *"would a skeptical regular of this platform smell marketing?"* check
-before it's returned.
+Every draft passes a silent "would a regular here smell marketing?" check before it comes back.
 
 ## How it works
 
 ```
-URL ─▶ /api/analyze   ─▶ ProductProfile      scrape + LLM diagnosis (what it is, why care)
-       /api/strategy  ─▶ MarketingStrategy   score & rank ALL channels + the full CMO plan
-       /api/generate  ─▶ GenerateResult      native content + per-platform playbook + calendar
+URL ─▶ /api/analyze   ─▶ diagnosis: what it is, who cares
+       /api/strategy  ─▶ score & rank every channel + the full CMO plan
+       /api/generate  ─▶ native content + per-platform playbook + calendar
 ```
 
-The frontend drives this as a 4-step flow — **Analyze → Diagnose → Strategy → Launch plan** — at
-`/app`. The marketing landing page is at `/`.
+Four steps in the app — **Analyze → Diagnose → Strategy → Launch plan** — at `/app`.
 
-## Stack
-
-- **Next.js 15** (App Router) · **React 19** · **TypeScript** (strict) · **Tailwind v4**
-- Pluggable LLM, switchable per request (`lib/llm.ts`): **Claude** (Anthropic), **OpenAI**, or **DeepSeek**
-- `cheerio` for scraping, with a headless render fallback for SPA pages
-- **Supabase** (optional) for accounts + saved projects
-- Deploys to **Vercel**
-
-## Run locally
+## Run it locally
 
 ```bash
 npm install
-cp .env.example .env     # add ANTHROPIC_API_KEY and/or OPENAI_API_KEY (or DEEPSEEK_API_KEY)
+cp .env.example .env     # add one model key (see below)
 npm run dev              # http://localhost:3000
 ```
 
-At least one model key is required; everything else is optional. `npm run build` must stay green.
+You need **at least one** of these in `.env`:
 
-## Optional configuration
+```
+ANTHROPIC_API_KEY=...     # Claude
+OPENAI_API_KEY=...        # OpenAI
+DEEPSEEK_API_KEY=...      # DeepSeek (cheapest to run)
+# DEFAULT_PROVIDER=deepseek   # optional: which one the UI picks first
+```
 
-Each of these degrades gracefully if its key is unset — the app always runs end-to-end without them.
+No key handy? The app still runs — open `/app?demo=1` for the full example plan.
 
-| Env | Enables |
+Everything else is optional and degrades gracefully:
+
+| Env | Turns on |
 | --- | --- |
-| `DEFAULT_PROVIDER` | Pins which model the UI selects first (`claude` / `openai` / `deepseek`). |
-| `SCRAPE_API_KEY` | Headless rendering (Firecrawl) for client-rendered SPA landing pages. |
-| `SEARCH_API_KEY` | Grounded niche-channel discovery (Tavily) — real, link-checked communities. |
-| `NEXT_PUBLIC_SUPABASE_URL` + `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Magic-link sign-in, autosave, saved projects. Run `supabase/schema.sql` once. |
-| `SUPABASE_SERVICE_ROLE_KEY` + `POLAR_*` | Server-side usage metering + Polar checkout/webhook billing. |
+| `SCRAPE_API_KEY` | Headless rendering (Firecrawl) for client-rendered SPA pages |
+| `SEARCH_API_KEY` | Grounded, link-checked niche-channel discovery (Tavily) |
+| `NEXT_PUBLIC_SUPABASE_URL` + `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Sign-in, autosave, saved projects (run `supabase/schema.sql` once) |
+| `SUPABASE_SERVICE_ROLE_KEY` + `POLAR_*` | Usage metering + checkout |
+| `NEXT_PUBLIC_FEEDBACK_URL` | Where the in-app "Send feedback" points (defaults to GitHub issues) |
 
 ## Deploy
 
-Push to GitHub → import in Vercel → add the same env vars → point `postbeacon.app` DNS at Vercel.
-Accounts need `supabase/schema.sql` run once in the Supabase SQL editor.
+Push to GitHub → import in Vercel → add the same env vars → point your domain at Vercel. `npm run build` is the bar; it stays green.
+
+## Stack
+
+Next.js 15 (App Router) · React 19 · TypeScript (strict) · Tailwind v4 · pluggable LLM (`lib/llm.ts`) · `cheerio` scraping · optional Supabase. No heavy framework on top.
 
 ## Roadmap
 
-- **Effect tracking** — paste results back in to learn which angles and channels actually landed.
-- **A second platform universe** — Chinese channels (小红书 / 即刻 / V2EX / 掘金 / B站).
-- **Team collaboration** on a shared launch plan.
+- **Effect tracking** — paste results back in to learn which angles and channels actually converted
+- **A second platform universe** — Chinese channels (小红书 / 即刻 / V2EX / 掘金 / B站)
+- **Shared projects** for small teams
+
+## It's in beta — tell me what's wrong
+
+I'd rather hear "the Reddit post still sounds like an ad" than nothing. If a plan is off, the copy misses, or a channel score seems wrong, [open an issue](https://github.com/zhengbrody/PostBeacon/issues) — that feedback is what shapes what ships next.
+
+## License
+
+[MIT](./LICENSE).

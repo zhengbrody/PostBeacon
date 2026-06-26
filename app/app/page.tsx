@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useLaunchFlow } from "@/hooks/useLaunchFlow";
+import { useLaunchFlow, type Step } from "@/hooks/useLaunchFlow";
 import { useAutosave } from "@/hooks/useAutosave";
 import { Stepper } from "@/components/app/Stepper";
 import { UrlStep } from "@/components/app/UrlStep";
@@ -11,11 +11,24 @@ import { ResultsView } from "@/components/app/ResultsView";
 import { ProjectBar } from "@/components/app/ProjectBar";
 import { Paywall } from "@/components/app/Paywall";
 import { UsageBadge } from "@/components/app/UsageBadge";
+import { FeedbackCTA } from "@/components/app/FeedbackCTA";
+import { AuthScreen } from "@/components/app/AuthScreen";
+import { useSupabaseUser } from "@/components/app/SignIn";
+import { supabaseConfigured } from "@/lib/supabase/client";
 import { Spinner } from "@/components/ui/Spinner";
+import { Button } from "@/components/ui/Button";
 
 export default function AppPage() {
   const f = useLaunchFlow();
+  const { userEmail, loading: authLoading } = useSupabaseUser();
   const { lastSaved, saving, saveNow } = useAutosave(f);
+
+  // Login gate: required only when Supabase is configured. The demo bypasses it
+  // so anyone can explore the example; with no Supabase keys the app stays open.
+  const gateOn = supabaseConfigured() && !f.demo;
+  const checkingAuth = gateOn && authLoading;
+  const needsAuth = gateOn && !authLoading && !userEmail;
+  const showHeaderTools = !checkingAuth && !needsAuth;
 
   return (
     <main className="mx-auto max-w-4xl px-5 py-8">
@@ -24,23 +37,84 @@ export default function AppPage() {
           <Link href="/" className="text-xl font-bold tracking-tight">
             Post<span className="text-accent-400">Beacon</span>
           </Link>
-          <UsageBadge refreshKey={f.generations} />
+          {showHeaderTools && <UsageBadge refreshKey={f.generations} />}
         </div>
-        <ProjectBar
-          snapshot={f.snapshot}
-          onLoad={f.loadProject}
-          lastSaved={lastSaved}
-          saving={saving}
-          onSaveNow={saveNow}
-        />
+        {showHeaderTools && (
+          <ProjectBar
+            snapshot={f.snapshot}
+            onLoad={f.loadProject}
+            lastSaved={lastSaved}
+            saving={saving}
+            onSaveNow={saveNow}
+          />
+        )}
       </header>
 
-      <Stepper step={f.step} />
+      {checkingAuth ? (
+        <div className="mt-16 flex justify-center text-accent-300">
+          <Spinner />
+        </div>
+      ) : needsAuth ? (
+        <AuthScreen onDemo={f.loadDemo} />
+      ) : (
+        <AppFlow f={f} />
+      )}
+    </main>
+  );
+}
 
-      {f.availProviders.length === 0 && (
-        <div className="mb-6 rounded-md bg-amber-950/60 px-4 py-3 text-xs text-amber-300">
-          No model API key detected. Add ANTHROPIC_API_KEY or OPENAI_API_KEY to
-          .env, then restart.
+function AppFlow({ f }: { f: ReturnType<typeof useLaunchFlow> }) {
+  const reachable: Step[] = ["input"];
+  if (f.profile) reachable.push("profile");
+  if (f.strategy) reachable.push("strategy");
+  if (f.result) reachable.push("results");
+
+  return (
+    <>
+      <Stepper step={f.step} enabled={reachable} onNavigate={f.setStep} />
+
+      {f.step === "input" && f.pendingDraft && !f.demo && (
+        <div className="no-print mb-6 flex flex-wrap items-center justify-between gap-3 rounded-md border border-line bg-surface-2 px-4 py-3 text-xs">
+          <span className="text-neutral-300">
+            Pick up where you left off
+            {f.pendingDraft.profile?.name
+              ? ` — ${f.pendingDraft.profile.name}`
+              : ""}
+            ?
+          </span>
+          <span className="flex gap-2">
+            <Button size="sm" onClick={f.resumeDraft}>
+              Continue
+            </Button>
+            <Button size="sm" variant="outline" onClick={f.dismissDraft}>
+              Start fresh
+            </Button>
+          </span>
+        </div>
+      )}
+
+      {f.demo && (
+        <div className="no-print mb-6 flex flex-wrap items-center justify-between gap-3 rounded-md border border-accent-700/50 bg-accent-600/10 px-4 py-3 text-xs text-accent-200">
+          <span>
+            <span className="font-semibold">Example plan.</span> This is a
+            ready-made launch plan for a fictional product, so you can see the
+            output without an API key.
+          </span>
+          <Button size="sm" variant="outline" onClick={f.reset}>
+            Try your own URL →
+          </Button>
+        </div>
+      )}
+
+      {f.availProviders.length === 0 && !f.demo && (
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-md bg-amber-950/60 px-4 py-3 text-xs text-amber-300">
+          <span>
+            No model API key detected. Add ANTHROPIC_API_KEY, OPENAI_API_KEY, or
+            DEEPSEEK_API_KEY to .env and restart — or explore the example plan.
+          </span>
+          <Button size="sm" variant="outline" onClick={f.loadDemo}>
+            See an example →
+          </Button>
         </div>
       )}
 
@@ -66,6 +140,7 @@ export default function AppPage() {
           availProviders={f.availProviders}
           loading={f.loading}
           onAnalyze={f.analyze}
+          onDemo={f.loadDemo}
         />
       )}
 
@@ -106,9 +181,15 @@ export default function AppPage() {
         />
       )}
 
+      {f.step === "results" && f.result && (
+        <div className="mt-8">
+          <FeedbackCTA />
+        </div>
+      )}
+
       {f.paywall && (
         <Paywall reason={f.paywall} onClose={() => f.setPaywall(null)} />
       )}
-    </main>
+    </>
   );
 }

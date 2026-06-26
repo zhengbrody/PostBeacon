@@ -16,6 +16,7 @@ export function UrlStep({
   availProviders,
   loading,
   onAnalyze,
+  onDemo,
 }: {
   url: string;
   setUrl: (v: string) => void;
@@ -24,6 +25,7 @@ export function UrlStep({
   availProviders: Provider[];
   loading: boolean;
   onAnalyze: () => void;
+  onDemo: () => void;
 }) {
   return (
     <Card className="p-6">
@@ -58,13 +60,18 @@ export function UrlStep({
         </div>
       )}
 
-      <Button
-        onClick={onAnalyze}
-        disabled={!url || loading}
-        className="mt-5"
-      >
-        Analyze product →
-      </Button>
+      <div className="mt-5 flex flex-wrap items-center gap-3">
+        <Button onClick={onAnalyze} disabled={!url || loading}>
+          Analyze product →
+        </Button>
+        <button
+          onClick={onDemo}
+          disabled={loading}
+          className="text-xs text-neutral-400 underline-offset-4 transition-colors hover:text-accent-300 hover:underline disabled:opacity-40"
+        >
+          or see a full example plan
+        </button>
+      </div>
     </Card>
   );
 }

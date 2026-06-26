@@ -13,14 +13,14 @@ export function Hero() {
           <span className="text-gradient">Launch everywhere.</span>
         </h1>
         <p className="mx-auto mt-6 max-w-xl text-base text-neutral-300 sm:text-lg">
-          PostBeacon scans 20+ platforms, ranks where to go all-in for your
-          product, and writes ready-to-post content + a launch calendar. Built
-          for vibecoders who&apos;d rather ship than market.
+          Paste your product URL and get a full 0→1 launch plan: positioning,
+          ranked channels, ready-to-post content written to not sound like AI,
+          and a calendar. The CMO work, for vibecoders who&apos;d rather ship.
         </p>
         <div className="mt-8 flex items-center justify-center gap-3">
           <ButtonLink href="/app">Start free →</ButtonLink>
-          <ButtonLink href="#how" variant="outline">
-            See how it works
+          <ButtonLink href="/app?demo=1" variant="outline">
+            See an example plan
           </ButtonLink>
         </div>
         <p className="mt-4 text-xs text-neutral-500">

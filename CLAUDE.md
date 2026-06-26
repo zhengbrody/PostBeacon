@@ -44,6 +44,8 @@ lib/
   llm.ts                Claude/OpenAI abstraction → generateJson()
   generate.ts           Per-platform content+playbook prompt (generatePlatformPosts) — shared by generate+regenerate
   voice.ts              ANTI_AI_RULES — house rules injected into content prompts to kill AI tells
+  demo.ts               DEMO_PROJECT — a hand-authored full example plan (the no-API-key showcase)
+  site.ts               Public config (REPO_URL, FEEDBACK_URL) — NEXT_PUBLIC_* overridable
   export.ts             Launch plan → Markdown / JSON; downloadFile helper
   dates.ts              scheduleDate(launchDate, day) for the calendar
   auth.ts               bearer(req) — read the Supabase token from a request
@@ -99,6 +101,29 @@ left unset → accounts off (anon + localStorage), generation open/unmetered, `P
 Redeploy: `npx vercel --prod --yes`. Push env from `.env.local`: `~/push-env.sh`.
 
 ## Status / changelog
+- **2026-06-25**: **M9 — login gate + Google OAuth.** `/app` now requires sign-in **when Supabase is
+  configured** (degrades to fully open when it isn't, so local dev + the demo still work; `?demo=1`
+  always bypasses the gate). New `components/app/AuthScreen.tsx` (Continue-with-Google primary +
+  magic-link fallback + "see example" escape). `SignIn.tsx` gained `loading` on `useSupabaseUser`
+  (drives a no-flash gate via `onAuthStateChange`'s initial session), `signInWithGoogle()`, and a
+  reusable `GoogleButton`. `app/app/page.tsx` split into `AppPage` (gate) + `AppFlow` (the tool).
+  Google sign-in uses `supabase.auth.signInWithOAuth({provider:'google', redirectTo:'/app'})` — works
+  with the client's existing `detectSessionInUrl`, no callback route needed. **Activation needs config
+  (not code):** Supabase URL+anon keys, Google provider enabled in Supabase, a Google Cloud OAuth
+  client, and the redirect URLs whitelisted. Build green; gate UI verified in browser. (Server-side
+  hardening of /api/analyze+/api/strategy is still optional — generate/regenerate already gate on
+  metering.)
+- **2026-06-25**: **M8 — beta-launch polish (public GitHub-ready).** (1) **Demo mode**: new
+  `lib/demo.ts` ships a hand-authored, anti-AI full example plan ("Cronwise"); `useLaunchFlow`
+  gained `demo`/`loadDemo`, a `?demo=1` deep link, and an "or see a full example plan" entry on the
+  URL step + a no-key prompt. Autosave is gated on `demo` so the example never overwrites a real
+  draft. Lets anyone (incl. GitHub visitors with no API key) explore the whole dashboard for free.
+  (2) **Beta feedback CTA**: `components/app/FeedbackCTA.tsx` (shown on results) + `lib/site.ts`
+  (`REPO_URL`/`FEEDBACK_URL`, defaults to GitHub issues). (3) **LLM robustness**: `lib/llm.ts`
+  now slices+repairs JSON and does one model **repair retry** on parse failure (fixes the
+  unescaped-inner-quote crash from the bigger M7 strategy schema); added a JSON guard to prompts.
+  (4) Founder-voice **README** rewrite + **LICENSE** (MIT) + landing hero/demo-link alignment.
+  Build green; demo verified end-to-end in browser.
 - **2026-06-24**: **M7 — AI-CMO operating system.** Upgraded from "content generator" to a full 0→1
   launch plan, distributed across the existing 3 LLM calls (no new endpoints, keeps JSON reliable):
   • **analyze** now forms a business *diagnosis* (`whatItIs`/`whyCare`/`useCase`/`confidence`).

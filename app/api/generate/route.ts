@@ -17,7 +17,27 @@ import type {
   GenerateResult,
 } from "@/lib/types";
 
-export const maxDuration = 120;
+export const maxDuration = 300;
+
+// Run async work over `items` with a concurrency ceiling — keeps "select every
+// channel" from firing 20 LLM calls at once (provider rate-limits + memory), and
+// preserves input order in the result.
+async function mapLimit<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T, index: number) => Promise<R>
+): Promise<R[]> {
+  const out: R[] = new Array(items.length);
+  let next = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (next < items.length) {
+      const i = next++;
+      out[i] = await fn(items[i], i);
+    }
+  });
+  await Promise.all(workers);
+  return out;
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -58,17 +78,12 @@ export async function POST(req: NextRequest) {
 
     const platforms = getPlatforms(platformIds);
 
-    // Generate content per platform in parallel — each platform has its own voice.
-    const content: PlatformContent[] = await Promise.all(
-      platforms.map(async (p) => {
-        const { posts, playbook } = await generatePlatformPosts(
-          profile,
-          p,
-          provider
-        );
-        return { platformId: p.id, platformName: p.name, posts, playbook };
-      })
-    );
+    // Generate content per platform (each has its own voice), capped at 6
+    // concurrent calls so large selections stay within the time/rate budget.
+    const content: PlatformContent[] = await mapLimit(platforms, 6, async (p) => {
+      const { posts, playbook } = await generatePlatformPosts(profile, p, provider);
+      return { platformId: p.id, platformName: p.name, posts, playbook };
+    });
 
     // Build a deterministic launch sequence from the platform playbook.
     const schedule: ScheduleItem[] = platforms
