@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { supabaseConfigured } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/Button";
-import { SignIn, useSupabaseUser } from "./SignIn";
+import { AccountName, SignIn, useSupabaseUser } from "./SignIn";
 
 export interface ProjectSnapshot {
   url: string;
@@ -32,7 +32,7 @@ export function ProjectBar({
   saving: boolean;
   onSaveNow: () => void;
 }) {
-  const { userEmail, supabase } = useSupabaseUser();
+  const { userEmail, displayName, supabase, updateDisplayName } = useSupabaseUser();
   const [projects, setProjects] = useState<SavedProject[]>([]);
 
   // Refresh the list on sign-in and after each autosave (so the current project shows up).
@@ -72,7 +72,11 @@ export function ProjectBar({
   return (
     <div className="flex flex-col items-end gap-2">
       <div className="flex items-center gap-2 text-xs">
-        <span className="text-neutral-400">{userEmail}</span>
+        <AccountName
+          email={userEmail}
+          name={displayName}
+          onSave={updateDisplayName}
+        />
         <span className="text-neutral-500">
           {saving ? "Saving…" : lastSaved ? `Saved ✓ ${lastSaved}` : ""}
         </span>

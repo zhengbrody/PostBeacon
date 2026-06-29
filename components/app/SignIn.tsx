@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/Button";
 export function useSupabaseUser() {
   const supabase = getSupabase();
   const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [displayName, setDisplayName] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -17,15 +18,107 @@ export function useSupabaseUser() {
     }
     // onAuthStateChange emits the initial session (after Supabase has processed
     // any OAuth/magic-link tokens in the URL), so it's the single signal we need
-    // — using it for the first read avoids a gate flash on OAuth return.
+    // — using it for the first read avoids a gate flash on OAuth return. It also
+    // re-fires on USER_UPDATED, so the display name stays fresh after an edit.
     const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
       setUserEmail(session?.user?.email ?? null);
+      setDisplayName(
+        (session?.user?.user_metadata?.display_name as string) || null
+      );
       setLoading(false);
     });
     return () => sub.subscription.unsubscribe();
   }, [supabase]);
 
-  return { userEmail, supabase, loading };
+  /** Persist a custom display name to Supabase user metadata (empty string clears it). */
+  async function updateDisplayName(name: string): Promise<{ error?: string }> {
+    if (!supabase) return { error: "Accounts are not configured." };
+    const display_name = name.trim();
+    const { error } = await supabase.auth.updateUser({ data: { display_name } });
+    if (error) return { error: error.message };
+    setDisplayName(display_name || null);
+    return {};
+  }
+
+  return { userEmail, displayName, supabase, loading, updateDisplayName };
+}
+
+/**
+ * Account label (custom display name, falling back to email) with a small inline
+ * editor — the "change your account name" setting. Click the name to rename.
+ */
+export function AccountName({
+  email,
+  name,
+  onSave,
+}: {
+  email: string;
+  name: string | null;
+  onSave: (name: string) => Promise<{ error?: string }>;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+
+  function open() {
+    setDraft(name ?? "");
+    setErr("");
+    setEditing(true);
+  }
+
+  async function save() {
+    setBusy(true);
+    const { error } = await onSave(draft);
+    setBusy(false);
+    if (error) {
+      setErr(error);
+      return;
+    }
+    setEditing(false);
+  }
+
+  if (editing) {
+    return (
+      <span className="flex items-center gap-1.5">
+        <input
+          autoFocus
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") save();
+            if (e.key === "Escape") setEditing(false);
+          }}
+          placeholder={email}
+          className="w-36 rounded-md border border-line bg-surface-2 px-2 py-1 text-xs outline-none focus:border-accent-500"
+        />
+        <button
+          onClick={save}
+          disabled={busy}
+          className="text-accent-300 hover:text-accent-200 disabled:opacity-50"
+        >
+          Save
+        </button>
+        <button
+          onClick={() => setEditing(false)}
+          className="text-neutral-500 hover:text-neutral-300"
+        >
+          Cancel
+        </button>
+        {err && <span className="text-red-400">{err}</span>}
+      </span>
+    );
+  }
+
+  return (
+    <button
+      onClick={open}
+      title="Edit display name"
+      className="text-neutral-400 hover:text-neutral-200"
+    >
+      {name || email}
+    </button>
+  );
 }
 
 /** Kick off Google OAuth. Supabase redirects to Google and back to `redirectTo`. */
@@ -86,7 +179,7 @@ function GoogleMark() {
  * Renders nothing when Supabase isn't configured.
  */
 export function SignIn({ redirectTo = "/app" }: { redirectTo?: string }) {
-  const { userEmail, supabase } = useSupabaseUser();
+  const { userEmail, displayName, supabase } = useSupabaseUser();
   const [email, setEmail] = useState("");
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
@@ -108,7 +201,7 @@ export function SignIn({ redirectTo = "/app" }: { redirectTo?: string }) {
   if (userEmail) {
     return (
       <div className="flex items-center gap-2 text-xs">
-        <span className="text-neutral-400">{userEmail}</span>
+        <span className="text-neutral-400">{displayName || userEmail}</span>
         <button
           onClick={() => supabase?.auth.signOut()}
           className="text-neutral-500 hover:text-neutral-300"
