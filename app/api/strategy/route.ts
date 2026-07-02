@@ -88,6 +88,7 @@ Return JSON exactly:
 Rules:
 - Score ALL ${catalog.length} channels 0-100 for fit to THIS product+audience. Be honest — low scores for poor fits. "bestMove" = the single highest-leverage action on that channel.
 - At least one risk must be about avoiding looking like an ad / getting flagged on the strict communities (HN, Reddit, Lobsters).
+- "bestMove" must name the exact venue — the specific subreddit, community, newsletter, or thread type (e.g. "r/selfhosted", "Indie Hackers milestone post") — never a vague "engage with the community".
 - Concrete over generic everywhere. Real numbers, real communities, real actions.`,
     });
 

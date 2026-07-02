@@ -14,7 +14,7 @@ const TIERS = [
     highlight: false,
     features: [
       "3 full launches",
-      "All 20+ platforms scored & ranked",
+      "All 19+ platforms scored & ranked",
       "Ready-to-post content + launch calendar",
       "Copy-paste — no auto-posting",
       "Export to Markdown / PDF",

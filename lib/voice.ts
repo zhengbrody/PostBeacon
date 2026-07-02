@@ -12,6 +12,8 @@ Banned openers & phrases (never use, in any form):
   "supercharge", "leverage", "robust", "cutting-edge", "powerful", "effortless", "next-level", "10x"
 - "Excited to announce", "Thrilled to share", "I'm proud to"
 - "Whether you're X or Y", "It's not just X — it's Y", "not only… but also"
+- "Say goodbye to", "Look no further", "That's where <product> comes in"
+- "streamline", "empower", "delve", "boast" — and never open a piece with "Introducing"
 
 Banned rhythms:
 - No three-item triads for cadence ("faster, cleaner, smarter").

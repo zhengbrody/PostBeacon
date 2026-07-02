@@ -12,6 +12,7 @@ import { ProjectBar } from "@/components/app/ProjectBar";
 import { Paywall } from "@/components/app/Paywall";
 import { UsageBadge } from "@/components/app/UsageBadge";
 import { FeedbackCTA } from "@/components/app/FeedbackCTA";
+import { CopilotPanel } from "@/components/app/CopilotPanel";
 import { AuthScreen } from "@/components/app/AuthScreen";
 import { useSupabaseUser } from "@/components/app/SignIn";
 import { supabaseConfigured } from "@/lib/supabase/client";
@@ -185,6 +186,18 @@ function AppFlow({ f }: { f: ReturnType<typeof useLaunchFlow> }) {
         <div className="mt-8">
           <FeedbackCTA />
         </div>
+      )}
+
+      {f.step === "results" && f.result && f.profile && f.strategy && (
+        <CopilotPanel
+          profile={f.profile}
+          strategy={f.strategy}
+          result={f.result}
+          launchDate={f.launchDate}
+          provider={f.provider}
+          onApplyRewrite={f.updatePost}
+          onAuthRequired={() => f.setPaywall("auth")}
+        />
       )}
 
       {f.paywall && (

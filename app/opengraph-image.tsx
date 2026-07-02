@@ -43,7 +43,7 @@ export default function OpengraphImage() {
           Your AI CMO. URL in, launch plan out.
         </div>
         <div style={{ marginTop: 34, fontSize: 30, color: "#a1a1aa", maxWidth: 840 }}>
-          Scans 20+ platforms, ranks where to go all-in, and writes ready-to-post
+          Scans 19+ platforms, ranks where to go all-in, and writes ready-to-post
           content + a launch calendar. Built for vibecoders.
         </div>
       </div>

@@ -4,7 +4,7 @@
 
 ## What PostBeacon is
 An AI-CMO SaaS for vibecoders. Paste a product URL → PostBeacon scrapes the page,
-distills a product profile, scans 20+ platforms and **scores/ranks** them for that
+distills a product profile, scans 19+ platforms and **scores/ranks** them for that
 specific product, then generates **ready-to-post** native content + a launch calendar.
 **No auto-posting** by design (copy-paste keeps users off platform ban radar).
 
@@ -37,12 +37,14 @@ app/
   app/page.tsx          The tool — thin; wires useLaunchFlow to components/app/*
   api/
     analyze|strategy|generate|regenerate|providers|usage/route.ts   server endpoints
+    copilot/route.ts                                                 Launch Copilot (plan-scoped CMO chat)
     billing/{checkout,webhook}/route.ts                              Polar checkout + webhook
 lib/
   types.ts              All shared types (Provider, ProductProfile, MarketingStrategy, ...)
   platforms.ts          THE platform universe (catalog + per-platform voice rules). Most-tuned file.
   llm.ts                Claude/OpenAI abstraction → generateJson()
   generate.ts           Per-platform content+playbook prompt (generatePlatformPosts) — shared by generate+regenerate
+  copilot.ts            Launch Copilot: compact plan-context builder + per-action prompts (runCopilot)
   voice.ts              ANTI_AI_RULES — house rules injected into content prompts to kill AI tells
   demo.ts               DEMO_PROJECT — a hand-authored full example plan (the no-API-key showcase)
   site.ts               Public config (REPO_URL, FEEDBACK_URL) — NEXT_PUBLIC_* overridable
@@ -64,7 +66,8 @@ hooks/
 components/
   ui/                   Button, Card, Badge, Spinner, Field (design system primitives)
   app/                  Stepper, UrlStep, ProfileForm, StrategyView, ResultsView (operating dashboard),
-                        PlanSummary (shared plan-section cards), ProjectBar, SignIn, Paywall, UsageBadge
+                        PlanSummary (shared plan-section cards), CopilotPanel (Launch Copilot drawer),
+                        ProjectBar, SignIn, Paywall, UsageBadge
   landing/              Nav, Hero, HowItWorks, PlatformShowcase, Pricing, FAQ, Footer
 supabase/schema.sql     projects table + row-level security
 ```
@@ -101,6 +104,26 @@ left unset → accounts off (anon + localStorage), generation open/unmetered, `P
 Redeploy: `npx vercel --prod --yes`. Push env from `.env.local`: `~/push-env.sh`.
 
 ## Status / changelog
+- **2026-07-01**: **M10 — Contextual Launch Copilot.** A CMO assistant scoped to the CURRENT plan
+  (not a generic chatbot), on the results dashboard. New `lib/copilot.ts` (`runCopilot`): compact
+  plain-text plan snapshot (profile/strategy/calendar + posts tagged `[platformId #idx]`, 28k-char
+  cap, type-guarded against malformed request JSON) + 7 actions (`explain-plan`, `next-steps`,
+  `improve-posts`, `rewrite`, `first-replies`, `review-feedback`, `ask`) with anti-generic system
+  rules ("point at concrete plan elements by name; no advice that'd fit another product; never
+  invent facts — leave [fill in] placeholders"); rewrite-type actions inject platform
+  guidance/persona + ANTI_AI_RULES. New `POST /api/copilot` (guardRoute → login+daily cap for free;
+  maxDuration 120; per-action 400 validation). New `components/app/CopilotPanel.tsx`: floating
+  "✦ Ask your CMO" → right drawer (fixed+no-print, Esc/scrim close), quick-action chips, platform
+  select for Rewrite/First replies, "pasting feedback" toggle, transcript in component state ONLY
+  (session-scoped by design), per-reply Copy, rewrite cards with Copy + **Apply to draft** →
+  `updatePost` (old hook auto-becomes A/B variant; autosave picks it up). Mounted in `AppFlow`
+  next to Paywall; 401 → existing sign-in Paywall. History = last 6 turns, sent per request.
+  Also: **prompt hardening** (voice.ts banned-phrase additions incl. "Say goodbye to"/"delve"/
+  "Introducing" opener; generate.ts competitor test; strategy bestMove must name the exact venue;
+  analyze never fabricates on thin pages), **Copy all posts** button on Content library
+  (`postsToMarkdown` in export.ts, shared `appendPosts` with toMarkdown), and "20+" → "19+"
+  platform-count fix (metadata/OG/Pricing/README — catalog has 19). Build green; all 7 actions
+  verified live (deepseek) incl. multi-turn history, Apply-to-draft, and 401 semantics.
 - **2026-06-25**: **M9 — login gate + Google OAuth.** `/app` now requires sign-in **when Supabase is
   configured** (degrades to fully open when it isn't, so local dev + the demo still work; `?demo=1`
   always bypasses the gate). New `components/app/AuthScreen.tsx` (Continue-with-Google primary +

@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
       provider,
       maxTokens: 2000,
       system:
-        "You are a sharp product strategist doing a first-pass diagnosis of a product from its landing page. Don't just lift the marketing copy — form a real point of view on what this is, who would actually pay attention, and why. Be concrete and specific, no fluff. Landing pages oversell; translate hype into the plain underlying truth. If the page is thin, infer sensibly and lower your confidence.",
+        "You are a sharp product strategist doing a first-pass diagnosis of a product from its landing page. Don't just lift the marketing copy — form a real point of view on what this is, who would actually pay attention, and why. Be concrete and specific, no fluff. Landing pages oversell; translate hype into the plain underlying truth. If the page is thin, infer sensibly and lower your confidence — never fabricate specifics the page doesn't support, and name what you inferred in confidenceNote.",
       user: `Here is the scraped landing page.
 
 URL: ${page.url}

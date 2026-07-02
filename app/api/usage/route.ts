@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { meteringEnabled } from "@/lib/supabase/server";
+import { billingEnabled, meteringEnabled } from "@/lib/supabase/server";
 import { getUserFromRequest, getEntitlement, FREE_LAUNCHES } from "@/lib/usage";
 
 // Current plan + remaining free launches for the signed-in user. Returns
 // { enabled:false } when metering is off so the UI can hide the indicator.
+// Also hidden while billing is off: the lifetime launch cap is only enforced
+// once Polar is wired (see /api/generate), so during the free beta a
+// "N launches left" badge would be pure noise.
 export async function GET(req: NextRequest) {
-  if (!meteringEnabled()) {
+  if (!meteringEnabled() || !billingEnabled()) {
     return NextResponse.json({ enabled: false });
   }
   const user = await getUserFromRequest(req);

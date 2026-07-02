@@ -14,7 +14,13 @@ import {
   RisksCard,
 } from "@/components/app/PlanSummary";
 import { scheduleDate } from "@/lib/dates";
-import { toMarkdown, toJson, downloadFile, type ExportSnapshot } from "@/lib/export";
+import {
+  toMarkdown,
+  toJson,
+  postsToMarkdown,
+  downloadFile,
+  type ExportSnapshot,
+} from "@/lib/export";
 import type {
   GenerateResult,
   MarketingStrategy,
@@ -50,6 +56,12 @@ export function ResultsView({
 }) {
   function exportSnapshot(): ExportSnapshot {
     return { url: undefined, profile, strategy, result, launchDate };
+  }
+  const [copiedAll, setCopiedAll] = useState(false);
+  async function copyAllPosts() {
+    await navigator.clipboard.writeText(postsToMarkdown(result));
+    setCopiedAll(true);
+    setTimeout(() => setCopiedAll(false), 1500);
   }
   const slug = useMemo(
     () =>
@@ -184,9 +196,19 @@ export function ResultsView({
       </section>
 
       <section id="content" className="scroll-mt-4 space-y-8">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-accent-300">
-          Content library
-        </h2>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-accent-300">
+            Content library
+          </h2>
+          <Button
+            size="sm"
+            variant="outline"
+            className="no-print"
+            onClick={copyAllPosts}
+          >
+            {copiedAll ? "Copied!" : "⧉ Copy all posts"}
+          </Button>
+        </div>
         {result.content.map((c) => (
           <ChannelBlock
             key={c.platformId}

@@ -34,7 +34,9 @@ ${p.persona ? `\nWrite as: ${p.persona}` : ""}
 
 The product's own voice is: ${profile.tone || "clear, specific, human"}. Blend it with how people really write on ${p.name} — the platform's native format wins, the product's personality only colors word choice.
 
-${ANTI_AI_RULES}`,
+${ANTI_AI_RULES}
+
+Competitor test: if a sentence could describe a competitor unchanged, add a product-specific fact or cut it.`,
     user: `PRODUCT PROFILE:
 ${JSON.stringify(profile, null, 2)}
 

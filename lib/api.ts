@@ -6,6 +6,8 @@ import type {
   GenerateResult,
   PlatformPost,
   PlatformPlaybook,
+  CopilotReply,
+  CopilotRequest,
 } from "./types";
 
 export interface UsageInfo {
@@ -71,6 +73,7 @@ export const api = {
       "/api/regenerate",
       { profile, platformId, provider }
     ),
+  copilot: (body: CopilotRequest) => post<CopilotReply>("/api/copilot", body),
   usage: async (): Promise<UsageInfo> => {
     const res = await fetch("/api/usage", { headers: { ...(await authHeader()) } });
     return res.json();

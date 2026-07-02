@@ -4,7 +4,7 @@
 
 I built PostBeacon because I can ship a product in a weekend and then completely stall on the part that decides whether anyone sees it. Writing the Show HN, picking the right subreddits, figuring out the order to post things in, making the copy not sound like a press release — that work is real, and "use AI to write a tweet" doesn't cover it.
 
-So this isn't a caption generator. You give it a URL; it reads the page, works out what the product actually is and who'd care, scores 20+ channels for *that* product, and hands back a full go-to-market plan — positioning, audience, a phased calendar, a founder checklist, and copy-paste content written to read like a person, not a model.
+So this isn't a caption generator. You give it a URL; it reads the page, works out what the product actually is and who'd care, scores 19+ channels for *that* product, and hands back a full go-to-market plan — positioning, audience, a phased calendar, a founder checklist, and copy-paste content written to read like a person, not a model.
 
 **It never posts for you.** Everything is copy-paste, on purpose — you stay in control, and you stay off every platform's automation ban radar.
 

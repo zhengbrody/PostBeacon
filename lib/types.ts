@@ -127,3 +127,46 @@ export interface DiscoveredChannel {
   source: string; // how it was found (e.g. "Tavily" when grounded, "AI" otherwise)
   validated?: boolean; // true if the URL was confirmed reachable / came from live search
 }
+
+// ---- Launch Copilot (M10): a CMO assistant scoped to the CURRENT plan ----
+
+export type CopilotAction =
+  | "explain-plan" // walk me through the plan's logic
+  | "next-steps" // what do I do next, concretely
+  | "improve-posts" // find + rewrite the posts that smell like AI
+  | "rewrite" // rewrite the posts for one platform (targetPlatformId)
+  | "first-replies" // replies to seed one platform's thread (targetPlatformId)
+  | "review-feedback" // read pasted comments/results against the plan
+  | "ask"; // free-form question about this launch
+
+export interface CopilotMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+/** A copy-ready replacement for a drafted post. Applies via updatePost when it
+ *  resolves to an existing [platformId, postIndex]; otherwise it's copy-only. */
+export interface CopilotRewrite {
+  platformId?: string;
+  postIndex?: number;
+  label: string; // e.g. "Reddit post 2 — cut the ad voice"
+  hook?: string;
+  body: string;
+}
+
+export interface CopilotReply {
+  reply: string; // plain text answer
+  rewrites?: CopilotRewrite[];
+}
+
+export interface CopilotRequest {
+  provider?: Provider;
+  profile: ProductProfile;
+  strategy: MarketingStrategy;
+  result?: GenerateResult | null;
+  launchDate?: string;
+  action: CopilotAction;
+  question?: string; // free question / rewrite direction / pasted feedback
+  targetPlatformId?: string; // required for "rewrite" and "first-replies"
+  history?: CopilotMessage[]; // last few turns, session-scoped (not persisted)
+}

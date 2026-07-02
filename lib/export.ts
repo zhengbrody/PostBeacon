@@ -2,6 +2,7 @@ import type {
   ProductProfile,
   GenerateResult,
   MarketingStrategy,
+  PlatformContent,
 } from "./types";
 import { scheduleDate } from "./dates";
 
@@ -45,14 +46,7 @@ export function toMarkdown(snap: ExportSnapshot): string {
       if (pb.postingWindow) out.push(`*Post during:* ${pb.postingWindow}`);
       out.push("");
     }
-    c.posts.forEach((post, i) => {
-      if (c.posts.length > 1) out.push(`### Post ${i + 1}`, "");
-      out.push(`**${post.hook}**`, "", post.body, "");
-      if (post.imageSuggestion) out.push(`*Image:* ${post.imageSuggestion}`);
-      if (post.bestTime) out.push(`*Best time:* ${post.bestTime}`);
-      if (post.caveats) out.push(`*Caveat:* ${post.caveats}`);
-      out.push("");
-    });
+    appendPosts(out, c);
     if (pb?.firstReplies?.length) {
       out.push("*First replies to seed discussion:*");
       pb.firstReplies.forEach((r) => out.push(`- ${r}`));
@@ -60,6 +54,27 @@ export function toMarkdown(snap: ExportSnapshot): string {
     }
   }
   return out.join("\n");
+}
+
+/** Just the ready-to-post content, per platform — the copy-all-posts payload. */
+export function postsToMarkdown(result: GenerateResult): string {
+  const out: string[] = [];
+  for (const c of result.content) {
+    out.push(`## ${c.platformName}`, "");
+    appendPosts(out, c);
+  }
+  return out.join("\n");
+}
+
+function appendPosts(out: string[], c: PlatformContent) {
+  c.posts.forEach((post, i) => {
+    if (c.posts.length > 1) out.push(`### Post ${i + 1}`, "");
+    out.push(`**${post.hook}**`, "", post.body, "");
+    if (post.imageSuggestion) out.push(`*Image:* ${post.imageSuggestion}`);
+    if (post.bestTime) out.push(`*Best time:* ${post.bestTime}`);
+    if (post.caveats) out.push(`*Caveat:* ${post.caveats}`);
+    out.push("");
+  });
 }
 
 /** Append the strategic CMO plan (everything that isn't per-platform content). */
