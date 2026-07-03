@@ -11,12 +11,14 @@ export interface ProjectSnapshot {
   strategy: any;
   result: any;
   posted: Record<string, boolean>;
+  selected: string[];
 }
 
-interface SavedProject extends ProjectSnapshot {
+interface SavedProject extends Omit<ProjectSnapshot, "selected"> {
   id: string;
   name: string;
   updated_at: string;
+  meta?: { selected?: string[]; launchDate?: string };
 }
 
 export function ProjectBar({

@@ -175,9 +175,17 @@ function AppFlow({ f }: { f: ReturnType<typeof useLaunchFlow> }) {
           onTogglePosted={f.togglePosted}
           onRegenerate={f.regeneratePost}
           onUpdatePost={f.updatePost}
+          onUpdateStrategy={f.updateStrategy}
+          onUpdateRecommendation={f.updateRecommendation}
+          onUpdateScheduleItem={f.updateScheduleItem}
+          onRemoveScheduleItem={f.removeScheduleItem}
+          onAddScheduleItem={f.addScheduleItem}
+          onRemoveChannel={f.removeChannel}
+          onAddChannel={f.addChannel}
           launchDate={f.launchDate}
           setLaunchDate={f.setLaunchDate}
           loading={f.loading}
+          demo={f.demo}
           onReset={f.reset}
         />
       )}

@@ -6,6 +6,7 @@ import {
   LaunchPlanCard,
   PositioningCard,
 } from "@/components/app/PlanSummary";
+import { PLATFORMS } from "@/lib/platforms";
 import type { MarketingStrategy, PlatformRecommendation } from "@/lib/types";
 
 const effortLabel: Record<NonNullable<PlatformRecommendation["effort"]>, string> = {
@@ -29,6 +30,11 @@ export function StrategyView({
   onBack: () => void;
   onGenerate: () => void;
 }) {
+  // What the current selection turns into, so the choice feels concrete.
+  const postEstimate = selected.reduce(
+    (n, id) => n + (PLATFORMS.find((p) => p.id === id)?.postCount ?? 1),
+    0
+  );
   return (
     <div className="space-y-6">
       <PositioningCard strategy={strategy} />
@@ -45,8 +51,14 @@ export function StrategyView({
           <span className="text-xs text-neutral-500">{selected.length} selected</span>
         </div>
         <p className="mb-4 text-xs text-neutral-500">
-          Pick where to spend your limited time. We only write content for the
-          channels you keep.
+          We pre-checked your best-scoring channels. Content is written{" "}
+          <span className="font-medium text-neutral-300">
+            only for checked channels
+          </span>{" "}
+          — fewer channels means a tighter plan you&apos;ll actually execute.
+          Current pick ≈ {postEstimate} ready-to-post drafts +{" "}
+          {selected.length} playbooks. You can add more channels later from the
+          results page.
         </p>
         <div className="space-y-2">
           {strategy.recommendations.map((r) => (
@@ -90,7 +102,8 @@ export function StrategyView({
           ← Back
         </Button>
         <Button onClick={onGenerate} disabled={!selected.length || loading}>
-          Generate content for {selected.length} channels →
+          Generate {postEstimate} posts for {selected.length}{" "}
+          {selected.length === 1 ? "channel" : "channels"} →
         </Button>
       </div>
     </div>

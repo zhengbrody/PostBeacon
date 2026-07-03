@@ -64,12 +64,13 @@ hooks/
   useLaunchFlow.ts      The 4-step state machine + actions + project load/restore + draft hydrate
   useAutosave.ts        Debounced persist: localStorage (anon) / Supabase upsert (signed-in)
 components/
-  ui/                   Button, Card, Badge, Spinner, Field (design system primitives)
-  app/                  Stepper, UrlStep, ProfileForm, StrategyView, ResultsView (operating dashboard),
+  ui/                   Button, Card, Badge, Spinner, Field, Tabs (design system primitives)
+  app/                  Stepper, UrlStep, ProfileForm, StrategyView, ResultsView (tabbed operating
+                        dashboard: Overview/Content/Calendar/Execute + channel master-detail),
                         PlanSummary (shared plan-section cards), CopilotPanel (Launch Copilot drawer),
                         ProjectBar, SignIn, Paywall, UsageBadge
   landing/              Nav, Hero, HowItWorks, PlatformShowcase, Pricing, FAQ, Footer
-supabase/schema.sql     projects table + row-level security
+supabase/schema.sql     projects table (+ meta jsonb: selection/launchDate) + row-level security
 ```
 
 ## Conventions
@@ -104,6 +105,28 @@ left unset → accounts off (anon + localStorage), generation open/unmetered, `P
 Redeploy: `npx vercel --prod --yes`. Push env from `.env.local`: `~/push-env.sh`.
 
 ## Status / changelog
+- **2026-07-02**: **M11 — editable, focused, navigable** (founder feedback: plan not individually
+  editable, too much content, one giant scroll). (1) **Focused generation**: default selection is
+  now the **top-4 channels by score** (`defaultSelection` in useLaunchFlow, replaces "all non-low");
+  StrategyView states the contract ("content only for checked channels") + a live post estimate;
+  `selected` is persisted (localStorage draft field / new `projects.meta` jsonb, which also fixes
+  signed-in `launchDate` never being saved). Restore chain `p.selected ?? p.meta?.selected ??
+  defaultSelection(...)` keeps all pre-M11 saves working. (2) **Tabbed dashboard**: ResultsView
+  rebuilt as 4 tabs (Overview / Content / Calendar / Execute) via new `components/ui/Tabs.tsx`;
+  only the active tab mounts. Content is master-detail: ranked channel list (score, priority,
+  posted progress) → one channel's playbook+posts; anchor-nav + "channels, ranked" section removed
+  as dead code. Print/Cmd+P force-mounts everything via `beforeprint` + `flushSync` (all tabs, all
+  channels), `print:block` on the grid so the hidden sidebar doesn't squeeze the paper layout.
+  (3) **Editable plan**: PositioningCard gains optional `onUpdate` (exec summary + positioning,
+  results step only); per-channel angle/bestMove editable in the channel header
+  (`updateRecommendation`); calendar rows edit (commit-on-Done, re-sorts by day) / delete / add
+  custom step; channels removable post-generation (inline two-step confirm; prunes content,
+  schedule, posted marks, selection together) and addable from the ranked list (`addChannel` via
+  /api/regenerate, splices at ranked position + calendar entry; hidden in demo). New hook actions:
+  updateStrategy, updateRecommendation, updateScheduleItem, removeScheduleItem, addScheduleItem,
+  removeChannel, addChannel — all pure state, so autosave/export/Copilot pick edits up for free.
+  Build green; verified in browser on the demo plan (tabs, master-detail, edits, add/remove
+  channel + calendar cascade, beforeprint force-mount, top-4 preselect fallback for legacy saves).
 - **2026-07-01**: **M10 — Contextual Launch Copilot.** A CMO assistant scoped to the CURRENT plan
   (not a generic chatbot), on the results dashboard. New `lib/copilot.ts` (`runCopilot`): compact
   plain-text plan snapshot (profile/strategy/calendar + posts tagged `[platformId #idx]`, 28k-char

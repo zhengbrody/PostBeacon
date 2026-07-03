@@ -4,15 +4,30 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import { loadDraft } from "@/lib/storage";
 import { DEMO_PROJECT } from "@/lib/demo";
+import { PLATFORMS } from "@/lib/platforms";
 import type {
   Provider,
   ProductProfile,
   MarketingStrategy,
   GenerateResult,
+  PlatformContent,
   PlatformPost,
+  PlatformRecommendation,
+  ScheduleItem,
 } from "@/lib/types";
 
 export type Step = "input" | "profile" | "strategy" | "results";
+
+// Default channel set: the 4 best-scoring recommendations. A tight default —
+// content is only written for checked channels, and a focused plan beats a
+// sprawling one. Sorted explicitly; the model's array order isn't trusted.
+function defaultSelection(recs?: PlatformRecommendation[]): string[] {
+  if (!recs?.length) return [];
+  return [...recs]
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 4)
+    .map((r) => r.platformId);
+}
 
 /**
  * The whole 4-step launch flow as one hook: state machine + API actions +
@@ -78,11 +93,7 @@ export function useLaunchFlow() {
       if (!profile) return;
       const s = await api.strategy(profile, provider);
       setStrategy(s);
-      setSelected(
-        s.recommendations
-          .filter((r) => r.priority !== "low")
-          .map((r) => r.platformId)
-      );
+      setSelected(defaultSelection(s.recommendations));
       setStep("strategy");
     }, "Scanning every platform & ranking your channels…");
 
@@ -155,6 +166,124 @@ export function useLaunchFlow() {
       s.includes(id) ? s.filter((x) => x !== id) : [...s, id]
     );
 
+  // ---- Plan editing (M11). Pure state patches: autosave, export and the
+  // ---- Copilot context all read this state, so edits flow through for free.
+
+  const updateStrategy = (patch: Partial<MarketingStrategy>) =>
+    setStrategy((s) => (s ? { ...s, ...patch } : s));
+
+  const updateRecommendation = (
+    platformId: string,
+    patch: Partial<PlatformRecommendation>
+  ) =>
+    setStrategy((s) =>
+      s
+        ? {
+            ...s,
+            recommendations: s.recommendations.map((r) =>
+              r.platformId === platformId ? { ...r, ...patch } : r
+            ),
+          }
+        : s
+    );
+
+  // Schedule edits re-sort by day inside the producer, so the render and the
+  // next index-based edit always see the same order.
+  const updateScheduleItem = (idx: number, patch: Partial<ScheduleItem>) =>
+    setResult((r) =>
+      r
+        ? {
+            ...r,
+            schedule: r.schedule
+              .map((s, i) => (i === idx ? { ...s, ...patch } : s))
+              .sort((a, b) => a.day - b.day),
+          }
+        : r
+    );
+
+  const removeScheduleItem = (idx: number) =>
+    setResult((r) =>
+      r ? { ...r, schedule: r.schedule.filter((_, i) => i !== idx) } : r
+    );
+
+  const addScheduleItem = (item: ScheduleItem) =>
+    setResult((r) =>
+      r
+        ? { ...r, schedule: [...r.schedule, item].sort((a, b) => a.day - b.day) }
+        : r
+    );
+
+  // Drop a channel from the plan. Content, calendar steps, posted marks and
+  // the generation set go together so counts and re-generates never drift.
+  const removeChannel = (platformId: string) => {
+    setResult((r) =>
+      r
+        ? {
+            content: r.content.filter((c) => c.platformId !== platformId),
+            schedule: r.schedule.filter((s) => s.platformId !== platformId),
+          }
+        : r
+    );
+    setPosted((p) =>
+      Object.fromEntries(
+        Object.entries(p).filter(([k]) => !k.startsWith(`${platformId}-`))
+      )
+    );
+    setSelected((s) => s.filter((x) => x !== platformId));
+  };
+
+  // Write content for one more channel after generation, slotting it into the
+  // plan at its ranked position (content order, calendar, selection).
+  const addChannel = (platformId: string) => {
+    const platform = PLATFORMS.find((p) => p.id === platformId);
+    if (!platform) return Promise.resolve();
+    return run(async () => {
+      if (!profile) return;
+      setPaywall(null);
+      try {
+        const { posts, playbook } = await api.regenerate(
+          profile,
+          platformId,
+          provider
+        );
+        const block: PlatformContent = {
+          platformId,
+          platformName: platform.name,
+          posts,
+          playbook,
+        };
+        setResult((r) => {
+          if (!r || r.content.some((c) => c.platformId === platformId)) return r;
+          const rank = new Map(
+            (strategy?.recommendations ?? []).map((rec, i) => [rec.platformId, i])
+          );
+          return {
+            content: [...r.content, block].sort(
+              (a, b) =>
+                (rank.get(a.platformId) ?? Infinity) -
+                (rank.get(b.platformId) ?? Infinity)
+            ),
+            // Same action template the server uses, so the calendar reads uniformly.
+            schedule: [
+              ...r.schedule,
+              {
+                day: platform.defaultDay,
+                platformId,
+                platformName: platform.name,
+                action: `Post to ${platform.name} — ${platform.blurb} (${platform.bestTime})`,
+              },
+            ].sort((a, b) => a.day - b.day),
+          };
+        });
+        setSelected((s) => (s.includes(platformId) ? s : [...s, platformId]));
+      } catch (e: any) {
+        if (e?.code === "auth") return setPaywall("auth");
+        if (e?.code === "paywall") return setPaywall("limit");
+        throw e;
+      }
+    }, `Writing content for ${platform.name}…`);
+  };
+
   const togglePosted = (id: string) =>
     setPosted((p) => ({ ...p, [id]: !p[id] }));
 
@@ -178,15 +307,15 @@ export function useLaunchFlow() {
     setStrategy(p.strategy || null);
     setResult(p.result || null);
     setPosted(p.posted || {});
-    setLaunchDate(p.launchDate || "");
+    setLaunchDate(p.launchDate || p.meta?.launchDate || "");
     setProjectId(p.id || "");
-    if (p.strategy?.recommendations) {
-      setSelected(
-        p.strategy.recommendations
-          .filter((r: any) => r.priority !== "low")
-          .map((r: any) => r.platformId)
-      );
-    }
+    // Three generations of saved data: flat `selected` (local draft), `meta`
+    // (Supabase row), or neither (pre-M11 saves) → derive a fresh default.
+    setSelected(
+      p.selected ??
+        p.meta?.selected ??
+        defaultSelection(p.strategy?.recommendations)
+    );
     setStep(
       p.result ? "results" : p.strategy ? "strategy" : p.profile ? "profile" : "input"
     );
@@ -228,8 +357,8 @@ export function useLaunchFlow() {
   // Stable identity unless the contents change — lets autosave depend on the
   // object reference instead of re-serializing it every render.
   const snapshot = useMemo(
-    () => ({ url, profile, strategy, result, posted }),
-    [url, profile, strategy, result, posted]
+    () => ({ url, profile, strategy, result, posted, selected }),
+    [url, profile, strategy, result, posted, selected]
   );
 
   return {
@@ -253,6 +382,13 @@ export function useLaunchFlow() {
     togglePosted,
     regeneratePost,
     updatePost,
+    updateStrategy,
+    updateRecommendation,
+    updateScheduleItem,
+    removeScheduleItem,
+    addScheduleItem,
+    removeChannel,
+    addChannel,
     launchDate,
     setLaunchDate,
     projectId,

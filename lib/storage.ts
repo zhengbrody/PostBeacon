@@ -10,6 +10,7 @@ export interface Draft {
   strategy?: any;
   result?: any;
   posted?: Record<string, boolean>;
+  selected?: string[]; // channels checked for generation
   launchDate?: string;
 }
 

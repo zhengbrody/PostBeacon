@@ -9,9 +9,15 @@ create table if not exists public.projects (
   strategy jsonb,
   result jsonb,
   posted jsonb default '{}'::jsonb,
+  -- client-side plan state (channel selection, launch date) — not a server response
+  meta jsonb default '{}'::jsonb,
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
+
+-- Migration for existing installs (safe to re-run):
+alter table public.projects
+  add column if not exists meta jsonb default '{}'::jsonb;
 
 create index if not exists projects_user_idx on public.projects (user_id, updated_at desc);
 

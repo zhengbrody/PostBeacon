@@ -1,4 +1,9 @@
+"use client";
+
+import { useState } from "react";
 import { Card } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
+import { Field } from "@/components/ui/Field";
 import type {
   AudienceSegment,
   FounderTask,
@@ -23,22 +28,64 @@ const tierLabel: Record<AudienceSegment["tier"], string> = {
   "early-adopter": "Early adopters",
 };
 
-/** Executive summary + positioning + anti-positioning + the play + cold start. */
-export function PositioningCard({ strategy }: { strategy: MarketingStrategy }) {
+/** Executive summary + positioning + anti-positioning + the play + cold start.
+ *  Pass `onUpdate` to make the summary and positioning editable in place —
+ *  they're the two lines a founder most often disagrees with, and both feed
+ *  every Copilot prompt. */
+export function PositioningCard({
+  strategy,
+  onUpdate,
+}: {
+  strategy: MarketingStrategy;
+  onUpdate?: (patch: Partial<MarketingStrategy>) => void;
+}) {
+  const [editing, setEditing] = useState(false);
   return (
     <Card className="border-accent-700/50 bg-accent-600/10 p-6">
-      {strategy.executiveSummary && (
-        <>
-          <SectionHeading>Executive summary</SectionHeading>
-          <p className="mt-1.5 text-sm text-neutral-100">
-            {strategy.executiveSummary}
-          </p>
-        </>
+      {onUpdate && (
+        <Button
+          size="sm"
+          variant="outline"
+          className="no-print float-right -mr-1 -mt-1"
+          onClick={() => setEditing((e) => !e)}
+        >
+          {editing ? "Done" : "Edit"}
+        </Button>
+      )}
+      {editing && onUpdate ? (
+        <Field
+          label="Executive summary"
+          textarea
+          value={strategy.executiveSummary ?? ""}
+          onChange={(v) => onUpdate({ executiveSummary: v })}
+        />
+      ) : (
+        strategy.executiveSummary && (
+          <>
+            <SectionHeading>Executive summary</SectionHeading>
+            <p className="mt-1.5 text-sm text-neutral-100">
+              {strategy.executiveSummary}
+            </p>
+          </>
+        )
       )}
       <div className="mt-5 grid gap-5 sm:grid-cols-2">
         <div>
-          <SectionHeading>Positioning</SectionHeading>
-          <p className="mt-1.5 text-sm text-neutral-100">{strategy.positioning}</p>
+          {editing && onUpdate ? (
+            <Field
+              label="Positioning"
+              textarea
+              value={strategy.positioning}
+              onChange={(v) => onUpdate({ positioning: v })}
+            />
+          ) : (
+            <>
+              <SectionHeading>Positioning</SectionHeading>
+              <p className="mt-1.5 text-sm text-neutral-100">
+                {strategy.positioning}
+              </p>
+            </>
+          )}
         </div>
         {strategy.antiPositioning && (
           <div>
