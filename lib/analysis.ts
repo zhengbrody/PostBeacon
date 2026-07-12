@@ -1,5 +1,6 @@
 import { generateJsonMeta } from "./llm";
 import { auditFacts, pickClarifyingQuestions } from "./facts";
+import { asString, asStringList } from "./coerce";
 import type { FactAudit, PageCorpus } from "./facts";
 import type {
   ClarifyingQuestion,
@@ -76,9 +77,8 @@ Fact entries to produce, in this order:
   const { facts, audit } = auditFacts(data?.facts, page);
   const questions = pickClarifyingQuestions(facts);
 
-  const s = (v: unknown): string => (typeof v === "string" ? v : "");
-  const arr = (v: unknown): string[] =>
-    Array.isArray(v) ? v.map((x) => s(x)).filter(Boolean) : [];
+  const s = asString;
+  const arr = asStringList;
 
   const profile: ProductProfile = {
     name: s(data?.name),

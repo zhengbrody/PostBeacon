@@ -4,7 +4,7 @@
 
 ## What PostBeacon is
 An AI-CMO SaaS for vibecoders. Paste a product URL → PostBeacon scrapes the page,
-distills a product profile, scans 20+ platforms and **scores/ranks** them for that
+distills a product profile, scores all 19 catalog platforms for that
 specific product, then generates **ready-to-post** native content + a launch calendar.
 **No auto-posting** by design (copy-paste keeps users off platform ban radar).
 
@@ -13,8 +13,9 @@ specific product, then generates **ready-to-post** native content + a launch cal
   which collided with an existing marketing company.)
 
 ## Stack
-Next.js 15 (App Router) · React 19 · Tailwind v4 · TypeScript (strict) ·
-Claude/OpenAI (switchable) · Supabase (optional accounts) · cheerio + Firecrawl (scraping). Deploys to Vercel.
+Next.js 15 (App Router) · React 19 · Tailwind v4 · TypeScript (strict) · zod ·
+Claude/OpenAI/DeepSeek (switchable) · Supabase (optional accounts) · cheerio + Firecrawl
+(scraping) · vitest + ESLint (CLI, flat config) + Prettier + GitHub Actions CI. Deploys to Vercel.
 
 ## Data flow
 ```
@@ -22,7 +23,9 @@ URL ──► /api/analyze  ──► ProductProfile        (scrape + LLM extrac
         /api/strategy ──► MarketingStrategy      (score & rank ALL platforms + positioning)
         /api/generate ──► GenerateResult         (per-platform content + launch calendar)
 ```
-The frontend drives this as a 4-step flow: input → profile → strategy → results.
+The frontend drives this as a 4-step flow: input → profile → strategy → results
+(plus /api/regenerate for single-channel rewrites and /api/copilot for the
+plan-scoped CMO chat on the results dashboard).
 
 ## Architecture map
 ```
@@ -57,7 +60,11 @@ lib/
   dates.ts              scheduleDate(launchDate, day) for the calendar
   auth.ts               bearer(req) — read the Supabase token from a request
   usage.ts              Entitlement read/increment + FREE_LAUNCHES + daily cap (server metering)
-  errors.ts             PublicError/BlockedUrlError — the only error messages routes may expose
+  plan.ts               Shared plan shaping: rank ordering, canonical calendar entries (M14)
+  coerce.ts             unknown-typed coercers for loose JSON (replaces per-file any helpers, M14)
+  async.ts              mapLimit — bounded-concurrency runner (route + evals share it, M14)
+  errors.ts             PublicError/BlockedUrlError + ApiErrorBody/ApiErrorCode — THE error
+                        shape every route returns and the client consumes
   urlPolicy.ts          SSRF URL policy (schemes/ports/hostnames/IPv4+IPv6 ranges); isomorphic,
                         also guards external <a href>s (isSafeExternalHref)
   safeFetch.ts          SSRF-safe fetch for user/model URLs: DNS validated at connect time
@@ -70,24 +77,34 @@ lib/
   search.ts             Live web search seam (Tavily; SEARCH_API_KEY) for grounding
   discovery.ts          Niche-channel discovery: search→ground→URL-validate, LLM fallback
   api.ts                Browser→server typed client (used by the hook)
-  storage.ts            localStorage "current draft" (anonymous autosave slot)
+  storage.ts            Versioned localStorage draft (DRAFT_SCHEMA_VERSION + migrateDraft;
+                        the Supabase projects.meta jsonb carries the same version)
   supabase/client.ts    Browser Supabase client (graceful if unconfigured)
   supabase/server.ts    Service-role client (server-only; trust-counts usage)
 hooks/
-  useLaunchFlow.ts      The 4-step state machine + actions + project load/restore + draft hydrate
+  launchFlowReducer.ts  THE plan state machine: pure reducer + normalize() enforcing the
+                        invariants (no result without its strategy, selection ⊆ channels,
+                        posted marks ⊆ existing posts, step never deeper than the data)
+  useLaunchFlow.ts      Thin hook over the reducer: async API actions + ephemeral UI state
   useAutosave.ts        Debounced persist: localStorage (anon) / Supabase upsert (signed-in)
 components/
   ui/                   Button, Card, Badge, Spinner, Field, Tabs (design system primitives)
   app/                  Stepper, UrlStep, ProfileForm, FactLedger (provenance UI + questions),
-                        StrategyView (score breakdowns), ResultsView (failures panel + retry),
+                        StrategyView (score breakdowns), ResultsView (tab orchestrator),
                         PlanSummary, CopilotPanel, ProjectBar, SignIn, AuthScreen, Paywall,
                         UsageBadge, FeedbackCTA
+  app/results/          The results dashboard, one module per tab (M14): OverviewTab,
+                        ContentTab (master-detail) + ChannelBlock + PostCard, CalendarTab,
+                        ExecuteTab, FailuresCard, PrintHeading
   landing/              Nav, Hero, HowItWorks, PlatformShowcase, Pricing, FAQ, Footer
 docs/M13-trust-layer.md Design + migration doc for the trust layer (facts/scoring/partial success)
 tests/                  vitest suites: urlPolicy, safeFetch, billing, webhook route, validate,
-                        golden (12-fixture offline evals), generateRoute; eval.live (gated)
+                        golden (12-fixture offline evals), generateRoute, flowReducer
+                        (state-machine invariants), storage (draft migrations); eval.live (gated)
 tests/golden/           fixtures.ts — 12 product-type golden fixtures with ground truth
 supabase/schema.sql     projects + entitlements + webhook_events tables, row-level security
+.github/workflows/ci.yml  typecheck · lint · format:check · offline tests · build on every push/PR
+eslint.config.mjs / .prettierrc.json   non-interactive lint + format (next lint is deprecated)
 ```
 
 ## Security posture
@@ -124,6 +141,9 @@ supabase/schema.sql     projects + entitlements + webhook_events tables, row-lev
 - Brand color = `accent-*` tokens only (defined in `globals.css`), never raw `violet-*`.
 - Reuse `components/ui/*` primitives; don't re-style buttons/cards inline.
 - No dead code. Self-review each change for duplication and consistency before moving on.
+- Plan state changes go through hooks/launchFlowReducer.ts actions — never parallel useState
+  that can drift. Loose JSON is normalized with lib/coerce.ts, not `any`. Rank ordering and
+  calendar entries come from lib/plan.ts (one source, three consumers).
 - LLM calls go through `lib/llm.ts`; browser calls through `lib/api.ts`.
 
 ## Run
@@ -132,8 +152,9 @@ npm install
 cp .env.example .env     # ANTHROPIC_API_KEY and/or OPENAI_API_KEY (Supabase keys optional)
 npm run dev              # landing at /, tool at /app
 npm run typecheck        # tsc --noEmit
-npm test                 # vitest (security + golden suites in tests/; offline, no API keys)
-npm run lint             # next lint (eslint-config-next)
+npm test                 # vitest (offline suites in tests/; no API keys needed)
+npm run lint             # eslint . (flat config, non-interactive)
+npm run format:check     # prettier --check . (CI-enforced)
 npm run build            # must stay green
 RUN_LIVE_EVAL=1 npx vitest run tests/eval.live.test.ts   # live provider eval → eval-results/
 ```
@@ -156,6 +177,27 @@ left unset → accounts off (anon + localStorage), generation open/unmetered, `P
 Redeploy: `npx vercel --prod --yes`. Push env from `.env.local`: `~/push-env.sh`.
 
 ## Status / changelog
+- **2026-07-12**: **M14 — behavior-preserving engineering cleanup.** (1) ResultsView (865
+  lines) split into `components/app/results/` — one module per tab + ChannelBlock/PostCard/
+  FailuresCard/PrintHeading; ResultsView is now a ~200-line orchestrator. (2) Plan state moved
+  from 16 parallel useStates into `hooks/launchFlowReducer.ts` — a pure reducer whose
+  normalize() makes contradictory states impossible (fresh analyze / rebuilt strategy now
+  drop stale downstream data; selection ⊆ channels; posted marks pruned with their posts;
+  step clamped to available data; loading a real project after the demo clears the demo flag
+  — the last four were live bug classes). 12 invariant tests. (3) Unified `ApiErrorBody`/
+  `ApiErrorCode` in lib/errors.ts consumed by routes and lib/api.ts; deduped mapLimit
+  (lib/async), rank-order + calendar-entry logic (lib/plan ×3 copies each), and the
+  `str/arr` any-typed coercers (lib/coerce, 5 files); app-code `any` went 38 → 3 (the
+  documented JSON seam in lib/llm.ts). (4) Persisted plans are versioned:
+  DRAFT_SCHEMA_VERSION=3 + migrateDraft() (v1 pre-M11 / v2 M11 / v3 M13) with tests;
+  Supabase meta rows carry the same version. (5) Tooling: deprecated interactive `next lint`
+  replaced by ESLint CLI (flat config), Prettier + format:check (repo formatted once),
+  GitHub Actions CI (typecheck/lint/format/tests/build). (6) Fixed the /twitter-image build
+  warning (`runtime` segment config can't be re-exported — declared literally). Deleted:
+  platformCatalogForStrategist (dead since M13), 15 needless exports de-exported;
+  components/landing/Pricing.tsx is intentionally KEPT (documented beta gating). Gates green
+  throughout: 185 offline tests, eslint/prettier clean, build warning-free; demo dashboard +
+  step navigation re-verified in the browser.
 - **2026-07-12**: **M13 — trust layer.** Facts, inference and recommendations separated; design +
   migration doc in `docs/M13-trust-layer.md` (no SQL migration — new data rides existing jsonb;
   all new type fields optional so pre-M13 saves keep rendering). Fact Ledger with code-enforced
@@ -189,6 +231,29 @@ Redeploy: `npx vercel --prod --yes`. Push env from `.env.local`: `~/push-env.sh`
   scripts. typecheck/test/lint/build green; SSRF rejections, schema 400s, webhook 503,
   body-cap 413, headers, and the happy path (live analyze incl. real redirects) verified
   against a running dev server. See "Security posture" above.
+- **2026-07-02**: M11 — editable, focused, navigable. Default selection = top-4 channels by
+  score; `selected` persisted (draft field / projects.meta); ResultsView rebuilt as 4 tabs
+  (Overview/Content/Calendar/Execute, components/ui/Tabs) with master-detail content and
+  print force-mount; plan editing everywhere (positioning, per-channel angle/bestMove,
+  calendar row edit/delete/add, channels removable + addable post-generation via
+  /api/regenerate).
+- **2026-07-01**: M10 — Contextual Launch Copilot. lib/copilot.ts (compact plan snapshot,
+  7 actions incl. rewrite/first-replies/review-feedback, anti-generic rules) + POST
+  /api/copilot + components/app/CopilotPanel.tsx drawer (quick actions, per-reply copy,
+  rewrite cards with Apply-to-draft). Prompt hardening in voice/generate/strategy/analyze;
+  "Copy all posts"; 20+→19 platform-count fix.
+- **2026-06-25**: M9 — login gate + Google OAuth. /app requires sign-in when Supabase is
+  configured (open otherwise; ?demo=1 always bypasses); AuthScreen with
+  Continue-with-Google + magic link; AppPage (gate) / AppFlow (tool) split.
+- **2026-06-25**: M8 — beta-launch polish. lib/demo.ts hand-authored example plan +
+  ?demo=1 deep link; FeedbackCTA + lib/site.ts; lib/llm.ts JSON slice/repair + one model
+  repair retry; founder-voice README + MIT LICENSE.
+- **2026-06-24**: M7 — AI-CMO operating system. analyze forms a business diagnosis
+  (whatItIs/whyCare/useCase/confidence); strategy becomes the full CMO plan (executive
+  summary, positioning/anti-positioning, audience segments, cold start + GTM phases,
+  founder checklist, risks, iteration loop, effort/confidence/bestMove per channel);
+  generate emits per-platform playbooks; lib/voice.ts ANTI_AI_RULES + per-platform
+  personas; results becomes the sectioned operating dashboard (PlanSummary.tsx).
 - **2026-06-24**: **DEPLOYED to production** — live at https://postbeacon.app (+ www) on Vercel.
   Beta posture: no Supabase / service-role / Polar configured → fully open & free, no payment UI.
 - **2026-06-24**: All platform `blurb`s translated to English (they surface in the launch-calendar

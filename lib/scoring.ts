@@ -1,5 +1,6 @@
 import { PLATFORMS, type PlatformDef } from "./platforms";
 import { factsForPrompt } from "./facts";
+import { asRecord, asRecordList, clipString } from "./coerce";
 import type {
   DiscoveredChannel,
   Fact,
@@ -107,8 +108,7 @@ export function computeEvidenceQuality(
   };
 }
 
-const str = (v: unknown, max: number): string =>
-  typeof v === "string" ? v.trim().slice(0, max) : "";
+const str = clipString;
 
 /** Parse one raw model dimension; null when unusable (treated as missing). */
 function parseDim(raw: unknown, facts: Fact[]): ScoreDimension | null {
@@ -314,11 +314,9 @@ export async function scoreAllPlatforms(
   };
 
   const ingest = (raw: unknown, phase: "first" | "retry") => {
-    const list = Array.isArray((raw as any)?.recommendations)
-      ? ((raw as any).recommendations as unknown[])
-      : [];
+    const list = asRecordList(asRecord(raw).recommendations);
     for (const entry of list) {
-      const id = String((entry as any)?.platformId ?? "");
+      const id = String(entry.platformId ?? "");
       const platform = byId.get(id);
       if (!platform) continue; // unknown id — never invent platforms
       if (valid.has(id)) {
@@ -391,8 +389,6 @@ export function groundRecommendations(
       })
       .map((d) => d.url)
       .slice(0, 3);
-    return sources.length
-      ? { ...rec, sources, provenance: "grounded" as const }
-      : rec;
+    return sources.length ? { ...rec, sources, provenance: "grounded" as const } : rec;
   });
 }

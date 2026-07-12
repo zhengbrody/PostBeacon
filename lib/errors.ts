@@ -22,6 +22,15 @@ export class BlockedUrlError extends PublicError {
   }
 }
 
+/** Gate codes the UI branches on (Paywall shows sign-in vs upgrade vs limit). */
+export type ApiErrorCode = "auth" | "limit" | "paywall";
+
+/** THE error body every API route returns — client and server share this shape. */
+export interface ApiErrorBody {
+  error: string;
+  code?: ApiErrorCode;
+}
+
 /** The message safe to show an end user for this error. */
 export function publicMessage(err: unknown, fallback: string): string {
   return err instanceof PublicError ? err.message : fallback;

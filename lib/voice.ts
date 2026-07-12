@@ -47,7 +47,10 @@ export const BANNED_PHRASES: string[] = [
 const BANNED_PATTERNS: { name: string; re: RegExp }[] = [
   { name: 'opener "Introducing"', re: /^\s*introducing\b/i },
   { name: '"Whether you\'re X or Y"', re: /\bwhether you'?re\b[^.\n]{3,60}\bor\b/i },
-  { name: '"It\'s not just X — it\'s Y"', re: /\b(?:it'?s|this is) not just\b[^.\n]{3,80}\b(?:it'?s|but)\b/i },
+  {
+    name: "\"It's not just X — it's Y\"",
+    re: /\b(?:it'?s|this is) not just\b[^.\n]{3,80}\b(?:it'?s|but)\b/i,
+  },
   { name: '"not only … but also"', re: /\bnot only\b[^.\n]{3,80}\bbut also\b/i },
   { name: '"That\'s where X comes in"', re: /\bthat'?s where\b[^.\n]{2,60}\bcomes in\b/i },
 ];
@@ -68,7 +71,10 @@ export function lintVoice(text: string): VoiceViolation[] {
   for (const phrase of BANNED_PHRASES) {
     const i = lower.indexOf(phrase);
     if (i !== -1) {
-      out.push({ phrase, excerpt: text.slice(Math.max(0, i - 20), i + phrase.length + 20).trim() });
+      out.push({
+        phrase,
+        excerpt: text.slice(Math.max(0, i - 20), i + phrase.length + 20).trim(),
+      });
     }
   }
   for (const { name, re } of BANNED_PATTERNS) {

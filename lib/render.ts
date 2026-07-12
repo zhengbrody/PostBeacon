@@ -14,10 +14,10 @@
  */
 
 import { fetchWithTimeout } from "./fetch";
+import { asRecord, asString } from "./coerce";
 import { assertPublicHttpUrl } from "./urlPolicy";
 
-const RENDER_ENDPOINT =
-  process.env.SCRAPE_API_URL || "https://api.firecrawl.dev/v1/scrape";
+const RENDER_ENDPOINT = process.env.SCRAPE_API_URL || "https://api.firecrawl.dev/v1/scrape";
 
 /** Whether a headless renderer is configured (key present). */
 export function renderConfigured(): boolean {
@@ -48,9 +48,9 @@ export async function renderUrl(url: string): Promise<string> {
     throw new Error(`Render failed: ${res.status} ${res.statusText}`);
   }
   // Be tolerant of envelope shape across API versions.
-  const json: any = await res.json();
-  const data = json?.data ?? json;
-  const html: string | undefined = data?.rawHtml ?? data?.html ?? data?.markdown;
+  const json = asRecord(await res.json());
+  const data = asRecord(json.data ?? json);
+  const html = asString(data.rawHtml) || asString(data.html) || asString(data.markdown);
   if (!html) throw new Error("Render returned no HTML");
   return html;
 }

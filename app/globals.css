@@ -46,11 +46,7 @@
     background-size: 28px 28px;
   }
   .text-gradient {
-    background: linear-gradient(
-      90deg,
-      var(--color-accent-300),
-      var(--color-accent-500)
-    );
+    background: linear-gradient(90deg, var(--color-accent-300), var(--color-accent-500));
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;

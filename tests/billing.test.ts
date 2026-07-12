@@ -1,10 +1,6 @@
 import crypto from "node:crypto";
 import { describe, expect, it } from "vitest";
-import {
-  resolvePlanChange,
-  verifyWebhook,
-  WEBHOOK_TOLERANCE_S,
-} from "@/lib/billing";
+import { resolvePlanChange, verifyWebhook, WEBHOOK_TOLERANCE_S } from "@/lib/billing";
 
 const RAW_SECRET = "test-secret-value";
 const B64_SECRET = "whsec_" + Buffer.from("another-secret").toString("base64");
@@ -15,10 +11,7 @@ function sign(id: string, ts: number, payload: string, secret: string): string {
   const key = secret.startsWith("whsec_")
     ? Buffer.from(secret.slice(6), "base64")
     : Buffer.from(secret, "utf8");
-  return crypto
-    .createHmac("sha256", key)
-    .update(`${id}.${ts}.${payload}`)
-    .digest("base64");
+  return crypto.createHmac("sha256", key).update(`${id}.${ts}.${payload}`).digest("base64");
 }
 
 function headersFor(payload: string, secret: string, tsOffsetS = 0) {
@@ -84,11 +77,7 @@ describe("verifyWebhook", () => {
     const id = "msg_1";
     const ts = "soon" as unknown as number;
     const signature = `v1,${sign(id, ts, payload, RAW_SECRET)}`;
-    const v = verifyWebhook(
-      { id, timestamp: String(ts), signature },
-      payload,
-      RAW_SECRET
-    );
+    const v = verifyWebhook({ id, timestamp: String(ts), signature }, payload, RAW_SECRET);
     expect(v.ok).toBe(false);
   });
 });
@@ -116,12 +105,14 @@ describe("resolvePlanChange", () => {
       userId: UID,
       plan: "pro",
     });
-    expect(resolvePlanChange(sub("subscription.canceled", "canceled"), PRODUCT)).toEqual(
-      { userId: UID, plan: "free" }
-    );
-    expect(resolvePlanChange(sub("subscription.updated", "past_due"), PRODUCT)).toEqual(
-      { userId: UID, plan: "free" }
-    );
+    expect(resolvePlanChange(sub("subscription.canceled", "canceled"), PRODUCT)).toEqual({
+      userId: UID,
+      plan: "free",
+    });
+    expect(resolvePlanChange(sub("subscription.updated", "past_due"), PRODUCT)).toEqual({
+      userId: UID,
+      plan: "free",
+    });
   });
 
   it("ignores events for a different product", () => {

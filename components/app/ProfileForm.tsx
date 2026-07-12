@@ -28,8 +28,7 @@ export function ProfileForm({
   onBack: () => void;
   onNext: () => void;
 }) {
-  const set = (patch: Partial<ProductProfile>) =>
-    setProfile({ ...profile, ...patch });
+  const set = (patch: Partial<ProductProfile>) => setProfile({ ...profile, ...patch });
 
   const diagnosis = profile.whatItIs || profile.whyCare || profile.useCase;
 
@@ -41,9 +40,7 @@ export function ProfileForm({
             <h2 className="text-sm font-semibold uppercase tracking-wide text-accent-300">
               Diagnosis
             </h2>
-            {profile.confidence && (
-              <ConfidenceTag confidence={profile.confidence} />
-            )}
+            {profile.confidence && <ConfidenceTag confidence={profile.confidence} />}
           </div>
           <dl className="space-y-3 text-sm">
             {profile.whatItIs && (
@@ -67,14 +64,26 @@ export function ProfileForm({
       <Card className="p-6">
         <h2 className="mb-1 text-lg font-semibold">Product profile</h2>
         <p className="mb-4 text-xs text-neutral-500">
-          We read this off your page — edit anything that&apos;s off before the
-          strategy runs.
+          We read this off your page — edit anything that&apos;s off before the strategy
+          runs.
         </p>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Name" value={profile.name} onChange={(v) => set({ name: v })} />
-          <Field label="Tagline" value={profile.tagline} onChange={(v) => set({ tagline: v })} />
-          <Field label="Audience" value={profile.audience} onChange={(v) => set({ audience: v })} />
-          <Field label="Category" value={profile.category} onChange={(v) => set({ category: v })} />
+          <Field
+            label="Tagline"
+            value={profile.tagline}
+            onChange={(v) => set({ tagline: v })}
+          />
+          <Field
+            label="Audience"
+            value={profile.audience}
+            onChange={(v) => set({ audience: v })}
+          />
+          <Field
+            label="Category"
+            value={profile.category}
+            onChange={(v) => set({ category: v })}
+          />
         </div>
         <Field
           className="mt-4"
@@ -88,7 +97,12 @@ export function ProfileForm({
           label="Differentiators (comma-separated)"
           value={profile.differentiators?.join(", ") ?? ""}
           onChange={(v) =>
-            set({ differentiators: v.split(",").map((s) => s.trim()).filter(Boolean) })
+            set({
+              differentiators: v
+                .split(",")
+                .map((s) => s.trim())
+                .filter(Boolean),
+            })
           }
         />
       </Card>

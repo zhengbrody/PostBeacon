@@ -23,8 +23,8 @@ export function Paywall({
     try {
       const { url } = await api.checkout();
       window.location.href = url;
-    } catch (e: any) {
-      setErr(e?.message || "Couldn't start checkout.");
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Couldn't start checkout.");
       setBusy(false);
     }
   }

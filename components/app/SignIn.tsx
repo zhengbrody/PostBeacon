@@ -22,9 +22,7 @@ export function useSupabaseUser() {
     // re-fires on USER_UPDATED, so the display name stays fresh after an edit.
     const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
       setUserEmail(session?.user?.email ?? null);
-      setDisplayName(
-        (session?.user?.user_metadata?.display_name as string) || null
-      );
+      setDisplayName((session?.user?.user_metadata?.display_name as string) || null);
       setLoading(false);
     });
     return () => sub.subscription.unsubscribe();
@@ -122,7 +120,7 @@ export function AccountName({
 }
 
 /** Kick off Google OAuth. Supabase redirects to Google and back to `redirectTo`. */
-export async function signInWithGoogle(redirectTo = "/app") {
+async function signInWithGoogle(redirectTo = "/app") {
   const supabase = getSupabase();
   if (!supabase) return;
   await supabase.auth.signInWithOAuth({

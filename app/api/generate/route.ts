@@ -10,7 +10,9 @@ import {
   FREE_LAUNCHES,
 } from "@/lib/usage";
 import { apiError, generateBodySchema, parseBody, readJsonBody } from "@/lib/validate";
-import { PublicError, publicMessage } from "@/lib/errors";
+import { scheduleEntryFor, sortSchedule } from "@/lib/plan";
+import { mapLimit } from "@/lib/async";
+import { PublicError, publicMessage, type ApiErrorBody } from "@/lib/errors";
 import type {
   PlatformContent,
   ScheduleItem,
@@ -19,26 +21,6 @@ import type {
 } from "@/lib/types";
 
 export const maxDuration = 300;
-
-// Run async work over `items` with a concurrency ceiling — keeps "select every
-// channel" from firing 20 LLM calls at once (provider rate-limits + memory), and
-// preserves input order in the result.
-async function mapLimit<T, R>(
-  items: T[],
-  limit: number,
-  fn: (item: T, index: number) => Promise<R>
-): Promise<R[]> {
-  const out: R[] = new Array(items.length);
-  let next = 0;
-  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
-    while (next < items.length) {
-      const i = next++;
-      out[i] = await fn(items[i], i);
-    }
-  });
-  await Promise.all(workers);
-  return out;
-}
 
 export async function POST(req: NextRequest) {
   try {
@@ -63,7 +45,7 @@ export async function POST(req: NextRequest) {
           {
             error: `You've used your ${FREE_LAUNCHES} free launches. Upgrade to Pro for unlimited.`,
             code: "paywall",
-          },
+          } satisfies ApiErrorBody,
           { status: 402 }
         );
       }
@@ -115,15 +97,9 @@ export async function POST(req: NextRequest) {
 
     // Deterministic launch sequence — only for channels that actually have content.
     const generated = new Set(content.map((c) => c.platformId));
-    const schedule: ScheduleItem[] = platforms
-      .filter((p) => generated.has(p.id))
-      .map((p) => ({
-        day: p.defaultDay,
-        platformId: p.id,
-        platformName: p.name,
-        action: `Post to ${p.name} — ${p.blurb} (${p.bestTime})`,
-      }))
-      .sort((a, b) => a.day - b.day);
+    const schedule: ScheduleItem[] = sortSchedule(
+      platforms.filter((p) => generated.has(p.id)).map(scheduleEntryFor)
+    );
 
     if (userId && billingEnabled()) await incrementLaunch(userId);
 

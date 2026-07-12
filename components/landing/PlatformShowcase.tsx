@@ -24,8 +24,9 @@ export function PlatformShowcase() {
           One scan. Every channel that matters.
         </h2>
         <p className="mx-auto mt-3 max-w-xl text-center text-sm text-neutral-400">
-          PostBeacon evaluates {PLATFORMS.length}+ platforms across {Object.keys(grouped).length}{" "}
-          categories and tells you which deserve your limited time.
+          PostBeacon evaluates {PLATFORMS.length}+ platforms across{" "}
+          {Object.keys(grouped).length} categories and tells you which deserve your limited
+          time.
         </p>
         <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {Object.entries(grouped).map(([cat, names]) => (

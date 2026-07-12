@@ -9,45 +9,43 @@ export const contentType = "image/png";
 
 export default function OpengraphImage() {
   return new ImageResponse(
-    (
+    <div
+      style={{
+        width: "100%",
+        height: "100%",
+        display: "flex",
+        flexDirection: "column",
+        justifyContent: "center",
+        padding: "80px",
+        background: "radial-gradient(circle at 22% 12%, #1e1b4b 0%, #07070b 55%)",
+        color: "#e9e9ee",
+        fontFamily: "sans-serif",
+      }}
+    >
+      <div style={{ display: "flex", fontSize: 36, fontWeight: 700, letterSpacing: -1 }}>
+        <span>Post</span>
+        <span style={{ color: "#a78bfa" }}>Beacon</span>
+      </div>
       <div
         style={{
-          width: "100%",
-          height: "100%",
-          display: "flex",
-          flexDirection: "column",
-          justifyContent: "center",
-          padding: "80px",
-          background: "radial-gradient(circle at 22% 12%, #1e1b4b 0%, #07070b 55%)",
-          color: "#e9e9ee",
-          fontFamily: "sans-serif",
+          marginTop: 44,
+          fontSize: 70,
+          fontWeight: 800,
+          lineHeight: 1.05,
+          letterSpacing: -2,
+          maxWidth: 920,
+          backgroundImage: "linear-gradient(90deg, #c4b5fd, #8b5cf6)",
+          backgroundClip: "text",
+          color: "transparent",
         }}
       >
-        <div style={{ display: "flex", fontSize: 36, fontWeight: 700, letterSpacing: -1 }}>
-          <span>Post</span>
-          <span style={{ color: "#a78bfa" }}>Beacon</span>
-        </div>
-        <div
-          style={{
-            marginTop: 44,
-            fontSize: 70,
-            fontWeight: 800,
-            lineHeight: 1.05,
-            letterSpacing: -2,
-            maxWidth: 920,
-            backgroundImage: "linear-gradient(90deg, #c4b5fd, #8b5cf6)",
-            backgroundClip: "text",
-            color: "transparent",
-          }}
-        >
-          Your AI CMO. URL in, launch plan out.
-        </div>
-        <div style={{ marginTop: 34, fontSize: 30, color: "#a1a1aa", maxWidth: 840 }}>
-          Scans 19+ platforms, ranks where to go all-in, and writes ready-to-post
-          content + a launch calendar. Built for vibecoders.
-        </div>
+        Your AI CMO. URL in, launch plan out.
       </div>
-    ),
+      <div style={{ marginTop: 34, fontSize: 30, color: "#a1a1aa", maxWidth: 840 }}>
+        Scans 19+ platforms, ranks where to go all-in, and writes ready-to-post content + a
+        launch calendar. Built for vibecoders.
+      </div>
+    </div>,
     { ...size }
   );
 }

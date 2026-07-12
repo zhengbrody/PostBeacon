@@ -198,8 +198,8 @@ export function FactLedger({
             {questions.length} quick {questions.length === 1 ? "question" : "questions"}
           </h2>
           <p className="mb-3 mt-1 text-xs text-neutral-400">
-            Your page doesn&apos;t say these. Answering sharpens the whole plan —
-            skipping is fine, the strategy will treat them as unknown instead of guessing.
+            Your page doesn&apos;t say these. Answering sharpens the whole plan — skipping
+            is fine, the strategy will treat them as unknown instead of guessing.
           </p>
           <ul className="space-y-2">
             {questions.map((q) => (

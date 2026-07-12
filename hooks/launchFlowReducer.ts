@@ -1,0 +1,460 @@
+import { PLATFORMS } from "@/lib/platforms";
+import {
+  answerFact,
+  applyFactToProfile,
+  confirmFact,
+  correctFact,
+  type ContextField,
+} from "@/lib/facts";
+import { orderByRecommendation, scheduleEntryFor, sortSchedule } from "@/lib/plan";
+import type {
+  ClarifyingQuestion,
+  Fact,
+  GenerateResult,
+  GenerationMeta,
+  MarketingStrategy,
+  PlatformPlaybook,
+  PlatformPost,
+  PlatformRecommendation,
+  ProductProfile,
+  ScheduleItem,
+} from "@/lib/types";
+
+/**
+ * The launch flow as an explicit state machine. Every plan mutation goes
+ * through this pure reducer, and `normalize()` re-establishes the invariants
+ * after EVERY action, so contradictory states (a result without its strategy,
+ * a selection referencing channels that no longer exist, posted marks for
+ * removed content, a step with no data behind it) are impossible by
+ * construction — not by every call site remembering to clean up.
+ */
+
+export type Step = "input" | "profile" | "strategy" | "results";
+
+export interface FlowState {
+  step: Step;
+  url: string;
+  profile: ProductProfile | null;
+  facts: Fact[];
+  questions: ClarifyingQuestion[];
+  strategy: MarketingStrategy | null;
+  selected: string[]; // channels checked for generation (⊆ strategy recs)
+  result: GenerateResult | null;
+  posted: Record<string, boolean>; // `${platformId}-${postIdx}` → done
+  launchDate: string;
+  projectId: string; // stable id for autosave upsert
+  demo: boolean; // viewing the baked-in example (autosave paused)
+}
+
+export const initialFlowState: FlowState = {
+  step: "input",
+  url: "",
+  profile: null,
+  facts: [],
+  questions: [],
+  strategy: null,
+  selected: [],
+  result: null,
+  posted: {},
+  launchDate: "",
+  projectId: "",
+  demo: false,
+};
+
+/** Payload for one channel's freshly generated content (regenerate/add/retry). */
+interface ChannelPayload {
+  platformId: string;
+  posts: PlatformPost[];
+  playbook?: PlatformPlaybook;
+  meta?: GenerationMeta;
+}
+
+/** A saved project/draft in any historical shape (see lib/storage.ts). */
+export interface LoadedProject {
+  id?: string;
+  url?: string;
+  profile?: ProductProfile | null;
+  strategy?: MarketingStrategy | null;
+  result?: GenerateResult | null;
+  posted?: Record<string, boolean>;
+  selected?: string[];
+  launchDate?: string;
+  facts?: Fact[];
+  meta?: { selected?: string[]; launchDate?: string; facts?: Fact[] } | null;
+}
+
+export type FlowAction =
+  | { type: "RESET" }
+  | { type: "URL_SET"; url: string }
+  | { type: "STEP_SET"; step: Step }
+  | { type: "PROJECT_LOADED"; project: LoadedProject; demo: boolean }
+  | {
+      type: "ANALYZED";
+      profile: ProductProfile;
+      facts: Fact[];
+      questions: ClarifyingQuestion[];
+    }
+  | { type: "PROFILE_SET"; profile: ProductProfile }
+  | { type: "FACT_CONFIRMED"; id: string }
+  | { type: "FACT_CORRECTED"; id: string; claim: string }
+  | { type: "FACT_DELETED"; id: string }
+  | { type: "QUESTION_ANSWERED"; id: ContextField; answer: string }
+  | { type: "STRATEGY_BUILT"; strategy: MarketingStrategy }
+  | { type: "STRATEGY_PATCHED"; patch: Partial<MarketingStrategy> }
+  | {
+      type: "RECOMMENDATION_PATCHED";
+      platformId: string;
+      patch: Partial<PlatformRecommendation>;
+    }
+  | { type: "SELECTION_TOGGLED"; platformId: string }
+  | { type: "GENERATED"; result: GenerateResult }
+  | { type: "CHANNEL_CONTENT_REPLACED"; channel: ChannelPayload }
+  | { type: "CHANNEL_UPSERTED"; channel: ChannelPayload } // add-channel + retry-failed
+  | { type: "CHANNEL_REMOVED"; platformId: string }
+  | { type: "POST_PATCHED"; platformId: string; idx: number; patch: Partial<PlatformPost> }
+  | { type: "SCHEDULE_ITEM_PATCHED"; idx: number; patch: Partial<ScheduleItem> }
+  | { type: "SCHEDULE_ITEM_REMOVED"; idx: number }
+  | { type: "SCHEDULE_ITEM_ADDED"; item: ScheduleItem }
+  | { type: "POSTED_TOGGLED"; id: string }
+  | { type: "LAUNCH_DATE_SET"; date: string }
+  | { type: "PROJECT_ID_SET"; id: string };
+
+// Default channel set: the 4 best-scoring recommendations. A tight default —
+// content is only written for checked channels, and a focused plan beats a
+// sprawling one. Sorted explicitly; the model's array order isn't trusted.
+export function defaultSelection(recs?: PlatformRecommendation[]): string[] {
+  if (!recs?.length) return [];
+  return [...recs]
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 4)
+    .map((r) => r.platformId);
+}
+
+/** The deepest step the state has data for. */
+function deepestStep(s: FlowState): Step {
+  if (s.result) return "results";
+  if (s.strategy) return "strategy";
+  if (s.profile) return "profile";
+  return "input";
+}
+
+const STEP_ORDER: Step[] = ["input", "profile", "strategy", "results"];
+
+/**
+ * Re-establish every invariant. Called on the result of each transition:
+ *  1. no profile  ⇒ no facts/questions/strategy (and everything below)
+ *  2. no strategy ⇒ no selection, no result (and everything below)
+ *  3. selection   ⊆ strategy's channels
+ *  4. no result   ⇒ no posted marks
+ *  5. posted marks ⇒ only for posts that exist in result content
+ *  6. step        ⇒ never deeper than the data supports
+ */
+export function normalize(s: FlowState): FlowState {
+  let next = s;
+  if (!next.profile && (next.facts.length || next.questions.length || next.strategy)) {
+    next = { ...next, facts: [], questions: [], strategy: null };
+  }
+  if (!next.strategy && (next.selected.length || next.result)) {
+    next = { ...next, selected: [], result: null };
+  }
+  if (next.strategy && next.selected.length) {
+    const known = new Set(next.strategy.recommendations.map((r) => r.platformId));
+    const kept = next.selected.filter((id) => known.has(id));
+    if (kept.length !== next.selected.length) next = { ...next, selected: kept };
+  }
+  if (!next.result && Object.keys(next.posted).length) {
+    next = { ...next, posted: {} };
+  }
+  if (next.result && Object.keys(next.posted).length) {
+    const valid = new Set(
+      next.result.content.flatMap((c) => c.posts.map((_, i) => `${c.platformId}-${i}`))
+    );
+    const entries = Object.entries(next.posted).filter(([k]) => valid.has(k));
+    if (entries.length !== Object.keys(next.posted).length) {
+      next = { ...next, posted: Object.fromEntries(entries) };
+    }
+  }
+  const deepest = deepestStep(next);
+  if (STEP_ORDER.indexOf(next.step) > STEP_ORDER.indexOf(deepest)) {
+    next = { ...next, step: deepest };
+  }
+  return next;
+}
+
+function transition(s: FlowState, a: FlowAction): FlowState {
+  switch (a.type) {
+    case "RESET":
+      return initialFlowState;
+
+    case "URL_SET":
+      return { ...s, url: a.url };
+
+    case "STEP_SET":
+      // normalize() clamps to the deepest step the data supports.
+      return { ...s, step: a.step };
+
+    case "PROJECT_LOADED": {
+      const p = a.project;
+      return {
+        step: "input", // normalize derives the real step via the clamp below
+        url: p.url || "",
+        profile: p.profile || null,
+        strategy: p.strategy || null,
+        result: p.result || null,
+        posted: p.posted || {},
+        launchDate: p.launchDate || p.meta?.launchDate || "",
+        projectId: p.id || "",
+        // Facts: flat field (local draft) or meta (Supabase row); pre-M13
+        // saves have neither → empty ledger.
+        facts: p.facts ?? p.meta?.facts ?? [],
+        questions: [], // questions are an analyze-time artifact, not persisted
+        // Three generations of saved data: flat `selected`, `meta`, or neither
+        // (pre-M11) → derive a fresh default.
+        selected:
+          p.selected ?? p.meta?.selected ?? defaultSelection(p.strategy?.recommendations),
+        demo: a.demo,
+        // Open at the deepest step the loaded data supports.
+        ...(p.result
+          ? { step: "results" as Step }
+          : p.strategy
+            ? { step: "strategy" as Step }
+            : p.profile
+              ? { step: "profile" as Step }
+              : {}),
+      };
+    }
+
+    case "ANALYZED":
+      // A fresh analysis starts a fresh plan: anything derived from the
+      // previous product (strategy/result/selection/marks) is stale by
+      // definition and dropped, so steps 3-4 can never show the old product.
+      return {
+        ...s,
+        demo: false,
+        profile: a.profile,
+        facts: a.facts,
+        questions: a.questions,
+        strategy: null,
+        selected: [],
+        result: null,
+        posted: {},
+        step: "profile",
+      };
+
+    case "PROFILE_SET":
+      return { ...s, profile: a.profile };
+
+    case "FACT_CONFIRMED":
+      return {
+        ...s,
+        facts: s.facts.map((f) => (f.id === a.id ? confirmFact(f) : f)),
+      };
+
+    case "FACT_CORRECTED": {
+      const target = s.facts.find((f) => f.id === a.id);
+      if (!target) return s;
+      const fixed = correctFact(target, a.claim);
+      return {
+        ...s,
+        facts: s.facts.map((f) => (f.id === a.id ? fixed : f)),
+        // Correcting a fact also syncs the profile field it backs, so the
+        // ledger and the form never disagree.
+        profile: s.profile ? applyFactToProfile(s.profile, fixed) : s.profile,
+      };
+    }
+
+    case "FACT_DELETED":
+      return { ...s, facts: s.facts.filter((f) => f.id !== a.id) };
+
+    case "QUESTION_ANSWERED": {
+      const trimmed = a.answer.trim();
+      const remaining = s.questions.filter((q) => q.id !== a.id);
+      if (!trimmed) return { ...s, questions: remaining }; // skip = honest unknown
+      const fact = answerFact(a.id, trimmed);
+      return {
+        ...s,
+        questions: remaining,
+        facts: [...s.facts.filter((f) => f.id !== a.id), fact],
+        profile: s.profile ? applyFactToProfile(s.profile, fact) : s.profile,
+      };
+    }
+
+    case "STRATEGY_BUILT":
+      // A rebuilt strategy invalidates content generated under the old one.
+      return {
+        ...s,
+        strategy: a.strategy,
+        selected: defaultSelection(a.strategy.recommendations),
+        result: null,
+        posted: {},
+        step: "strategy",
+      };
+
+    case "STRATEGY_PATCHED":
+      return s.strategy ? { ...s, strategy: { ...s.strategy, ...a.patch } } : s;
+
+    case "RECOMMENDATION_PATCHED":
+      return s.strategy
+        ? {
+            ...s,
+            strategy: {
+              ...s.strategy,
+              recommendations: s.strategy.recommendations.map((r) =>
+                r.platformId === a.platformId ? { ...r, ...a.patch } : r
+              ),
+            },
+          }
+        : s;
+
+    case "SELECTION_TOGGLED": {
+      if (!s.strategy?.recommendations.some((r) => r.platformId === a.platformId)) {
+        return s; // can't select a channel the strategy doesn't know
+      }
+      return {
+        ...s,
+        selected: s.selected.includes(a.platformId)
+          ? s.selected.filter((x) => x !== a.platformId)
+          : [...s.selected, a.platformId],
+      };
+    }
+
+    case "GENERATED":
+      return { ...s, result: a.result, step: "results" };
+
+    case "CHANNEL_CONTENT_REPLACED":
+      return s.result
+        ? {
+            ...s,
+            result: {
+              ...s.result,
+              content: s.result.content.map((c) =>
+                c.platformId === a.channel.platformId
+                  ? {
+                      ...c,
+                      posts: a.channel.posts,
+                      playbook: a.channel.playbook ?? c.playbook,
+                      meta: a.channel.meta ?? c.meta,
+                    }
+                  : c
+              ),
+            },
+          }
+        : s;
+
+    case "CHANNEL_UPSERTED": {
+      // Write content for one more channel (or retry a failed one), slotting
+      // it into the plan at its ranked position — content order, calendar,
+      // selection and the failure list move together.
+      const platform = PLATFORMS.find((p) => p.id === a.channel.platformId);
+      if (!s.result || !platform) return s;
+      const block = {
+        platformId: platform.id,
+        platformName: platform.name,
+        posts: a.channel.posts,
+        playbook: a.channel.playbook,
+        meta: a.channel.meta,
+      };
+      return {
+        ...s,
+        result: {
+          ...s.result,
+          content: orderByRecommendation(
+            [...s.result.content.filter((c) => c.platformId !== platform.id), block],
+            s.strategy?.recommendations
+          ),
+          schedule: sortSchedule([
+            ...s.result.schedule.filter((x) => x.platformId !== platform.id),
+            scheduleEntryFor(platform),
+          ]),
+          failures: (s.result.failures ?? []).filter((f) => f.platformId !== platform.id),
+        },
+        selected: s.selected.includes(platform.id)
+          ? s.selected
+          : [...s.selected, platform.id],
+      };
+    }
+
+    case "CHANNEL_REMOVED":
+      // Content, calendar steps, posted marks and the generation set go
+      // together so counts and re-generates never drift.
+      return {
+        ...s,
+        result: s.result
+          ? {
+              ...s.result,
+              content: s.result.content.filter((c) => c.platformId !== a.platformId),
+              schedule: s.result.schedule.filter((x) => x.platformId !== a.platformId),
+            }
+          : s.result,
+        selected: s.selected.filter((x) => x !== a.platformId),
+        // posted marks for the removed channel are pruned by normalize()
+      };
+
+    case "POST_PATCHED":
+      return s.result
+        ? {
+            ...s,
+            result: {
+              ...s.result,
+              content: s.result.content.map((c) =>
+                c.platformId === a.platformId
+                  ? {
+                      ...c,
+                      posts: c.posts.map((p, i) =>
+                        i === a.idx ? { ...p, ...a.patch } : p
+                      ),
+                    }
+                  : c
+              ),
+            },
+          }
+        : s;
+
+    case "SCHEDULE_ITEM_PATCHED":
+      // Re-sort by day inside the transition, so the render and the next
+      // index-based edit always see the same order.
+      return s.result
+        ? {
+            ...s,
+            result: {
+              ...s.result,
+              schedule: sortSchedule(
+                s.result.schedule.map((x, i) => (i === a.idx ? { ...x, ...a.patch } : x))
+              ),
+            },
+          }
+        : s;
+
+    case "SCHEDULE_ITEM_REMOVED":
+      return s.result
+        ? {
+            ...s,
+            result: {
+              ...s.result,
+              schedule: s.result.schedule.filter((_, i) => i !== a.idx),
+            },
+          }
+        : s;
+
+    case "SCHEDULE_ITEM_ADDED":
+      return s.result
+        ? {
+            ...s,
+            result: { ...s.result, schedule: sortSchedule([...s.result.schedule, a.item]) },
+          }
+        : s;
+
+    case "POSTED_TOGGLED":
+      return { ...s, posted: { ...s.posted, [a.id]: !s.posted[a.id] } };
+
+    case "LAUNCH_DATE_SET":
+      return { ...s, launchDate: a.date };
+
+    case "PROJECT_ID_SET":
+      return { ...s, projectId: a.id };
+  }
+}
+
+export function flowReducer(state: FlowState, action: FlowAction): FlowState {
+  return normalize(transition(state, action));
+}

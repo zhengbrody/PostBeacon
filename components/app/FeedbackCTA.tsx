@@ -9,12 +9,10 @@ export function FeedbackCTA() {
   return (
     <div className="no-print flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-surface/60 px-5 py-4 text-sm">
       <div>
-        <span className="font-medium text-neutral-100">
-          PostBeacon is in beta.
-        </span>{" "}
+        <span className="font-medium text-neutral-100">PostBeacon is in beta.</span>{" "}
         <span className="text-neutral-400">
-          What&apos;s sharp, what&apos;s off, what&apos;s missing? Tell us — it
-          shapes what ships next.
+          What&apos;s sharp, what&apos;s off, what&apos;s missing? Tell us — it shapes what
+          ships next.
         </span>
       </div>
       <a

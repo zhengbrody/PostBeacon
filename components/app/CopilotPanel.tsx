@@ -173,8 +173,8 @@ export function CopilotPanel({
           {msgs.length === 0 && (
             <p className="text-xs leading-relaxed text-neutral-500">
               I wrote this launch plan. Ask why a channel ranks where it does, what to do
-              first, or paste the comments you got — I&apos;ll read them against the plan. For
-              rewrites, I hand back copy-ready versions you can apply to your drafts.
+              first, or paste the comments you got — I&apos;ll read them against the plan.
+              For rewrites, I hand back copy-ready versions you can apply to your drafts.
             </p>
           )}
           {msgs.map((m, i) =>
@@ -196,7 +196,12 @@ export function CopilotPanel({
                   </div>
                 )}
                 {m.rewrites?.map((r, j) => (
-                  <RewriteCard key={j} rewrite={r} result={result} onApply={onApplyRewrite} />
+                  <RewriteCard
+                    key={j}
+                    rewrite={r}
+                    result={result}
+                    onApply={onApplyRewrite}
+                  />
                 ))}
               </div>
             )

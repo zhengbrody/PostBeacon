@@ -14,7 +14,7 @@ import type {
 } from "@/lib/types";
 
 /** Small uppercase accent heading used across the plan sections. */
-export function SectionHeading({ children }: { children: React.ReactNode }) {
+function SectionHeading({ children }: { children: React.ReactNode }) {
   return (
     <h2 className="text-sm font-semibold uppercase tracking-wide text-accent-300">
       {children}
@@ -63,9 +63,7 @@ export function PositioningCard({
         strategy.executiveSummary && (
           <>
             <SectionHeading>Executive summary</SectionHeading>
-            <p className="mt-1.5 text-sm text-neutral-100">
-              {strategy.executiveSummary}
-            </p>
+            <p className="mt-1.5 text-sm text-neutral-100">{strategy.executiveSummary}</p>
           </>
         )
       )}
@@ -81,27 +79,21 @@ export function PositioningCard({
           ) : (
             <>
               <SectionHeading>Positioning</SectionHeading>
-              <p className="mt-1.5 text-sm text-neutral-100">
-                {strategy.positioning}
-              </p>
+              <p className="mt-1.5 text-sm text-neutral-100">{strategy.positioning}</p>
             </>
           )}
         </div>
         {strategy.antiPositioning && (
           <div>
             <SectionHeading>Don&apos;t position it as</SectionHeading>
-            <p className="mt-1.5 text-sm text-neutral-300">
-              {strategy.antiPositioning}
-            </p>
+            <p className="mt-1.5 text-sm text-neutral-300">{strategy.antiPositioning}</p>
           </div>
         )}
       </div>
       <div className="mt-5 grid gap-5 sm:grid-cols-2">
         <div>
           <SectionHeading>The play</SectionHeading>
-          <p className="mt-1.5 text-sm text-neutral-100">
-            {strategy.overallStrategy}
-          </p>
+          <p className="mt-1.5 text-sm text-neutral-100">{strategy.overallStrategy}</p>
         </div>
         {strategy.coldStart && (
           <div>
@@ -125,14 +117,11 @@ export function AudienceCard({ segments }: { segments: AudienceSegment[] }) {
             <div className="text-[10px] font-semibold uppercase tracking-wide text-accent-300">
               {tierLabel[s.tier] ?? s.tier}
             </div>
-            <div className="mt-1 text-sm font-medium text-neutral-100">
-              {s.label}
-            </div>
+            <div className="mt-1 text-sm font-medium text-neutral-100">{s.label}</div>
             <p className="mt-1.5 text-xs text-neutral-400">{s.description}</p>
             {s.whereTheyHang && (
               <p className="mt-2 text-xs text-neutral-500">
-                <span className="text-neutral-400">Found in:</span>{" "}
-                {s.whereTheyHang}
+                <span className="text-neutral-400">Found in:</span> {s.whereTheyHang}
               </p>
             )}
           </div>
@@ -154,9 +143,7 @@ export function LaunchPlanCard({ phases }: { phases: GtmPhase[] }) {
               <span className="rounded-md bg-accent-700/40 px-2 py-0.5 text-xs font-medium text-accent-200">
                 {p.window}
               </span>
-              <span className="text-sm font-medium text-neutral-100">
-                {p.focus}
-              </span>
+              <span className="text-sm font-medium text-neutral-100">{p.focus}</span>
             </div>
             {p.actions.length > 0 && (
               <ul className="mt-2.5 space-y-1.5 text-sm text-neutral-300">
@@ -182,7 +169,10 @@ export function FounderChecklistCard({ tasks }: { tasks: FounderTask[] }) {
       <h2 className="mb-4 text-lg font-semibold">Founder checklist</h2>
       <ul className="space-y-2 text-sm">
         {tasks.map((t, i) => (
-          <li key={i} className="flex items-start gap-3 rounded-lg bg-surface-2 px-4 py-2.5">
+          <li
+            key={i}
+            className="flex items-start gap-3 rounded-lg bg-surface-2 px-4 py-2.5"
+          >
             <span className="shrink-0 rounded-md bg-neutral-700 px-2 py-0.5 text-[11px] font-medium text-neutral-200">
               {t.when}
             </span>

@@ -313,12 +313,3 @@ export function getPlatforms(ids: string[]): PlatformDef[] {
 }
 
 // Compact view for the strategist prompt (keeps tokens down).
-export function platformCatalogForStrategist() {
-  return PLATFORMS.map((p) => ({
-    id: p.id,
-    name: p.name,
-    category: p.category,
-    reaches: p.reaches,
-    effort: p.effort,
-  }));
-}

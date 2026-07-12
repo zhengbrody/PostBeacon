@@ -25,7 +25,9 @@ import { generatePlatformPosts } from "@/lib/generate";
 const [P0, P1, P2] = PLATFORMS.map((p) => p.id);
 
 const okGeneration = (id: string) => ({
-  posts: [{ hook: `${id} hook`, body: "body", imageSuggestion: "", bestTime: "", caveats: "" }],
+  posts: [
+    { hook: `${id} hook`, body: "body", imageSuggestion: "", bestTime: "", caveats: "" },
+  ],
   playbook: {
     whyThisPlatform: "",
     howToPost: "",

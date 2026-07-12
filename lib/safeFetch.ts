@@ -189,9 +189,7 @@ function requestOnce(
           chunks.push(chunk);
           if (received >= opts.maxBytes) {
             truncated = received > opts.maxBytes;
-            const body = Buffer.concat(chunks)
-              .subarray(0, opts.maxBytes)
-              .toString("utf8");
+            const body = Buffer.concat(chunks).subarray(0, opts.maxBytes).toString("utf8");
             done(() =>
               resolve({
                 status,

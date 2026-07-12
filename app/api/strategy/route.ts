@@ -9,6 +9,7 @@ import {
   SCORING_PROMPT_VERSION,
 } from "@/lib/scoring";
 import { apiError, parseBody, readJsonBody, strategyBodySchema } from "@/lib/validate";
+import { asRecordList, asString, asStringList } from "@/lib/coerce";
 import type {
   MarketingStrategy,
   Confidence,
@@ -20,10 +21,9 @@ import type {
 } from "@/lib/types";
 
 const TIERS = new Set(["primary", "secondary", "early-adopter"]);
-const str = (v: any) => (typeof v === "string" ? v : "");
-const arr = (v: any) => (Array.isArray(v) ? v : []);
-const strList = (v: any, n: number) =>
-  arr(v).map(str).filter(Boolean).slice(0, n);
+const str = asString;
+const arr = asRecordList;
+const strList = asStringList;
 
 export const maxDuration = 90;
 
@@ -100,39 +100,39 @@ Rules:
     const recommendations = groundRecommendations(scoring.recommendations, discoveries);
 
     const audienceSegments: AudienceSegment[] = arr(plan.audienceSegments)
-      .map((s: any) => ({
-        tier: TIERS.has(s?.tier) ? s.tier : "primary",
-        label: str(s?.label),
-        description: str(s?.description),
-        whereTheyHang: str(s?.whereTheyHang),
+      .map((s) => ({
+        tier: (TIERS.has(str(s.tier)) ? str(s.tier) : "primary") as AudienceSegment["tier"],
+        label: str(s.label),
+        description: str(s.description),
+        whereTheyHang: str(s.whereTheyHang),
       }))
       .filter((s: AudienceSegment) => s.label || s.description);
 
     const phases: GtmPhase[] = arr(plan.phases)
-      .map((p: any) => ({
-        window: str(p?.window),
-        focus: str(p?.focus),
-        actions: strList(p?.actions, 6),
+      .map((p) => ({
+        window: str(p.window),
+        focus: str(p.focus),
+        actions: strList(p.actions, 6),
       }))
       .filter((p: GtmPhase) => p.focus || p.actions.length);
 
     const founderChecklist: FounderTask[] = arr(plan.founderChecklist)
-      .map((t: any) => ({ when: str(t?.when), task: str(t?.task) }))
+      .map((t) => ({ when: str(t.when), task: str(t.task) }))
       .filter((t: FounderTask) => t.task);
 
     const risks: RiskItem[] = arr(plan.risks)
-      .map((r: any) => ({
-        area: str(r?.area),
-        risk: str(r?.risk),
-        mitigation: str(r?.mitigation),
+      .map((r) => ({
+        area: str(r.area),
+        risk: str(r.risk),
+        mitigation: str(r.mitigation),
       }))
       .filter((r: RiskItem) => r.risk);
 
     const iterationLoop: IterationMetric[] = arr(plan.iterationLoop)
-      .map((m: any) => ({
-        signal: str(m?.signal),
-        read: str(m?.read),
-        ifWeak: str(m?.ifWeak),
+      .map((m) => ({
+        signal: str(m.signal),
+        read: str(m.read),
+        ifWeak: str(m.ifWeak),
       }))
       .filter((m: IterationMetric) => m.signal);
 

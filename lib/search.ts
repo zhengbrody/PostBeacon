@@ -7,9 +7,9 @@
  */
 
 import { fetchWithTimeout } from "./fetch";
+import { asRecordList, asString } from "./coerce";
 
-const SEARCH_ENDPOINT =
-  process.env.SEARCH_API_URL || "https://api.tavily.com/search";
+const SEARCH_ENDPOINT = process.env.SEARCH_API_URL || "https://api.tavily.com/search";
 
 export interface SearchResult {
   title: string;
@@ -43,15 +43,14 @@ async function runQuery(query: string, key: string): Promise<SearchResult[]> {
       12000
     );
     if (!res.ok) return [];
-    const json: any = await res.json();
-    const results = Array.isArray(json?.results) ? json.results : [];
-    return results
-      .map((r: any) => ({
-        title: String(r.title || ""),
-        url: String(r.url || ""),
-        snippet: String(r.content || r.snippet || ""),
+    const json: unknown = await res.json();
+    return asRecordList((json as { results?: unknown })?.results)
+      .map((r) => ({
+        title: asString(r.title),
+        url: asString(r.url),
+        snippet: asString(r.content) || asString(r.snippet),
       }))
-      .filter((r: SearchResult) => r.url);
+      .filter((r) => r.url);
   } catch {
     return []; // best-effort; a failed query just contributes nothing
   }

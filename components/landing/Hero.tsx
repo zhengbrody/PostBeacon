@@ -13,9 +13,9 @@ export function Hero() {
           <span className="text-gradient">Launch everywhere.</span>
         </h1>
         <p className="mx-auto mt-6 max-w-xl text-base text-neutral-300 sm:text-lg">
-          Paste your product URL and get a full 0→1 launch plan: positioning,
-          ranked channels, ready-to-post content written to not sound like AI,
-          and a calendar. The CMO work, for vibecoders who&apos;d rather ship.
+          Paste your product URL and get a full 0→1 launch plan: positioning, ranked
+          channels, ready-to-post content written to not sound like AI, and a calendar. The
+          CMO work, for vibecoders who&apos;d rather ship.
         </p>
         <div className="mt-8 flex items-center justify-center gap-3">
           <ButtonLink href="/app">Start free →</ButtonLink>

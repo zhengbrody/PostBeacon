@@ -22,7 +22,9 @@ describe("analyzeBodySchema", () => {
     expect(() =>
       parseBody(analyzeBodySchema, { url: "https://example.com", provider: "claude" })
     ).not.toThrow();
-    expect(() => parseBody(analyzeBodySchema, { url: "https://example.com" })).not.toThrow();
+    expect(() =>
+      parseBody(analyzeBodySchema, { url: "https://example.com" })
+    ).not.toThrow();
   });
 
   it("rejects unknown providers", () => {
@@ -69,9 +71,9 @@ describe("regenerateBodySchema", () => {
     expect(() =>
       parseBody(regenerateBodySchema, { profile, platformId: P0 })
     ).not.toThrow();
-    expect(() =>
-      parseBody(regenerateBodySchema, { profile, platformId: "bogus" })
-    ).toThrow(PublicError);
+    expect(() => parseBody(regenerateBodySchema, { profile, platformId: "bogus" })).toThrow(
+      PublicError
+    );
   });
 });
 
@@ -110,9 +112,9 @@ describe("copilotBodySchema", () => {
   });
 
   it("rejects unknown actions", () => {
-    expect(() =>
-      parseBody(copilotBodySchema, { ...base, action: "exfiltrate" })
-    ).toThrow(PublicError);
+    expect(() => parseBody(copilotBodySchema, { ...base, action: "exfiltrate" })).toThrow(
+      PublicError
+    );
   });
 
   it("bounds the history (length, roles, message size)", () => {

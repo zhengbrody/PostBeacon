@@ -253,7 +253,9 @@ describe("deterministic scoring", () => {
     expect(toRecommendation(raw, platform, NO_FACTS)).toBeNull();
     const slop = rawRec(platform.id);
     (slop.dimensions as any).audienceFit.score = 10.4; // rounding slop → clamped
-    expect(toRecommendation(slop, platform, NO_FACTS)!.breakdown!.audienceFit.score).toBe(10);
+    expect(toRecommendation(slop, platform, NO_FACTS)!.breakdown!.audienceFit.score).toBe(
+      10
+    );
   });
 
   it("effort always comes from the catalog, not the model", () => {

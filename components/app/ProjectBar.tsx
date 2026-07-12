@@ -4,21 +4,29 @@ import { useEffect, useState } from "react";
 import { supabaseConfigured } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/Button";
 import { AccountName, SignIn, useSupabaseUser } from "./SignIn";
+import type { Fact, GenerateResult, MarketingStrategy, ProductProfile } from "@/lib/types";
 
 export interface ProjectSnapshot {
   url: string;
-  profile: any;
-  strategy: any;
-  result: any;
+  profile: ProductProfile | null;
+  strategy: MarketingStrategy | null;
+  result: GenerateResult | null;
   posted: Record<string, boolean>;
   selected: string[];
+  facts: Fact[];
 }
 
-interface SavedProject extends Omit<ProjectSnapshot, "selected"> {
+/** A `projects` row as loadProject consumes it (meta carries client state). */
+interface SavedProject extends Omit<ProjectSnapshot, "selected" | "facts"> {
   id: string;
   name: string;
   updated_at: string;
-  meta?: { selected?: string[]; launchDate?: string };
+  meta?: {
+    schemaVersion?: number;
+    selected?: string[];
+    launchDate?: string;
+    facts?: Fact[];
+  };
 }
 
 export function ProjectBar({
@@ -74,11 +82,7 @@ export function ProjectBar({
   return (
     <div className="flex flex-col items-end gap-2">
       <div className="flex items-center gap-2 text-xs">
-        <AccountName
-          email={userEmail}
-          name={displayName}
-          onSave={updateDisplayName}
-        />
+        <AccountName email={userEmail} name={displayName} onSave={updateDisplayName} />
         <span className="text-neutral-500">
           {saving ? "Saving…" : lastSaved ? `Saved ✓ ${lastSaved}` : ""}
         </span>

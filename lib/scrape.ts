@@ -19,9 +19,7 @@ function extract(html: string, url: string, rendered: boolean): ScrapedPage {
   $("script, style, noscript, svg").remove();
 
   const title =
-    $('meta[property="og:title"]').attr("content") ||
-    $("title").first().text() ||
-    "";
+    $('meta[property="og:title"]').attr("content") || $("title").first().text() || "";
   const description =
     $('meta[name="description"]').attr("content") ||
     $('meta[property="og:description"]').attr("content") ||
@@ -53,8 +51,7 @@ function looksEmpty(page: ScrapedPage): boolean {
 async function fetchStatic(url: string): Promise<string> {
   const res = await safeFetch(url, {
     headers: {
-      "User-Agent":
-        "Mozilla/5.0 (compatible; PostBeaconBot/1.0; +https://postbeacon.app)",
+      "User-Agent": "Mozilla/5.0 (compatible; PostBeaconBot/1.0; +https://postbeacon.app)",
     },
     timeoutMs: 15000,
     maxRedirects: 3,

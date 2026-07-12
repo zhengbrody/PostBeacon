@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { asRecord, asString } from "./coerce";
 import { getServiceSupabase } from "./supabase/server";
 
 /**
@@ -57,15 +58,14 @@ export function verifyWebhook(
       return false;
     }
     return (
-      candidate.length === expected.length &&
-      crypto.timingSafeEqual(candidate, expected)
+      candidate.length === expected.length && crypto.timingSafeEqual(candidate, expected)
     );
   });
   return match ? { ok: true, id } : { ok: false, reason: "bad-signature" };
 }
 
 /** The only event types that may change a plan. Anything else is ignored. */
-export const HANDLED_EVENT_TYPES = new Set([
+const HANDLED_EVENT_TYPES = new Set([
   "subscription.created",
   "subscription.active",
   "subscription.updated",
@@ -78,12 +78,11 @@ export const HANDLED_EVENT_TYPES = new Set([
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-type Rec = Record<string, unknown>;
-const rec = (v: unknown): Rec => (v && typeof v === "object" ? (v as Rec) : {});
-const str = (v: unknown): string => (typeof v === "string" ? v : "");
+const rec = asRecord;
+const str = asString;
 
 /** Every place a Polar payload may carry the purchased product's id. */
-function eventProductIds(data: Rec): string[] {
+function eventProductIds(data: Record<string, unknown>): string[] {
   return [
     str(data.product_id),
     str(rec(data.product).id),

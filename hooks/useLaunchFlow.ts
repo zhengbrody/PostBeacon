@@ -1,69 +1,44 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useState } from "react";
 import { api } from "@/lib/api";
 import { loadDraft } from "@/lib/storage";
 import { DEMO_PROJECT } from "@/lib/demo";
 import { PLATFORMS } from "@/lib/platforms";
+import type { ContextField } from "@/lib/facts";
 import {
-  answerFact,
-  applyFactToProfile,
-  confirmFact,
-  correctFact,
-  type ContextField,
-} from "@/lib/facts";
+  flowReducer,
+  initialFlowState,
+  type LoadedProject,
+  type Step,
+} from "./launchFlowReducer";
 import type {
   Provider,
-  ProductProfile,
   MarketingStrategy,
-  GenerateResult,
-  ClarifyingQuestion,
-  Fact,
-  PlatformContent,
   PlatformPost,
   PlatformRecommendation,
+  ProductProfile,
   ScheduleItem,
 } from "@/lib/types";
 
-export type Step = "input" | "profile" | "strategy" | "results";
-
-// Default channel set: the 4 best-scoring recommendations. A tight default —
-// content is only written for checked channels, and a focused plan beats a
-// sprawling one. Sorted explicitly; the model's array order isn't trusted.
-function defaultSelection(recs?: PlatformRecommendation[]): string[] {
-  if (!recs?.length) return [];
-  return [...recs]
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 4)
-    .map((r) => r.platformId);
-}
+export type { Step };
 
 /**
- * The whole 4-step launch flow as one hook: state machine + API actions +
- * load/restore for saved projects. Components stay presentational.
+ * The whole 4-step launch flow as one hook. All plan state lives in the pure
+ * reducer (hooks/launchFlowReducer.ts) — this hook adds the async API actions
+ * and ephemeral UI state (loading/error/paywall), and keeps the same public
+ * surface components have always consumed.
  */
 export function useLaunchFlow() {
-  const [step, setStep] = useState<Step>("input");
-  const [url, setUrl] = useState("");
+  const [state, dispatch] = useReducer(flowReducer, initialFlowState);
   const [provider, setProvider] = useState<Provider>("claude");
   const [availProviders, setAvailProviders] = useState<Provider[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingMsg, setLoadingMsg] = useState("");
   const [error, setError] = useState("");
-
-  const [profile, setProfile] = useState<ProductProfile | null>(null);
-  const [facts, setFacts] = useState<Fact[]>([]); // M13 fact ledger
-  const [questions, setQuestions] = useState<ClarifyingQuestion[]>([]); // ≤3, from analyze
-  const [strategy, setStrategy] = useState<MarketingStrategy | null>(null);
-  const [selected, setSelected] = useState<string[]>([]);
-  const [result, setResult] = useState<GenerateResult | null>(null);
-  const [posted, setPosted] = useState<Record<string, boolean>>({});
-  const [launchDate, setLaunchDate] = useState("");
-  const [projectId, setProjectId] = useState(""); // stable id of the current project (for autosave upsert)
   const [paywall, setPaywall] = useState<"auth" | "limit" | null>(null);
   const [generations, setGenerations] = useState(0); // bumps once per successful generate (usage refetch trigger)
-  const [demo, setDemo] = useState(false); // viewing the baked-in example (autosave is paused)
-  const [pendingDraft, setPendingDraft] = useState<any>(null); // saved draft offered for resume on mount
+  const [pendingDraft, setPendingDraft] = useState<LoadedProject | null>(null); // saved draft offered for resume on mount
 
   useEffect(() => {
     api
@@ -91,23 +66,24 @@ export function useLaunchFlow() {
     }
   }, []);
 
+  const { url, profile, facts, selected } = state;
+
   const analyze = () =>
     run(async () => {
-      setDemo(false);
       const { profile, facts, questions } = await api.analyze(url, provider);
-      setProfile(profile);
-      setFacts(facts ?? []);
-      setQuestions(questions ?? []);
-      setStep("profile");
+      dispatch({
+        type: "ANALYZED",
+        profile,
+        facts: facts ?? [],
+        questions: questions ?? [],
+      });
     }, "Reading your landing page…");
 
   const buildStrategy = () =>
     run(async () => {
       if (!profile) return;
-      const s = await api.strategy(profile, provider, facts);
-      setStrategy(s);
-      setSelected(defaultSelection(s.recommendations));
-      setStep("strategy");
+      const strategy = await api.strategy(profile, provider, facts);
+      dispatch({ type: "STRATEGY_BUILT", strategy });
     }, "Scanning every platform & ranking your channels…");
 
   const generate = () =>
@@ -115,13 +91,12 @@ export function useLaunchFlow() {
       if (!profile) return;
       setPaywall(null);
       try {
-        const r = await api.generate(profile, selected, provider, facts);
-        setResult(r);
-        setStep("results");
+        const result = await api.generate(profile, selected, provider, facts);
+        dispatch({ type: "GENERATED", result });
         setGenerations((n) => n + 1);
-      } catch (e: any) {
-        if (e?.code === "auth") return setPaywall("auth");
-        if (e?.code === "paywall") return setPaywall("limit");
+      } catch (e) {
+        if (isGateError(e, "auth")) return setPaywall("auth");
+        if (isGateError(e, "paywall")) return setPaywall("limit");
         throw e;
       }
     }, "Writing your launch content…");
@@ -136,195 +111,16 @@ export function useLaunchFlow() {
         provider,
         facts
       );
-      setResult((r) =>
-        r
-          ? {
-              ...r,
-              content: r.content.map((c) =>
-                c.platformId === platformId
-                  ? { ...c, posts, playbook: playbook ?? c.playbook, meta: meta ?? c.meta }
-                  : c
-              ),
-            }
-          : r
-      );
+      dispatch({
+        type: "CHANNEL_CONTENT_REPLACED",
+        channel: { platformId, posts, playbook, meta },
+      });
     }, "Rewriting this channel…");
 
-  // Retry ONE channel that failed during generation (partial-success flow).
-  // On success it moves from `failures` into content + calendar at its slot.
-  const retryFailed = (platformId: string) => {
-    const platform = PLATFORMS.find((p) => p.id === platformId);
-    if (!platform) return Promise.resolve();
-    return run(async () => {
-      if (!profile) return;
-      const { posts, playbook, meta } = await api.regenerate(
-        profile,
-        platformId,
-        provider,
-        facts
-      );
-      setResult((r) => {
-        if (!r) return r;
-        const block: PlatformContent = {
-          platformId,
-          platformName: platform.name,
-          posts,
-          playbook,
-          meta,
-        };
-        const rank = new Map(
-          (strategy?.recommendations ?? []).map((rec, i) => [rec.platformId, i])
-        );
-        return {
-          ...r,
-          content: [...r.content.filter((c) => c.platformId !== platformId), block].sort(
-            (a, b) =>
-              (rank.get(a.platformId) ?? Infinity) - (rank.get(b.platformId) ?? Infinity)
-          ),
-          schedule: [
-            ...r.schedule.filter((s) => s.platformId !== platformId),
-            {
-              day: platform.defaultDay,
-              platformId,
-              platformName: platform.name,
-              action: `Post to ${platform.name} — ${platform.blurb} (${platform.bestTime})`,
-            },
-          ].sort((a, b) => a.day - b.day),
-          failures: (r.failures ?? []).filter((f) => f.platformId !== platformId),
-        };
-      });
-    }, `Retrying ${platform.name}…`);
-  };
-
-  // ---- Fact Ledger operations (M13). The ONLY producers of "user-confirmed".
-
-  const confirmFactAction = (id: string) =>
-    setFacts((fs) => fs.map((f) => (f.id === id ? confirmFact(f) : f)));
-
-  // Correcting a fact also syncs the profile field it backs, so the ledger
-  // and the form never disagree.
-  const correctFactAction = (id: string, claim: string) => {
-    const target = facts.find((f) => f.id === id);
-    if (!target) return;
-    const fixed = correctFact(target, claim);
-    setFacts((fs) => fs.map((f) => (f.id === id ? fixed : f)));
-    setProfile((p) => (p ? applyFactToProfile(p, fixed) : p));
-  };
-
-  const deleteFactAction = (id: string) =>
-    setFacts((fs) => fs.filter((f) => f.id !== id));
-
-  // Answer (or skip) one clarifying question. Answers become user-confirmed
-  // facts + profile fields; skips leave the fact honestly unknown.
-  const answerQuestion = (id: ContextField, answer: string) => {
-    const trimmed = answer.trim();
-    if (trimmed) {
-      const fact = answerFact(id, trimmed);
-      setFacts((fs) => [...fs.filter((f) => f.id !== id), fact]);
-      setProfile((p) => (p ? applyFactToProfile(p, fact) : p));
-    }
-    setQuestions((qs) => qs.filter((q) => q.id !== id));
-  };
-
-  // Inline edit of a single generated post — edits live in `result` so they
-  // flow into export (and, once persisted, autosave) for free.
-  const updatePost = (
-    platformId: string,
-    idx: number,
-    patch: Partial<PlatformPost>
-  ) =>
-    setResult((r) =>
-      r
-        ? {
-            ...r,
-            content: r.content.map((c) =>
-              c.platformId === platformId
-                ? {
-                    ...c,
-                    posts: c.posts.map((p, i) =>
-                      i === idx ? { ...p, ...patch } : p
-                    ),
-                  }
-                : c
-            ),
-          }
-        : r
-    );
-
-  const toggleSelected = (id: string) =>
-    setSelected((s) =>
-      s.includes(id) ? s.filter((x) => x !== id) : [...s, id]
-    );
-
-  // ---- Plan editing (M11). Pure state patches: autosave, export and the
-  // ---- Copilot context all read this state, so edits flow through for free.
-
-  const updateStrategy = (patch: Partial<MarketingStrategy>) =>
-    setStrategy((s) => (s ? { ...s, ...patch } : s));
-
-  const updateRecommendation = (
-    platformId: string,
-    patch: Partial<PlatformRecommendation>
-  ) =>
-    setStrategy((s) =>
-      s
-        ? {
-            ...s,
-            recommendations: s.recommendations.map((r) =>
-              r.platformId === platformId ? { ...r, ...patch } : r
-            ),
-          }
-        : s
-    );
-
-  // Schedule edits re-sort by day inside the producer, so the render and the
-  // next index-based edit always see the same order.
-  const updateScheduleItem = (idx: number, patch: Partial<ScheduleItem>) =>
-    setResult((r) =>
-      r
-        ? {
-            ...r,
-            schedule: r.schedule
-              .map((s, i) => (i === idx ? { ...s, ...patch } : s))
-              .sort((a, b) => a.day - b.day),
-          }
-        : r
-    );
-
-  const removeScheduleItem = (idx: number) =>
-    setResult((r) =>
-      r ? { ...r, schedule: r.schedule.filter((_, i) => i !== idx) } : r
-    );
-
-  const addScheduleItem = (item: ScheduleItem) =>
-    setResult((r) =>
-      r
-        ? { ...r, schedule: [...r.schedule, item].sort((a, b) => a.day - b.day) }
-        : r
-    );
-
-  // Drop a channel from the plan. Content, calendar steps, posted marks and
-  // the generation set go together so counts and re-generates never drift.
-  const removeChannel = (platformId: string) => {
-    setResult((r) =>
-      r
-        ? {
-            content: r.content.filter((c) => c.platformId !== platformId),
-            schedule: r.schedule.filter((s) => s.platformId !== platformId),
-          }
-        : r
-    );
-    setPosted((p) =>
-      Object.fromEntries(
-        Object.entries(p).filter(([k]) => !k.startsWith(`${platformId}-`))
-      )
-    );
-    setSelected((s) => s.filter((x) => x !== platformId));
-  };
-
-  // Write content for one more channel after generation, slotting it into the
-  // plan at its ranked position (content order, calendar, selection).
-  const addChannel = (platformId: string) => {
+  // Write content for one more channel after generation (add), or retry one
+  // that failed — the reducer slots it into content/calendar/selection and
+  // clears any failure entry, all in one transition.
+  const upsertChannel = (platformId: string, msg: string) => {
     const platform = PLATFORMS.find((p) => p.id === platformId);
     if (!platform) return Promise.resolve();
     return run(async () => {
@@ -337,95 +133,36 @@ export function useLaunchFlow() {
           provider,
           facts
         );
-        const block: PlatformContent = {
-          platformId,
-          platformName: platform.name,
-          posts,
-          playbook,
-          meta,
-        };
-        setResult((r) => {
-          if (!r || r.content.some((c) => c.platformId === platformId)) return r;
-          const rank = new Map(
-            (strategy?.recommendations ?? []).map((rec, i) => [rec.platformId, i])
-          );
-          return {
-            content: [...r.content, block].sort(
-              (a, b) =>
-                (rank.get(a.platformId) ?? Infinity) -
-                (rank.get(b.platformId) ?? Infinity)
-            ),
-            // Same action template the server uses, so the calendar reads uniformly.
-            schedule: [
-              ...r.schedule,
-              {
-                day: platform.defaultDay,
-                platformId,
-                platformName: platform.name,
-                action: `Post to ${platform.name} — ${platform.blurb} (${platform.bestTime})`,
-              },
-            ].sort((a, b) => a.day - b.day),
-          };
+        dispatch({
+          type: "CHANNEL_UPSERTED",
+          channel: { platformId, posts, playbook, meta },
         });
-        setSelected((s) => (s.includes(platformId) ? s : [...s, platformId]));
-      } catch (e: any) {
-        if (e?.code === "auth") return setPaywall("auth");
-        if (e?.code === "paywall") return setPaywall("limit");
+      } catch (e) {
+        if (isGateError(e, "auth")) return setPaywall("auth");
+        if (isGateError(e, "paywall")) return setPaywall("limit");
         throw e;
       }
-    }, `Writing content for ${platform.name}…`);
+    }, msg);
   };
 
-  const togglePosted = (id: string) =>
-    setPosted((p) => ({ ...p, [id]: !p[id] }));
-
-  const reset = () => {
-    setDemo(false);
-    setStep("input");
-    setUrl("");
-    setProfile(null);
-    setFacts([]);
-    setQuestions([]);
-    setStrategy(null);
-    setResult(null);
-    setSelected([]);
-    setPosted({});
-    setLaunchDate("");
-    setProjectId("");
-    setError("");
+  const addChannel = (platformId: string) => {
+    const name = PLATFORMS.find((p) => p.id === platformId)?.name ?? platformId;
+    return upsertChannel(platformId, `Writing content for ${name}…`);
   };
 
-  const loadProject = (p: any) => {
-    setUrl(p.url || "");
-    setProfile(p.profile || null);
-    setStrategy(p.strategy || null);
-    setResult(p.result || null);
-    setPosted(p.posted || {});
-    setLaunchDate(p.launchDate || p.meta?.launchDate || "");
-    setProjectId(p.id || "");
-    // Facts: flat field (local draft) or meta (Supabase row); pre-M13 saves
-    // have neither → empty ledger (the UI offers re-analyze to build one).
-    setFacts(p.facts ?? p.meta?.facts ?? []);
-    setQuestions([]); // questions are an analyze-time artifact, not persisted
-    // Three generations of saved data: flat `selected` (local draft), `meta`
-    // (Supabase row), or neither (pre-M11 saves) → derive a fresh default.
-    setSelected(
-      p.selected ??
-        p.meta?.selected ??
-        defaultSelection(p.strategy?.recommendations)
-    );
-    setStep(
-      p.result ? "results" : p.strategy ? "strategy" : p.profile ? "profile" : "input"
-    );
+  const retryFailed = (platformId: string) => {
+    const name = PLATFORMS.find((p) => p.id === platformId)?.name ?? platformId;
+    return upsertChannel(platformId, `Retrying ${name}…`);
   };
+
+  const loadProject = (p: LoadedProject) =>
+    dispatch({ type: "PROJECT_LOADED", project: p, demo: false });
 
   // Load the baked-in example plan (no API call, works with zero keys). Marked
   // as `demo` so autosave skips it and it never overwrites the user's own draft.
   const loadDemo = useCallback(() => {
     setError("");
-    setDemo(true);
-    loadProject(DEMO_PROJECT);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    dispatch({ type: "PROJECT_LOADED", project: DEMO_PROJECT, demo: true });
   }, []);
 
   // Resume / discard the in-progress draft surfaced on mount.
@@ -449,59 +186,83 @@ export function useLaunchFlow() {
     }
     const draft = loadDraft();
     if (draft && (draft.profile || draft.url)) setPendingDraft(draft);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [loadDemo]);
 
   // Stable identity unless the contents change — lets autosave depend on the
   // object reference instead of re-serializing it every render.
   const snapshot = useMemo(
-    () => ({ url, profile, strategy, result, posted, selected, facts }),
-    [url, profile, strategy, result, posted, selected, facts]
+    () => ({
+      url: state.url,
+      profile: state.profile,
+      strategy: state.strategy,
+      result: state.result,
+      posted: state.posted,
+      selected: state.selected,
+      facts: state.facts,
+    }),
+    [
+      state.url,
+      state.profile,
+      state.strategy,
+      state.result,
+      state.posted,
+      state.selected,
+      state.facts,
+    ]
   );
 
   return {
-    step,
-    setStep,
-    url,
-    setUrl,
+    step: state.step,
+    setStep: (step: Step) => dispatch({ type: "STEP_SET", step }),
+    url: state.url,
+    setUrl: (u: string) => dispatch({ type: "URL_SET", url: u }),
     provider,
     setProvider,
     availProviders,
     loading,
     loadingMsg,
     error,
-    profile,
-    setProfile,
-    facts,
-    questions,
-    confirmFact: confirmFactAction,
-    correctFact: correctFactAction,
-    deleteFact: deleteFactAction,
-    answerQuestion,
+    profile: state.profile,
+    setProfile: (p: ProductProfile) => dispatch({ type: "PROFILE_SET", profile: p }),
+    facts: state.facts,
+    questions: state.questions,
+    confirmFact: (id: string) => dispatch({ type: "FACT_CONFIRMED", id }),
+    correctFact: (id: string, claim: string) =>
+      dispatch({ type: "FACT_CORRECTED", id, claim }),
+    deleteFact: (id: string) => dispatch({ type: "FACT_DELETED", id }),
+    answerQuestion: (id: ContextField, answer: string) =>
+      dispatch({ type: "QUESTION_ANSWERED", id, answer }),
     retryFailed,
-    strategy,
-    selected,
-    toggleSelected,
-    result,
-    posted,
-    togglePosted,
+    strategy: state.strategy,
+    selected: state.selected,
+    toggleSelected: (platformId: string) =>
+      dispatch({ type: "SELECTION_TOGGLED", platformId }),
+    result: state.result,
+    posted: state.posted,
+    togglePosted: (id: string) => dispatch({ type: "POSTED_TOGGLED", id }),
     regeneratePost,
-    updatePost,
-    updateStrategy,
-    updateRecommendation,
-    updateScheduleItem,
-    removeScheduleItem,
-    addScheduleItem,
-    removeChannel,
+    updatePost: (platformId: string, idx: number, patch: Partial<PlatformPost>) =>
+      dispatch({ type: "POST_PATCHED", platformId, idx, patch }),
+    updateStrategy: (patch: Partial<MarketingStrategy>) =>
+      dispatch({ type: "STRATEGY_PATCHED", patch }),
+    updateRecommendation: (platformId: string, patch: Partial<PlatformRecommendation>) =>
+      dispatch({ type: "RECOMMENDATION_PATCHED", platformId, patch }),
+    updateScheduleItem: (idx: number, patch: Partial<ScheduleItem>) =>
+      dispatch({ type: "SCHEDULE_ITEM_PATCHED", idx, patch }),
+    removeScheduleItem: (idx: number) => dispatch({ type: "SCHEDULE_ITEM_REMOVED", idx }),
+    addScheduleItem: (item: ScheduleItem) =>
+      dispatch({ type: "SCHEDULE_ITEM_ADDED", item }),
+    removeChannel: (platformId: string) =>
+      dispatch({ type: "CHANNEL_REMOVED", platformId }),
     addChannel,
-    launchDate,
-    setLaunchDate,
-    projectId,
-    setProjectId,
+    launchDate: state.launchDate,
+    setLaunchDate: (date: string) => dispatch({ type: "LAUNCH_DATE_SET", date }),
+    projectId: state.projectId,
+    setProjectId: (id: string) => dispatch({ type: "PROJECT_ID_SET", id }),
     paywall,
     setPaywall,
     generations,
-    demo,
+    demo: state.demo,
     loadDemo,
     pendingDraft,
     resumeDraft,
@@ -509,8 +270,13 @@ export function useLaunchFlow() {
     analyze,
     buildStrategy,
     generate,
-    reset,
+    reset: () => dispatch({ type: "RESET" }),
     loadProject,
     snapshot,
   };
+}
+
+/** Narrow an api.ts ApiError without `any`: gated 401/402s carry a code. */
+function isGateError(e: unknown, code: "auth" | "paywall"): boolean {
+  return typeof e === "object" && e !== null && (e as { code?: string }).code === code;
 }

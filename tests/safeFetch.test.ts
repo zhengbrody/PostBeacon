@@ -126,9 +126,9 @@ describe("safeFetch", () => {
   });
 
   it("enforces the overall timeout", async () => {
-    await expect(
-      safeFetch(`${base()}/slow`, { ...seams, timeoutMs: 150 })
-    ).rejects.toThrow(/Timed out/);
+    await expect(safeFetch(`${base()}/slow`, { ...seams, timeoutMs: 150 })).rejects.toThrow(
+      /Timed out/
+    );
   });
 
   it("supports HEAD without reading a body", async () => {

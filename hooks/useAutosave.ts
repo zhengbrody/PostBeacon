@@ -2,17 +2,18 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSupabaseUser } from "@/components/app/SignIn";
-import { saveDraft, clearDraft } from "@/lib/storage";
+import { saveDraft, clearDraft, DRAFT_SCHEMA_VERSION } from "@/lib/storage";
+import type { Fact, GenerateResult, MarketingStrategy, ProductProfile } from "@/lib/types";
 
 interface AutosaveFlow {
   snapshot: {
     url: string;
-    profile: any;
-    strategy: any;
-    result: any;
+    profile: ProductProfile | null;
+    strategy: MarketingStrategy | null;
+    result: GenerateResult | null;
     posted: Record<string, boolean>;
     selected: string[];
-    facts: any[];
+    facts: Fact[];
   };
   launchDate: string;
   projectId: string;
@@ -37,14 +38,19 @@ export function useAutosave(f: AutosaveFlow) {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Latest values in a ref so the debounced persist() never reads stale state.
-  const ref = useRef<AutosaveFlow & { userEmail: string | null; supabase: any }>(
-    { ...f, userEmail, supabase }
-  );
+  const ref = useRef({ ...f, userEmail, supabase });
   ref.current = { ...f, userEmail, supabase };
 
   const persist = useCallback(async () => {
-    const { snapshot: snap, launchDate, projectId, setProjectId, userEmail, supabase, demo } =
-      ref.current;
+    const {
+      snapshot: snap,
+      launchDate,
+      projectId,
+      setProjectId,
+      userEmail,
+      supabase,
+      demo,
+    } = ref.current;
     if (demo) return; // the example plan is read-only — don't save it
     if (!(snap.profile || snap.url)) return;
 
@@ -70,8 +76,14 @@ export function useAutosave(f: AutosaveFlow) {
             result: snap.result,
             posted: snap.posted,
             // Client-side plan state that isn't a server response: channel
-            // selection, launch date, and the M13 fact ledger.
-            meta: { selected: snap.selected, launchDate, facts: snap.facts },
+            // selection, launch date, the M13 fact ledger — plus the
+            // serialization version so future readers can migrate.
+            meta: {
+              schemaVersion: DRAFT_SCHEMA_VERSION,
+              selected: snap.selected,
+              launchDate,
+              facts: snap.facts,
+            },
             updated_at: new Date().toISOString(),
           },
           { onConflict: "id" }

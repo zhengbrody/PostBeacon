@@ -91,7 +91,11 @@ export const FIXTURES: GoldenFixture[] = [
       title: "Sipwell — the water reminder that adapts to your day",
       description:
         "An iOS app that nudges you to drink based on weather, activity, and your actual schedule.",
-      headings: ["Hydration that fits your life", "Smart, not naggy", "Download on the App Store"],
+      headings: [
+        "Hydration that fits your life",
+        "Smart, not naggy",
+        "Download on the App Store",
+      ],
       text: "Hydration that fits your life. Sipwell reads your calendar, the weather, and your workout data to time reminders when you can actually act on them — not during your 2pm meeting. Log a glass with one tap or from the widget. Streaks, gentle goals, and a weekly report that shows patterns you didn't notice. No account required, your data stays on your phone. Free to download on the App Store, with a one-time $12 unlock for the adaptive engine. Featured in the App Store's Health picks.",
     },
     truth: {
@@ -113,7 +117,11 @@ export const FIXTURES: GoldenFixture[] = [
       title: "Drafthorse — cold emails that sound like you wrote them",
       description:
         "An AI email writer trained on your sent folder so outreach keeps your voice.",
-      headings: ["Outreach in your voice", "Trained on your sent mail", "Join the waitlist"],
+      headings: [
+        "Outreach in your voice",
+        "Trained on your sent mail",
+        "Join the waitlist",
+      ],
       text: "Outreach in your voice. Drafthorse learns from the emails you've already sent — your phrasing, your sign-offs, your level of formality — and drafts cold outreach that reads like you on a good day. Paste a prospect's LinkedIn or website and get a first draft in seconds, with every claim pulled from the page you gave it. Edits teach it. Nothing is sent automatically; you approve every email. We're onboarding in small batches — join the waitlist and we'll email you when your spot opens.",
     },
     truth: {
@@ -135,7 +143,11 @@ export const FIXTURES: GoldenFixture[] = [
       title: "Loamly — the planter that waters itself for six weeks",
       description:
         "A ceramic self-watering planter with a six-week reservoir and a soil-moisture window.",
-      headings: ["Plants that survive your schedule", "Six weeks per fill", "Free shipping over $60"],
+      headings: [
+        "Plants that survive your schedule",
+        "Six weeks per fill",
+        "Free shipping over $60",
+      ],
       text: "Plants that survive your schedule. Loamly's ceramic reservoir waters your plant from below for up to six weeks per fill, and the soil-moisture window tells you exactly when to top up. No batteries, no app, no drowned roots. Each planter is slip-cast stoneware, available in three sizes and four glazes. $38 for the small, $52 medium, $74 large. Free shipping in the US over $60. 30-day returns, no questions. As seen in Apartment Therapy's spring roundup.",
     },
     truth: {
@@ -157,7 +169,11 @@ export const FIXTURES: GoldenFixture[] = [
       title: "The Margin — indie finance for people who ship",
       description:
         "A weekly newsletter on bootstrapper finance: pricing, taxes, and runway, in plain English.",
-      headings: ["Money advice for people who'd rather be building", "Every Tuesday", "Read by 9,200 founders"],
+      headings: [
+        "Money advice for people who'd rather be building",
+        "Every Tuesday",
+        "Read by 9,200 founders",
+      ],
       text: "Money advice for people who'd rather be building. Every Tuesday, The Margin breaks down one bootstrapper finance topic — pricing changes, estimated taxes, when to take a salary — in under five minutes, with real numbers from real indie companies. No jargon, no hot takes, no crypto. Read by 9,200 founders. The weekly letter is free; the $8/month tier adds the archive, spreadsheets, and a quarterly live Q&A. Subscribe free and see this week's issue in your inbox Tuesday.",
     },
     truth: {
@@ -179,7 +195,11 @@ export const FIXTURES: GoldenFixture[] = [
       title: "quickcache — a lock-free in-process cache for Rust",
       description:
         "MIT-licensed Rust crate: bounded, lock-free, TTL-aware caching with zero unsafe in the public API.",
-      headings: ["Fast by measurement, not adjectives", "Benchmarks", "cargo add quickcache"],
+      headings: [
+        "Fast by measurement, not adjectives",
+        "Benchmarks",
+        "cargo add quickcache",
+      ],
       text: "quickcache is a bounded in-process cache for Rust with lock-free reads, per-entry TTLs, and weighted eviction. In the included benchmarks it sustains 34 million reads per second on an M2 Pro across 8 threads — the harness is in the repo, run it yourself. Zero unsafe in the public API; the internals are fuzzed in CI. MIT licensed. Add it with cargo add quickcache. The README covers eviction tuning, and the changelog is honest about the two breaking releases so far.",
     },
     truth: {
@@ -201,7 +221,11 @@ export const FIXTURES: GoldenFixture[] = [
       title: "Centavo — budgeting for irregular income",
       description:
         "A budgeting app built for freelancers whose income changes every month.",
-      headings: ["Budgets that flex with your invoices", "Smooth the feast and famine", "Bank-level security"],
+      headings: [
+        "Budgets that flex with your invoices",
+        "Smooth the feast and famine",
+        "Bank-level security",
+      ],
       text: "Budgets that flex with your invoices. Centavo is budgeting for freelancers and contractors whose income is different every month. Instead of fixed category limits, it smooths your last six months of income into a safe-to-spend number that updates as invoices land. Tax set-aside is automatic — it moves your estimated percentage into a virtual envelope every time you're paid. Read-only bank connections via Plaid, encrypted at rest, and we never sell data. iOS and web. $7/month, first month free.",
     },
     truth: {
@@ -221,8 +245,7 @@ export const FIXTURES: GoldenFixture[] = [
     page: {
       url: "https://repcount.fit",
       title: "Repcount — the gym log you can use mid-set",
-      description:
-        "A no-frills workout logger designed for one-thumb use between sets.",
+      description: "A no-frills workout logger designed for one-thumb use between sets.",
       headings: ["Log a set in two taps", "Your program, not ours", "Works offline"],
       text: "Log a set in two taps, even with a plate in your other hand. Repcount is a workout logger with zero social feed, zero coaching upsell, and a rest timer that starts itself. Bring your own program — it learns your exercises and suggests last session's weight so you just confirm or bump it. Full history and PR tracking, CSV export, and it works offline in a basement gym. Android and iOS. Free for three months of history; $20/year for unlimited.",
     },
@@ -267,7 +290,11 @@ export const FIXTURES: GoldenFixture[] = [
       title: "SQLCamp — learn SQL by fixing a broken company database",
       description:
         "An interactive course where every lesson is a ticket against a realistic messy database.",
-      headings: ["Learn SQL like it's your job", "80 tickets, one messy database", "Lifetime access"],
+      headings: [
+        "Learn SQL like it's your job",
+        "80 tickets, one messy database",
+        "Lifetime access",
+      ],
       text: "Learn SQL like it's your job — because the course IS a job. SQLCamp drops you into a fictional company's genuinely messy database with 80 tickets to close: broken reports, slow queries, suspicious numbers the CFO wants explained. Everything runs in the browser against real Postgres; no setup. Hints escalate from nudge to full walkthrough, so you're never stuck or spoon-fed. Written by a data engineer who's interviewed 200+ analysts. $89 one-time, lifetime access, free updates. The first 10 tickets are free — no signup.",
     },
     truth: {

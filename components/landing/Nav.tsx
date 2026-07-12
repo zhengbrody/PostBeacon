@@ -10,13 +10,22 @@ export function Nav() {
           Post<span className="text-accent-400">Beacon</span>
         </Link>
         <div className="flex items-center gap-1 text-sm">
-          <a href="#how" className="hidden rounded-lg px-3 py-2 text-neutral-300 hover:text-white sm:block">
+          <a
+            href="#how"
+            className="hidden rounded-lg px-3 py-2 text-neutral-300 hover:text-white sm:block"
+          >
             How it works
           </a>
-          <a href="#platforms" className="hidden rounded-lg px-3 py-2 text-neutral-300 hover:text-white sm:block">
+          <a
+            href="#platforms"
+            className="hidden rounded-lg px-3 py-2 text-neutral-300 hover:text-white sm:block"
+          >
             Platforms
           </a>
-          <a href="#faq" className="hidden rounded-lg px-3 py-2 text-neutral-300 hover:text-white sm:block">
+          <a
+            href="#faq"
+            className="hidden rounded-lg px-3 py-2 text-neutral-300 hover:text-white sm:block"
+          >
             FAQ
           </a>
           <div className="ml-1 hidden md:block">

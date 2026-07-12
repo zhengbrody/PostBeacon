@@ -79,10 +79,7 @@ function AppFlow({ f }: { f: ReturnType<typeof useLaunchFlow> }) {
         <div className="no-print mb-6 flex flex-wrap items-center justify-between gap-3 rounded-md border border-line bg-surface-2 px-4 py-3 text-xs">
           <span className="text-neutral-300">
             Pick up where you left off
-            {f.pendingDraft.profile?.name
-              ? ` — ${f.pendingDraft.profile.name}`
-              : ""}
-            ?
+            {f.pendingDraft.profile?.name ? ` — ${f.pendingDraft.profile.name}` : ""}?
           </span>
           <span className="flex gap-2">
             <Button size="sm" onClick={f.resumeDraft}>
@@ -98,9 +95,8 @@ function AppFlow({ f }: { f: ReturnType<typeof useLaunchFlow> }) {
       {f.demo && (
         <div className="no-print mb-6 flex flex-wrap items-center justify-between gap-3 rounded-md border border-accent-700/50 bg-accent-600/10 px-4 py-3 text-xs text-accent-200">
           <span>
-            <span className="font-semibold">Example plan.</span> This is a
-            ready-made launch plan for a fictional product, so you can see the
-            output without an API key.
+            <span className="font-semibold">Example plan.</span> This is a ready-made launch
+            plan for a fictional product, so you can see the output without an API key.
           </span>
           <Button size="sm" variant="outline" onClick={f.reset}>
             Try your own URL →
@@ -222,9 +218,7 @@ function AppFlow({ f }: { f: ReturnType<typeof useLaunchFlow> }) {
         />
       )}
 
-      {f.paywall && (
-        <Paywall reason={f.paywall} onClose={() => f.setPaywall(null)} />
-      )}
+      {f.paywall && <Paywall reason={f.paywall} onClose={() => f.setPaywall(null)} />}
     </>
   );
 }

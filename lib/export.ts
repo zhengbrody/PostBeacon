@@ -106,7 +106,9 @@ function appendStrategy(out: string[], s: MarketingStrategy) {
   if (s.audienceSegments?.length) {
     out.push("## Audience", "");
     for (const a of s.audienceSegments) {
-      out.push(`- **${a.label}** (${a.tier}) — ${a.description}${a.whereTheyHang ? ` _Found in: ${a.whereTheyHang}_` : ""}`);
+      out.push(
+        `- **${a.label}** (${a.tier}) — ${a.description}${a.whereTheyHang ? ` _Found in: ${a.whereTheyHang}_` : ""}`
+      );
     }
     out.push("");
   }

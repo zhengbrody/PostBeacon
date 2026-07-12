@@ -21,11 +21,7 @@ export const metadata: Metadata = {
   twitter: { card: "summary_large_image", title: "PostBeacon — your AI CMO" },
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={inter.variable}>
       <body className="min-h-screen font-sans">

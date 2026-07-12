@@ -6,13 +6,14 @@ import {
   meteringEnabled,
 } from "./supabase/server";
 import { bearer } from "./auth";
+import type { ApiErrorBody } from "./errors";
 
 // One "full launch" = one successful /api/generate. Free plan gets this many.
 export const FREE_LAUNCHES = Number(process.env.FREE_LAUNCHES) || 3;
 
 // Anti-abuse: max expensive LLM-route calls (analyze/strategy/generate/regenerate)
 // per user per day. Generous for real use, blocks scripted budget drain.
-export const DAILY_LIMIT = Number(process.env.DAILY_LIMIT) || 30;
+const DAILY_LIMIT = Number(process.env.DAILY_LIMIT) || 30;
 
 export interface Entitlement {
   plan: string; // "free" | "pro"
@@ -21,7 +22,7 @@ export interface Entitlement {
 
 /** Verify a Supabase access token and return the user (or null). Works with the
  *  anon key, so login is enforceable even without a service-role key. */
-export async function getUserFromToken(token?: string | null) {
+async function getUserFromToken(token?: string | null) {
   const sb = getTokenVerifier();
   if (!sb || !token) return null;
   const { data } = await sb.auth.getUser(token);
@@ -47,7 +48,7 @@ export async function guardRoute(
   if (!user) {
     return {
       response: NextResponse.json(
-        { error: "Sign in to continue.", code: "auth" },
+        { error: "Sign in to continue.", code: "auth" } satisfies ApiErrorBody,
         { status: 401 }
       ),
     };
@@ -58,7 +59,7 @@ export async function guardRoute(
         {
           error: `You've hit today's limit of ${DAILY_LIMIT} runs. Try again tomorrow.`,
           code: "limit",
-        },
+        } satisfies ApiErrorBody,
         { status: 429 }
       ),
     };
@@ -72,7 +73,7 @@ export async function guardRoute(
  * when there's no service-role store (so the keyless app isn't blocked). Pro plan
  * is unmetered.
  */
-export async function allowCall(userId: string): Promise<boolean> {
+async function allowCall(userId: string): Promise<boolean> {
   const sb = getServiceSupabase();
   if (!sb) return true;
   const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD (UTC)
@@ -82,7 +83,7 @@ export async function allowCall(userId: string): Promise<boolean> {
     .eq("user_id", userId)
     .maybeSingle();
   if ((data?.plan || "free") === "pro") return true;
-  const used = data?.calls_date === today ? data?.calls_today ?? 0 : 0;
+  const used = data?.calls_date === today ? (data?.calls_today ?? 0) : 0;
   if (used >= DAILY_LIMIT) return false;
   await sb.from("entitlements").upsert(
     {
@@ -119,10 +120,12 @@ async function writeEntitlement(
 ): Promise<void> {
   const sb = getServiceSupabase();
   if (!sb) return;
-  await sb.from("entitlements").upsert(
-    { user_id: userId, ...patch, updated_at: new Date().toISOString() },
-    { onConflict: "user_id" }
-  );
+  await sb
+    .from("entitlements")
+    .upsert(
+      { user_id: userId, ...patch, updated_at: new Date().toISOString() },
+      { onConflict: "user_id" }
+    );
 }
 
 export async function incrementLaunch(userId: string): Promise<void> {

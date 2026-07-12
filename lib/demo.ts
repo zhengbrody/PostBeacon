@@ -1,9 +1,4 @@
-import type {
-  Fact,
-  GenerateResult,
-  MarketingStrategy,
-  ProductProfile,
-} from "./types";
+import type { Fact, GenerateResult, MarketingStrategy, ProductProfile } from "./types";
 import { PLATFORMS } from "./platforms";
 import { groundRecommendations, toRecommendation } from "./scoring";
 
@@ -71,8 +66,7 @@ const facts: Fact[] = [
   {
     id: "valueProp",
     field: "valueProp",
-    claim:
-      "Watches cron jobs and workers and alerts the moment one stops checking in.",
+    claim: "Watches cron jobs and workers and alerts the moment one stops checking in.",
     evidence: "pings you the moment one stops checking in",
     sourceUrl: "https://cronwise.dev",
     sourceType: "page",
@@ -178,7 +172,8 @@ const rawRecs = [
     dimensions: {
       audienceFit: {
         score: 10,
-        reason: "Senior devs who've been bitten by silent job failures are the core HN crowd.",
+        reason:
+          "Senior devs who've been bitten by silent job failures are the core HN crowd.",
         factIds: ["audience", "valueProp"],
       },
       intentFit: {
@@ -219,7 +214,8 @@ const rawRecs = [
       },
       intentFit: {
         score: 8,
-        reason: "Monitoring complaints already recur in both subs — the pain is pre-stated.",
+        reason:
+          "Monitoring complaints already recur in both subs — the pain is pre-stated.",
         factIds: [],
       },
       nativeContentFit: {
@@ -242,7 +238,8 @@ const rawRecs = [
     rationale:
       "r/selfhosted and r/devops run unattended jobs constantly and reward a self-hostable tool — if you post as a member, not a vendor.",
     angle: "Open with the failure story and a real question about how they monitor today.",
-    bestMove: "One subreddit at a time, starting with r/selfhosted, flaired correctly, link last.",
+    bestMove:
+      "One subreddit at a time, starting with r/selfhosted, flaired correctly, link last.",
     venue: "r/selfhosted",
   },
   {
@@ -265,7 +262,8 @@ const rawRecs = [
       },
       founderAccess: {
         score: 8,
-        reason: "An existing 1.2k-follower build-in-public account seeds real distribution.",
+        reason:
+          "An existing 1.2k-follower build-in-public account seeds real distribution.",
         factIds: ["assets"],
       },
       risk: {
@@ -588,17 +586,20 @@ const strategy: MarketingStrategy = {
     {
       signal: "Show HN front-page time and comment sentiment",
       read: "Hours on the front page with real technical questions means the story landed; a quick fade means the hook was too soft.",
-      ifWeak: "Reframe the title around the concrete failure, not the product, and try again in a few weeks.",
+      ifWeak:
+        "Reframe the title around the concrete failure, not the product, and try again in a few weeks.",
     },
     {
       signal: "Signup → first job connected",
       read: "If people sign up but never wire up a job, the one-line setup isn't landing or isn't trusted yet.",
-      ifWeak: "Put the exact curl line in onboarding with a 10-second video; cut steps to the first ping.",
+      ifWeak:
+        "Put the exact curl line in onboarding with a 10-second video; cut steps to the first ping.",
     },
     {
       signal: "Free → paid past 5 jobs",
       read: "Upgrades mean the free tier proved its worth; flat conversion means $9 isn't tied to a felt limit.",
-      ifWeak: "Revisit where the free cap sits and make the 'you have unmonitored jobs' nudge concrete.",
+      ifWeak:
+        "Revisit where the free cap sits and make the 'you have unmonitored jobs' nudge concrete.",
     },
   ],
 };

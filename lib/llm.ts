@@ -42,7 +42,10 @@ function resolveProvider(requested?: Provider): Provider {
  * caller's job so it can attempt a repair on failure.
  */
 function sliceJson(text: string): string {
-  const trimmed = text.trim().replace(/^```(?:json)?/i, "").replace(/```$/i, "");
+  const trimmed = text
+    .trim()
+    .replace(/^```(?:json)?/i, "")
+    .replace(/```$/i, "");
   const start = trimmed.search(/[[{]/);
   if (start === -1) throw new Error("Model returned no JSON: " + text.slice(0, 200));
   const open = trimmed[start];
@@ -81,7 +84,7 @@ function extractJson(text: string): any {
 }
 
 const JSON_GUARD =
-  "\n\nReturn ONLY valid JSON — no prose, no markdown fences. Inside string values, escape any double quote as \\\" and never use a raw newline (use \\n).";
+  '\n\nReturn ONLY valid JSON — no prose, no markdown fences. Inside string values, escape any double quote as \\" and never use a raw newline (use \\n).';
 
 /** One raw model round-trip. Returns the model's text (JSON not yet parsed). */
 async function callRaw(
@@ -108,9 +111,7 @@ async function callRaw(
   // just needs a different base URL, key, and model. Both support JSON mode.
   const isDeepseek = provider === "deepseek";
   const client = new OpenAI({
-    apiKey: isDeepseek
-      ? process.env.DEEPSEEK_API_KEY
-      : process.env.OPENAI_API_KEY,
+    apiKey: isDeepseek ? process.env.DEEPSEEK_API_KEY : process.env.OPENAI_API_KEY,
     baseURL: isDeepseek ? DEEPSEEK_BASE_URL : undefined,
   });
   const res = await client.chat.completions.create({

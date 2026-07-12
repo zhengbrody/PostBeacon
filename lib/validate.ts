@@ -16,10 +16,13 @@ import { PublicError, publicMessage, publicStatus } from "./errors";
  * offending field but never echoes the submitted value.
  */
 
-export const MAX_BODY_BYTES = 1_000_000;
+const MAX_BODY_BYTES = 1_000_000;
 
 /** Read + parse a JSON request body with a hard size cap. */
-export async function readJsonBody(req: Request, maxBytes = MAX_BODY_BYTES): Promise<unknown> {
+export async function readJsonBody(
+  req: Request,
+  maxBytes = MAX_BODY_BYTES
+): Promise<unknown> {
   const declared = Number(req.headers.get("content-length") || 0);
   if (declared > maxBytes) throw new PublicError("Request body is too large.", 413);
   const text = await req.text();
@@ -71,7 +74,7 @@ export function apiError(err: unknown, fallback: string): NextResponse {
 // Shared pieces
 
 const s = (max: number) => z.string().max(max);
-export const providerSchema = z.enum(["claude", "openai", "deepseek"]);
+const providerSchema = z.enum(["claude", "openai", "deepseek"]);
 const confidenceSchema = z.enum(["high", "medium", "low"]);
 const prioritySchema = z.enum(["high", "medium", "low"]);
 const effortSchema = z.enum(["low", "medium", "high"]);
@@ -91,7 +94,7 @@ const knownPlatformSchema = s(64).refine((id) => PLATFORM_IDS.has(id), "unknown 
 
 /** ProductProfile as the wire accepts it: every string bounded; strings the
  *  server always emits default to "" so thin profiles don't 400. */
-export const profileSchema = z.object({
+const profileSchema = z.object({
   name: s(300).default(""),
   tagline: s(1000).default(""),
   valueProp: s(5000).default(""),
@@ -112,7 +115,7 @@ export const profileSchema = z.object({
 
 /** Fact Ledger entries as the wire accepts them (M13). The server re-derives
  *  what matters (verifyFacts / evidenceQuality); this just bounds the shape. */
-export const factSchema = z.object({
+const factSchema = z.object({
   id: s(60),
   field: s(40).optional(),
   claim: s(500).default(""),
@@ -124,7 +127,7 @@ export const factSchema = z.object({
   lastVerifiedAt: s(40).default(""),
 });
 
-export const factsFieldSchema = z.array(factSchema).max(20).optional();
+const factsFieldSchema = z.array(factSchema).max(20).optional();
 
 /** Output provenance stamp (M13). */
 const generationMetaSchema = z.object({
@@ -169,7 +172,7 @@ const recommendationSchema = z.object({
 });
 
 /** MarketingStrategy as round-tripped from the client (plan-scoped copilot). */
-export const strategySchema = z.object({
+const strategySchema = z.object({
   executiveSummary: s(4000).optional(),
   positioning: s(4000).default(""),
   antiPositioning: s(4000).optional(),
@@ -254,7 +257,7 @@ const playbookSchema = z.object({
 });
 
 /** GenerateResult as round-tripped from the client (copilot context). */
-export const resultSchema = z.object({
+const resultSchema = z.object({
   content: z
     .array(
       z.object({

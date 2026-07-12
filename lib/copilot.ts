@@ -1,4 +1,5 @@
 import { generateJson } from "./llm";
+import { asRecord } from "./coerce";
 import { ANTI_AI_RULES } from "./voice";
 import { factsForPrompt } from "./facts";
 import { getPlatforms, type PlatformDef } from "./platforms";
@@ -23,7 +24,7 @@ const clip = (s: string | undefined | null, n: number): string => {
   const t = typeof s === "string" ? s.trim() : "";
   return t.length > n ? t.slice(0, n) + "…" : t;
 };
-const list = <T,>(v: T[] | undefined | null): T[] => (Array.isArray(v) ? v : []);
+const list = <T>(v: T[] | undefined | null): T[] => (Array.isArray(v) ? v : []);
 
 /** Compact plain-text snapshot of the whole plan. Posts are tagged
  *  [platformId #index] so the model can target rewrites precisely. */
@@ -41,11 +42,21 @@ function buildContext(req: CopilotRequest): string {
   out.push(`- Audience: ${clip(profile.audience, 200)}`);
   const diffs = list(profile.differentiators);
   if (diffs.length) {
-    out.push(`- Differentiators: ${diffs.slice(0, 4).map((d) => clip(d, 120)).join(" · ")}`);
+    out.push(
+      `- Differentiators: ${diffs
+        .slice(0, 4)
+        .map((d) => clip(d, 120))
+        .join(" · ")}`
+    );
   }
   const feats = list(profile.features);
   if (feats.length) {
-    out.push(`- Features: ${feats.slice(0, 5).map((f) => clip(f, 80)).join(" · ")}`);
+    out.push(
+      `- Features: ${feats
+        .slice(0, 5)
+        .map((f) => clip(f, 80))
+        .join(" · ")}`
+    );
   }
 
   out.push("", "STRATEGY:");
@@ -260,14 +271,21 @@ ${SHAPE}`;
 
   const reply = String(data?.reply || "");
   const rewrites: CopilotRewrite[] = (Array.isArray(data?.rewrites) ? data.rewrites : [])
-    .map((r: any): CopilotRewrite => {
+    .map((raw: unknown): CopilotRewrite => {
+      const r = asRecord(raw);
       const rw: CopilotRewrite = {
-        label: String(r?.label || "Rewrite"),
-        body: String(r?.body || ""),
+        label: String(r.label || "Rewrite"),
+        body: String(r.body || ""),
       };
-      if (r?.platformId) rw.platformId = String(r.platformId);
-      if (Number.isInteger(r?.postIndex) && r.postIndex >= 0) rw.postIndex = r.postIndex;
-      if (r?.hook) rw.hook = String(r.hook);
+      if (r.platformId) rw.platformId = String(r.platformId);
+      if (
+        typeof r.postIndex === "number" &&
+        Number.isInteger(r.postIndex) &&
+        r.postIndex >= 0
+      ) {
+        rw.postIndex = r.postIndex;
+      }
+      if (r.hook) rw.hook = String(r.hook);
       return rw;
     })
     .filter((r: CopilotRewrite) => r.body)

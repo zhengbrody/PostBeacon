@@ -57,7 +57,11 @@ lib/
   dates.ts              scheduleDate(launchDate, day) for the calendar
   auth.ts               bearer(req) — read the Supabase token from a request
   usage.ts              Entitlement read/increment + FREE_LAUNCHES (server metering)
-  errors.ts             PublicError/BlockedUrlError — the only error messages routes may expose
+  plan.ts               Shared plan shaping: rank ordering, canonical calendar entries (M14)
+  coerce.ts             unknown-typed coercers for loose JSON (replaces per-file any helpers, M14)
+  async.ts              mapLimit — bounded-concurrency runner (route + evals share it, M14)
+  errors.ts             PublicError/BlockedUrlError + ApiErrorBody/ApiErrorCode — THE error
+                        shape every route returns and the client consumes
   urlPolicy.ts          SSRF URL policy (schemes/ports/hostnames/IPv4+IPv6 ranges); isomorphic,
                         also guards external <a href>s (isSafeExternalHref)
   safeFetch.ts          SSRF-safe fetch for user/model URLs: DNS validated at connect time
@@ -70,24 +74,34 @@ lib/
   search.ts             Live web search seam (Tavily; SEARCH_API_KEY) for grounding
   discovery.ts          Niche-channel discovery: search→ground→URL-validate, LLM fallback
   api.ts                Browser→server typed client (used by the hook)
-  storage.ts            localStorage "current draft" (anonymous autosave slot)
+  storage.ts            Versioned localStorage draft (DRAFT_SCHEMA_VERSION + migrateDraft;
+                        the Supabase projects.meta jsonb carries the same version)
   supabase/client.ts    Browser Supabase client (graceful if unconfigured)
   supabase/server.ts    Service-role client (server-only; trust-counts usage)
 hooks/
-  useLaunchFlow.ts      The 4-step state machine + actions + project load/restore + draft hydrate
+  launchFlowReducer.ts  THE plan state machine: pure reducer + normalize() enforcing the
+                        invariants (no result without its strategy, selection ⊆ channels,
+                        posted marks ⊆ existing posts, step never deeper than the data)
+  useLaunchFlow.ts      Thin hook over the reducer: async API actions + ephemeral UI state
   useAutosave.ts        Debounced persist: localStorage (anon) / Supabase upsert (signed-in)
 components/
   ui/                   Button, Card, Badge, Spinner, Field, Tabs (design system primitives)
-  app/                  Stepper, UrlStep, ProfileForm, StrategyView, ResultsView (tabbed operating
-                        dashboard: Overview/Content/Calendar/Execute + channel master-detail),
-                        PlanSummary (shared plan-section cards), CopilotPanel (Launch Copilot drawer),
-                        ProjectBar, SignIn, Paywall, UsageBadge
+  app/                  Stepper, UrlStep, ProfileForm, FactLedger, StrategyView, ResultsView
+                        (tab orchestrator), PlanSummary (shared plan-section cards),
+                        CopilotPanel (Launch Copilot drawer), ProjectBar, SignIn, AuthScreen,
+                        Paywall, UsageBadge, FeedbackCTA
+  app/results/          The results dashboard, one module per tab (M14): OverviewTab,
+                        ContentTab (master-detail) + ChannelBlock + PostCard, CalendarTab,
+                        ExecuteTab, FailuresCard, PrintHeading
   landing/              Nav, Hero, HowItWorks, PlatformShowcase, Pricing, FAQ, Footer
 docs/M13-trust-layer.md Design + migration doc for the trust layer (facts/scoring/partial success)
 tests/                  vitest suites: urlPolicy, safeFetch, billing, webhook route, validate,
-                        golden (12-fixture offline evals), generateRoute; eval.live (gated, live)
+                        golden (12-fixture offline evals), generateRoute, flowReducer
+                        (state-machine invariants), storage (draft migrations); eval.live (gated)
 tests/golden/           fixtures.ts — 12 product-type golden fixtures with ground truth
 supabase/schema.sql     projects (+ meta jsonb) + entitlements + webhook_events, row-level security
+.github/workflows/ci.yml  typecheck · lint · format:check · offline tests · build on every push/PR
+eslint.config.mjs / .prettierrc.json   non-interactive lint + format (next lint is deprecated)
 ```
 
 ## Conventions
@@ -96,6 +110,9 @@ supabase/schema.sql     projects (+ meta jsonb) + entitlements + webhook_events,
 - Reuse `components/ui/*` primitives; don't re-style buttons/cards inline.
 - No dead code. Self-review each change for duplication and consistency before moving on.
 - LLM calls go through `lib/llm.ts`; browser calls through `lib/api.ts`.
+- Plan state changes go through hooks/launchFlowReducer.ts actions — never parallel useState
+  that can drift. Loose JSON is normalized with lib/coerce.ts, not `any`. Rank ordering and
+  calendar entries come from lib/plan.ts (one source, three consumers).
 - Security invariants (M12): any user/model/search-supplied URL is fetched ONLY via
   `lib/safeFetch.ts` (`lib/fetch.ts` is for operator-configured endpoints); every API body is
   parsed with a `lib/validate.ts` schema (never `as`-casts); routes expose only `PublicError`
@@ -108,8 +125,9 @@ npm install
 cp .env.example .env     # ANTHROPIC_API_KEY and/or OPENAI_API_KEY (Supabase keys optional)
 npm run dev              # landing at /, tool at /app
 npm run typecheck        # tsc --noEmit
-npm test                 # vitest (security + golden suites in tests/; offline, no API keys)
-npm run lint             # next lint (eslint-config-next)
+npm test                 # vitest (offline suites in tests/; no API keys needed)
+npm run lint             # eslint . (flat config, non-interactive)
+npm run format:check     # prettier --check . (CI-enforced)
 npm run build            # must stay green
 RUN_LIVE_EVAL=1 npx vitest run tests/eval.live.test.ts   # live provider eval → eval-results/
 ```
@@ -132,6 +150,25 @@ left unset → accounts off (anon + localStorage), generation open/unmetered, `P
 Redeploy: `npx vercel --prod --yes`. Push env from `.env.local`: `~/push-env.sh`.
 
 ## Status / changelog
+- **2026-07-12**: **M14 — behavior-preserving engineering cleanup** (no product changes).
+  Audit first (deps clean — madge: no cycles; knip + grep for dead code), then: (1)
+  ResultsView (865 lines) split into `components/app/results/` per-tab modules; ResultsView
+  is a ~200-line orchestrator. (2) Plan state: 16 parallel useStates → pure
+  `hooks/launchFlowReducer.ts` with normalize() enforcing invariants (fresh analyze /
+  rebuilt strategy drop stale downstream state; selection ⊆ strategy channels; posted marks
+  pruned with their posts; step clamped to data; PROJECT_LOADED resets the demo flag — each
+  of these was a reachable contradictory-state bug before). Hook API unchanged; 12 invariant
+  tests. (3) Dedup + typing: shared lib/plan.ts (rank order + calendar entry, was ×3),
+  lib/async.ts mapLimit (was ×2), lib/coerce.ts unknown-coercers (was any-typed ×5 files);
+  unified ApiErrorBody/ApiErrorCode across routes and client; app `any` 38 → 3 (llm.ts JSON
+  seam, documented). (4) Persistence versioned: DRAFT_SCHEMA_VERSION=3, migrateDraft()
+  chain (v1/v2/v3) + tests; Supabase meta carries the version. (5) Tooling: ESLint CLI flat
+  config replaces deprecated `next lint`, Prettier (+repo-wide format), GitHub Actions CI.
+  (6) /twitter-image build warning fixed (literal `runtime` export). Deleted:
+  platformCatalogForStrategist (dead since M13); 15 unused exports de-exported; Pricing.tsx
+  intentionally kept (beta gating). AGENTS.md fully synced (19 platforms, M7–M11 changelog
+  restored, map matches real files). 185 offline tests + lint + format + build green;
+  dashboard behavior re-verified in the browser.
 - **2026-07-12**: **M13 — trust layer: facts / inference / recommendations separated.** Design doc:
   `docs/M13-trust-layer.md` (written first, incl. data-migration plan — no SQL change, all new
   data rides existing jsonb + localStorage; every new type field optional so old saves render).

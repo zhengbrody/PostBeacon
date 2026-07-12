@@ -2,14 +2,16 @@
   "name": "postbeacon",
   "version": "0.1.0",
   "private": true,
-  "description": "PostBeacon — paste a URL, get a scored multi-platform launch plan + ready-to-post content. For vibecoders.",
+  "description": "PostBeacon \u2014 paste a URL, get a scored multi-platform launch plan + ready-to-post content. For vibecoders.",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
@@ -23,6 +25,7 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@eslint/eslintrc": "^3.3.6",
     "@tailwindcss/postcss": "^4.0.0",
     "@types/node": "^22.10.0",
     "@types/react": "^19.0.0",
@@ -30,6 +33,7 @@
     "eslint": "^9.39.5",
     "eslint-config-next": "^15.5.20",
     "postcss": "^8.5.0",
+    "prettier": "^3.9.5",
     "tailwindcss": "^4.0.0",
     "typescript": "^5.7.0",
     "vitest": "^4.1.10"

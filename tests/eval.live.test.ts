@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { FIXTURES, type GoldenFixture } from "./golden/fixtures";
+import { mapLimit } from "@/lib/async";
 
 /**
  * LIVE golden evaluation — calls real providers. Deliberately NOT part of
@@ -101,20 +102,6 @@ function errLabel(e: unknown): string {
   const status = (e as { status?: unknown })?.status;
   if (typeof status === "number") return `HTTP ${status}`;
   return e instanceof Error ? e.name : "error";
-}
-
-async function mapLimit<T, R>(items: T[], limit: number, fn: (t: T) => Promise<R>) {
-  const out: R[] = new Array(items.length);
-  let i = 0;
-  await Promise.all(
-    Array.from({ length: Math.min(limit, items.length) }, async () => {
-      while (i < items.length) {
-        const idx = i++;
-        out[idx] = await fn(items[idx]);
-      }
-    })
-  );
-  return out;
 }
 
 const URL_RE = /https?:\/\/[^\s"')\]]+/g;
@@ -246,8 +233,7 @@ describe.runIf(LIVE)("live golden eval", () => {
                 Object.values(r.breakdown ?? {}).some((d) => d.factIds?.length)
               ).length,
               venues: recommendations.filter((r) => r.venue).length,
-              grounded: recommendations.filter((r) => r.provenance === "grounded")
-                .length,
+              grounded: recommendations.filter((r) => r.provenance === "grounded").length,
               modelUrls: recommendations.reduce(
                 (n, r) => n + (prose(r).match(URL_RE)?.length ?? 0),
                 0
@@ -300,9 +286,7 @@ describe.runIf(LIVE)("live golden eval", () => {
             const phrases: string[] = [];
             let foreign = 0;
             for (const post of posts) {
-              const text = [post.hook, ...(post.hookVariants ?? []), post.body].join(
-                "\n"
-              );
+              const text = [post.hook, ...(post.hookVariants ?? []), post.body].join("\n");
               const hits = voice.lintVoice(text);
               banned += hits.length;
               phrases.push(...hits.map((h) => h.phrase));
@@ -384,7 +368,9 @@ function writeReport(
     const failures = [
       ...a.filter((x) => !x.ok).map((x) => `analyze ${x.fixture}: ${x.error}`),
       ...s.filter((x) => !x.ok).map((x) => `scoring ${x.fixture}: ${x.error}`),
-      ...c.filter((x) => !x.ok).map((x) => `content ${x.fixture}/${x.platform}: ${x.error}`),
+      ...c
+        .filter((x) => !x.ok)
+        .map((x) => `content ${x.fixture}/${x.platform}: ${x.error}`),
     ];
     if (failures.length) lines.push(`Failures: ${failures.join(" · ")}`, "");
     lines.push(
@@ -454,6 +440,6 @@ function writeReport(
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, "report.md"), lines.join("\n"));
   fs.writeFileSync(path.join(dir, "report.json"), JSON.stringify(results, null, 2));
-  // eslint-disable-next-line no-console
+
   console.log("\n" + lines.join("\n"));
 }

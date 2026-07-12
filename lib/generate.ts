@@ -1,4 +1,5 @@
 import { generateJsonMeta } from "./llm";
+import { asRecord, asRecordList, asStringList } from "./coerce";
 import { ANTI_AI_RULES } from "./voice";
 import { factsForPrompt } from "./facts";
 import type { PlatformDef } from "./platforms";
@@ -84,26 +85,21 @@ Field notes:
 - "postingWindow": the specific best window to post (default to "${p.bestTime}")`,
   });
 
-  const rawPosts = Array.isArray(data.posts) ? data.posts : [];
-  const posts: PlatformPost[] = rawPosts.map((post: any) => ({
-    hook: String(post?.hook || ""),
-    hookVariants: Array.isArray(post?.hookVariants)
-      ? post.hookVariants.map((h: any) => String(h)).filter(Boolean).slice(0, 3)
-      : [],
-    body: String(post?.body || ""),
-    imageSuggestion: String(post?.imageSuggestion || ""),
-    bestTime: String(post?.bestTime || p.bestTime),
-    caveats: String(post?.caveats || ""),
+  const posts: PlatformPost[] = asRecordList(data.posts).map((post) => ({
+    hook: String(post.hook || ""),
+    hookVariants: asStringList(post.hookVariants, 3),
+    body: String(post.body || ""),
+    imageSuggestion: String(post.imageSuggestion || ""),
+    bestTime: String(post.bestTime || p.bestTime),
+    caveats: String(post.caveats || ""),
   }));
 
-  const pb = data.playbook || {};
+  const pb = asRecord(data.playbook);
   const playbook: PlatformPlaybook = {
     whyThisPlatform: String(pb.whyThisPlatform || ""),
     howToPost: String(pb.howToPost || ""),
     whatToAvoid: String(pb.whatToAvoid || ""),
-    firstReplies: Array.isArray(pb.firstReplies)
-      ? pb.firstReplies.map((r: any) => String(r)).filter(Boolean).slice(0, 3)
-      : [],
+    firstReplies: asStringList(pb.firstReplies, 3),
     postingWindow: String(pb.postingWindow || p.bestTime),
   };
 

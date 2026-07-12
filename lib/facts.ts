@@ -1,3 +1,4 @@
+import { clipString } from "./coerce";
 import type { ClarifyingQuestion, Fact, FactStatus, ProductProfile } from "./types";
 
 /**
@@ -15,7 +16,7 @@ import type { ClarifyingQuestion, Fact, FactStatus, ProductProfile } from "./typ
 export const MAX_FACTS = 14;
 
 /** Launch-context fields the page almost never states — the question targets. */
-export const CONTEXT_FIELDS = ["stage", "conversionGoal", "assets"] as const;
+const CONTEXT_FIELDS = ["stage", "conversionGoal", "assets"] as const;
 export type ContextField = (typeof CONTEXT_FIELDS)[number];
 
 /** Confidence below which an inferred key fact still deserves a question. */
@@ -50,8 +51,7 @@ export function quoteAppearsOnPage(quote: string, page: PageCorpus): boolean {
   return corpus.includes(q);
 }
 
-const str = (v: unknown, max: number): string =>
-  typeof v === "string" ? v.trim().slice(0, max) : "";
+const str = clipString;
 const clamp01 = (v: unknown): number => {
   const n = Number(v);
   return Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : 0.5;
@@ -208,7 +208,12 @@ export function pickClarifyingQuestions(facts: Fact[]): ClarifyingQuestion[] {
 // User operations — the ONLY producers of "user-confirmed".
 
 export function confirmFact(f: Fact): Fact {
-  return { ...f, status: "user-confirmed", confidence: 1, lastVerifiedAt: new Date().toISOString() };
+  return {
+    ...f,
+    status: "user-confirmed",
+    confidence: 1,
+    lastVerifiedAt: new Date().toISOString(),
+  };
 }
 
 export function correctFact(f: Fact, claim: string): Fact {

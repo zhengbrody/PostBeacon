@@ -1,4 +1,5 @@
 import { generateJson } from "./llm";
+import { asRecordList, asString } from "./coerce";
 import { searchWeb, searchConfigured } from "./search";
 import { safeFetch } from "./safeFetch";
 import { BlockedUrlError, PublicError } from "./errors";
@@ -20,9 +21,7 @@ export async function discoverChannels(
   provider?: Provider
 ): Promise<DiscoveredChannel[]> {
   try {
-    const grounded = searchConfigured()
-      ? await searchWeb(buildQueries(profile))
-      : [];
+    const grounded = searchConfigured() ? await searchWeb(buildQueries(profile)) : [];
     const hasGrounding = grounded.length > 0;
 
     const data = await generateJson({
@@ -57,14 +56,13 @@ Return JSON: { "channels": [ { "name": string, "url": string, "why": string, "so
 - source: the channel type (subreddit | Discord | Slack | GitHub list | forum | newsletter)`,
     });
 
-    const channels = Array.isArray(data.channels) ? data.channels : [];
-    const normalized = channels
-      .filter((c: any) => c?.name && c?.url)
-      .map((c: any) => ({
-        name: String(c.name).slice(0, 300),
-        url: String(c.url).slice(0, 2048),
-        why: String(c.why || "").slice(0, 1000),
-        source: String(c.source || (hasGrounding ? "Tavily" : "AI")).slice(0, 100),
+    const normalized = asRecordList(data.channels)
+      .filter((c) => asString(c.name) && asString(c.url))
+      .map((c) => ({
+        name: asString(c.name).slice(0, 300),
+        url: asString(c.url).slice(0, 2048),
+        why: asString(c.why).slice(0, 1000),
+        source: (asString(c.source) || (hasGrounding ? "Tavily" : "AI")).slice(0, 100),
       }))
       // Model/search output is untrusted: drop anything that isn't a plain
       // public http(s) URL before it's probed, rendered as a link, or saved.

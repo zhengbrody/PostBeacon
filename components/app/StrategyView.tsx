@@ -47,9 +47,7 @@ export function StrategyView({
     <div className="space-y-6">
       <PositioningCard strategy={strategy} />
 
-      {strategy.audienceSegments && (
-        <AudienceCard segments={strategy.audienceSegments} />
-      )}
+      {strategy.audienceSegments && <AudienceCard segments={strategy.audienceSegments} />}
 
       {strategy.phases && <LaunchPlanCard phases={strategy.phases} />}
 
@@ -60,13 +58,10 @@ export function StrategyView({
         </div>
         <p className="mb-4 text-xs text-neutral-500">
           We pre-checked your best-scoring channels. Content is written{" "}
-          <span className="font-medium text-neutral-300">
-            only for checked channels
-          </span>{" "}
-          — fewer channels means a tighter plan you&apos;ll actually execute.
-          Current pick ≈ {postEstimate} ready-to-post drafts +{" "}
-          {selected.length} playbooks. You can add more channels later from the
-          results page.
+          <span className="font-medium text-neutral-300">only for checked channels</span> —
+          fewer channels means a tighter plan you&apos;ll actually execute. Current pick ≈{" "}
+          {postEstimate} ready-to-post drafts + {selected.length} playbooks. You can add
+          more channels later from the results page.
         </p>
         <div className="space-y-2">
           {strategy.recommendations.map((r) => (
@@ -85,8 +80,8 @@ export function StrategyView({
           <h2 className="text-lg font-semibold">🔎 Niche channels to check out</h2>
           {strategy.discoveries.some((d) => !d.validated) && (
             <p className="mb-3 text-xs text-neutral-500">
-              Unchecked links are AI-suggested — verify before posting (community
-              invites can change).
+              Unchecked links are AI-suggested — verify before posting (community invites
+              can change).
             </p>
           )}
           <ul className="space-y-2 text-sm">
@@ -94,14 +89,21 @@ export function StrategyView({
               <li key={i} className="rounded-lg bg-surface-2 px-3 py-2">
                 {/* Discovery URLs come from model/search output — only link http(s). */}
                 {isSafeExternalHref(d.url) ? (
-                  <a href={d.url} target="_blank" rel="noreferrer" className="font-medium text-accent-300">
+                  <a
+                    href={d.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-medium text-accent-300"
+                  >
                     {d.name}
                   </a>
                 ) : (
                   <span className="font-medium text-accent-300">{d.name}</span>
                 )}
                 {d.validated && (
-                  <span className="ml-2 align-middle text-xs text-emerald-400">✓ link checked</span>
+                  <span className="ml-2 align-middle text-xs text-emerald-400">
+                    ✓ link checked
+                  </span>
                 )}
                 <span className="text-neutral-400"> — {d.why}</span>
               </li>
@@ -130,7 +132,11 @@ const DIM_LABELS: { key: ScoreDimensionKey; label: string; note?: string }[] = [
   { key: "founderAccess", label: "Founder access" },
   { key: "effort", label: "Effort", note: "from catalog · lower is better" },
   { key: "risk", label: "Risk", note: "lower is better" },
-  { key: "evidenceQuality", label: "Evidence quality", note: "computed from fact grounding" },
+  {
+    key: "evidenceQuality",
+    label: "Evidence quality",
+    note: "computed from fact grounding",
+  },
 ];
 
 /** The explainable score: per-dimension bars + reasons. Total is code-computed. */
@@ -170,8 +176,8 @@ function BreakdownPanel({ breakdown }: { breakdown: ScoreBreakdown }) {
         );
       })}
       <p className="border-t border-line pt-2 text-[11px] text-neutral-500">
-        The 0–100 total is a fixed weighted sum computed by PostBeacon, not by the
-        model — the model only supplies the ratings and reasons above.
+        The 0–100 total is a fixed weighted sum computed by PostBeacon, not by the model —
+        the model only supplies the ratings and reasons above.
       </p>
     </div>
   );
@@ -218,10 +224,16 @@ function RecRow({
   return (
     <div
       className={`rounded-lg border p-3 transition-colors ${
-        on ? "border-accent-500 bg-accent-600/10" : "border-line bg-surface-2 hover:border-neutral-600"
+        on
+          ? "border-accent-500 bg-accent-600/10"
+          : "border-line bg-surface-2 hover:border-neutral-600"
       }`}
     >
-      <button onClick={onToggle} aria-pressed={on} className="flex w-full items-start gap-3 text-left">
+      <button
+        onClick={onToggle}
+        aria-pressed={on}
+        className="flex w-full items-start gap-3 text-left"
+      >
         <span
           className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded text-xs ${
             on ? "bg-accent-600 text-white" : "bg-neutral-700"
@@ -241,14 +253,19 @@ function RecRow({
             <span className="ml-auto font-mono text-xs text-neutral-400">{rec.score}</span>
           </span>
           <span className="mt-1.5 block h-1 w-full overflow-hidden rounded bg-neutral-800">
-            <span className="block h-1 rounded bg-accent-500" style={{ width: `${rec.score}%` }} />
+            <span
+              className="block h-1 rounded bg-accent-500"
+              style={{ width: `${rec.score}%` }}
+            />
           </span>
           {rec.fallback ? (
             <span className="mt-1.5 block text-xs text-amber-300">{rec.rationale}</span>
           ) : (
             <span className="mt-1.5 block text-xs text-neutral-400">{rec.rationale}</span>
           )}
-          {rec.angle && <span className="mt-1 block text-xs text-accent-300">↳ {rec.angle}</span>}
+          {rec.angle && (
+            <span className="mt-1 block text-xs text-accent-300">↳ {rec.angle}</span>
+          )}
         </span>
       </button>
       {rec.bestMove && (

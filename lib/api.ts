@@ -1,4 +1,5 @@
 import { getSupabase } from "./supabase/client";
+import type { ApiErrorCode } from "./errors";
 import type {
   Provider,
   ProductProfile,
@@ -23,7 +24,7 @@ export interface UsageInfo {
 }
 
 export interface ApiError extends Error {
-  code?: string; // e.g. "auth" | "paywall"
+  code?: ApiErrorCode;
   status?: number;
 }
 
@@ -44,8 +45,10 @@ async function post<T>(path: string, body: unknown): Promise<T> {
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    const err = new Error(data.error || `${path} failed`) as ApiError;
-    err.code = data.code;
+    // Every route emits the shared ApiErrorBody shape (lib/errors.ts).
+    const body = data as { error?: string; code?: ApiErrorCode };
+    const err = new Error(body.error || `${path} failed`) as ApiError;
+    err.code = body.code;
     err.status = res.status;
     throw err;
   }
@@ -74,8 +77,7 @@ export const api = {
     platformIds: string[],
     provider: Provider,
     facts: Fact[]
-  ) =>
-    post<GenerateResult>("/api/generate", { profile, platformIds, provider, facts }),
+  ) => post<GenerateResult>("/api/generate", { profile, platformIds, provider, facts }),
   regenerate: (
     profile: ProductProfile,
     platformId: string,
