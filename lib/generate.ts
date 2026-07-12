@@ -1,16 +1,23 @@
-import { generateJson } from "./llm";
+import { generateJsonMeta } from "./llm";
 import { ANTI_AI_RULES } from "./voice";
+import { factsForPrompt } from "./facts";
 import type { PlatformDef } from "./platforms";
 import type {
+  Fact,
+  GenerationMeta,
   PlatformPlaybook,
   PlatformPost,
   ProductProfile,
   Provider,
 } from "./types";
 
+/** Bump when the content prompt changes (recorded on every output). */
+export const GENERATE_PROMPT_VERSION = "g2";
+
 export interface PlatformGeneration {
   posts: PlatformPost[];
   playbook: PlatformPlaybook;
+  meta: GenerationMeta;
 }
 
 /**
@@ -24,9 +31,11 @@ export interface PlatformGeneration {
 export async function generatePlatformPosts(
   profile: ProductProfile,
   p: PlatformDef,
-  provider?: Provider
+  provider?: Provider,
+  facts: Fact[] = []
 ): Promise<PlatformGeneration> {
-  const data = await generateJson({
+  const ledger = factsForPrompt(facts);
+  const { data, meta: callMeta } = await generateJsonMeta({
     provider,
     maxTokens: p.maxTokens ?? 2800,
     system: `You are a founder who is genuinely good at writing for ${p.name} — not an agency, not a marketer. ${p.guidance}
@@ -36,9 +45,13 @@ The product's own voice is: ${profile.tone || "clear, specific, human"}. Blend i
 
 ${ANTI_AI_RULES}
 
-Competitor test: if a sentence could describe a competitor unchanged, add a product-specific fact or cut it.`,
+Competitor test: if a sentence could describe a competitor unchanged, add a product-specific fact or cut it.${
+      ledger
+        ? "\n\nFact discipline: state ESTABLISHED facts freely; hedge INFERRED ones; never invent numbers, users, or claims — where a specific is missing, write a [fill in: …] placeholder instead."
+        : ""
+    }`,
     user: `PRODUCT PROFILE:
-${JSON.stringify(profile, null, 2)}
+${JSON.stringify(profile, null, 2)}${ledger ? `\n\n${ledger}` : ""}
 
 Write ${p.postCount} ready-to-post piece(s) for ${p.name}. Each must read like a real person native to ${p.name} wrote it, and be copy-paste ready${
       p.longForm ? " — write the FULL piece, not an outline" : ""
@@ -94,5 +107,12 @@ Field notes:
     postingWindow: String(pb.postingWindow || p.bestTime),
   };
 
-  return { posts, playbook };
+  const meta: GenerationMeta = {
+    provider: callMeta.provider,
+    model: callMeta.model,
+    promptVersion: GENERATE_PROMPT_VERSION,
+    generatedAt: new Date().toISOString(),
+  };
+
+  return { posts, playbook, meta };
 }

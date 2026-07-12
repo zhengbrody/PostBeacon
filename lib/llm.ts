@@ -125,24 +125,38 @@ async function callRaw(
   return res.choices[0].message.content || "";
 }
 
+/** The model id a provider resolves to (for output provenance). */
+export function modelFor(provider: Provider): string {
+  if (provider === "claude") return ANTHROPIC_MODEL;
+  if (provider === "deepseek") return DEEPSEEK_MODEL;
+  return OPENAI_MODEL;
+}
+
+export interface LlmCallMeta {
+  provider: Provider;
+  model: string;
+}
+
 /**
- * Single entry point. Sends a system + user prompt, returns parsed JSON.
- * Provider-agnostic. If the model emits malformed JSON (most commonly an
- * unescaped quote inside a long prose value), one repair round-trip asks the
- * model to return strictly valid JSON before we give up.
+ * Single entry point. Sends a system + user prompt, returns parsed JSON plus
+ * which provider/model actually ran (the request's provider is a preference;
+ * resolution can fall back). If the model emits malformed JSON (most commonly
+ * an unescaped quote inside a long prose value), one repair round-trip asks
+ * the model to return strictly valid JSON before we give up.
  */
-export async function generateJson(opts: {
+export async function generateJsonMeta(opts: {
   provider?: Provider;
   system: string;
   user: string;
   maxTokens?: number;
-}): Promise<any> {
+}): Promise<{ data: any; meta: LlmCallMeta }> {
   const provider = resolveProvider(opts.provider);
   const maxTokens = opts.maxTokens ?? 4000;
+  const meta: LlmCallMeta = { provider, model: modelFor(provider) };
 
   const raw = await callRaw(provider, opts.system, opts.user, maxTokens);
   try {
-    return extractJson(raw);
+    return { data: extractJson(raw), meta };
   } catch {
     // Repair pass: hand the broken text back and ask only for valid JSON.
     const fixed = await callRaw(
@@ -151,6 +165,16 @@ export async function generateJson(opts: {
       `This was meant to be a single JSON value but does not parse. Return the corrected JSON only:\n\n${raw}`,
       maxTokens
     );
-    return extractJson(fixed);
+    return { data: extractJson(fixed), meta };
   }
+}
+
+/** generateJsonMeta without the meta — for callers that don't record provenance. */
+export async function generateJson(opts: {
+  provider?: Provider;
+  system: string;
+  user: string;
+  maxTokens?: number;
+}): Promise<any> {
+  return (await generateJsonMeta(opts)).data;
 }

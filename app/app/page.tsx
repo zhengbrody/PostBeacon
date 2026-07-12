@@ -6,6 +6,7 @@ import { useAutosave } from "@/hooks/useAutosave";
 import { Stepper } from "@/components/app/Stepper";
 import { UrlStep } from "@/components/app/UrlStep";
 import { ProfileForm } from "@/components/app/ProfileForm";
+import { FactLedger } from "@/components/app/FactLedger";
 import { StrategyView } from "@/components/app/StrategyView";
 import { ResultsView } from "@/components/app/ResultsView";
 import { ProjectBar } from "@/components/app/ProjectBar";
@@ -146,13 +147,23 @@ function AppFlow({ f }: { f: ReturnType<typeof useLaunchFlow> }) {
       )}
 
       {f.step === "profile" && f.profile && (
-        <ProfileForm
-          profile={f.profile}
-          setProfile={f.setProfile}
-          loading={f.loading}
-          onBack={f.reset}
-          onNext={f.buildStrategy}
-        />
+        <div className="space-y-6">
+          <FactLedger
+            facts={f.facts}
+            questions={f.questions}
+            onConfirm={f.confirmFact}
+            onCorrect={f.correctFact}
+            onDelete={f.deleteFact}
+            onAnswer={f.answerQuestion}
+          />
+          <ProfileForm
+            profile={f.profile}
+            setProfile={f.setProfile}
+            loading={f.loading}
+            onBack={f.reset}
+            onNext={f.buildStrategy}
+          />
+        </div>
       )}
 
       {f.step === "strategy" && f.strategy && (
@@ -171,6 +182,7 @@ function AppFlow({ f }: { f: ReturnType<typeof useLaunchFlow> }) {
           result={f.result}
           strategy={f.strategy}
           profile={f.profile}
+          facts={f.facts}
           posted={f.posted}
           onTogglePosted={f.togglePosted}
           onRegenerate={f.regeneratePost}
@@ -182,6 +194,7 @@ function AppFlow({ f }: { f: ReturnType<typeof useLaunchFlow> }) {
           onAddScheduleItem={f.addScheduleItem}
           onRemoveChannel={f.removeChannel}
           onAddChannel={f.addChannel}
+          onRetryFailed={f.retryFailed}
           launchDate={f.launchDate}
           setLaunchDate={f.setLaunchDate}
           loading={f.loading}
@@ -201,6 +214,7 @@ function AppFlow({ f }: { f: ReturnType<typeof useLaunchFlow> }) {
           profile={f.profile}
           strategy={f.strategy}
           result={f.result}
+          facts={f.facts}
           launchDate={f.launchDate}
           provider={f.provider}
           onApplyRewrite={f.updatePost}

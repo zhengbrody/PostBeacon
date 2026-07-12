@@ -24,6 +24,7 @@ import {
   type ExportSnapshot,
 } from "@/lib/export";
 import type {
+  Fact,
   GenerateResult,
   MarketingStrategy,
   PlatformContent,
@@ -39,6 +40,7 @@ export function ResultsView({
   result,
   strategy,
   profile,
+  facts,
   posted,
   onTogglePosted,
   onRegenerate,
@@ -50,6 +52,7 @@ export function ResultsView({
   onAddScheduleItem,
   onRemoveChannel,
   onAddChannel,
+  onRetryFailed,
   launchDate,
   setLaunchDate,
   loading,
@@ -59,6 +62,7 @@ export function ResultsView({
   result: GenerateResult;
   strategy: MarketingStrategy | null;
   profile: ProductProfile | null;
+  facts: Fact[];
   posted: Record<string, boolean>;
   onTogglePosted: (id: string) => void;
   onRegenerate: (platformId: string) => void;
@@ -73,6 +77,7 @@ export function ResultsView({
   onAddScheduleItem: (item: ScheduleItem) => void;
   onRemoveChannel: (platformId: string) => void;
   onAddChannel: (platformId: string) => void;
+  onRetryFailed: (platformId: string) => void;
   launchDate: string;
   setLaunchDate: (v: string) => void;
   loading: boolean;
@@ -80,7 +85,7 @@ export function ResultsView({
   onReset: () => void;
 }) {
   function exportSnapshot(): ExportSnapshot {
-    return { url: undefined, profile, strategy, result, launchDate };
+    return { url: undefined, profile, strategy, result, launchDate, facts };
   }
   const slug = useMemo(
     () =>
@@ -135,6 +140,40 @@ export function ResultsView({
 
   return (
     <div className="space-y-6">
+      {/* Partial success (M13): failed channels are listed, not lost — the
+          rest of the plan stands, each failure retries alone. */}
+      {result.failures && result.failures.length > 0 && (
+        <Card className="no-print border-amber-700/50 bg-amber-500/10 p-4">
+          <h2 className="text-sm font-semibold text-amber-300">
+            {result.failures.length}{" "}
+            {result.failures.length === 1 ? "channel" : "channels"} didn&apos;t generate
+          </h2>
+          <p className="mt-0.5 text-xs text-neutral-400">
+            Everything else succeeded. Retry these individually — no other content is lost.
+          </p>
+          <ul className="mt-2 space-y-1.5">
+            {result.failures.map((f) => (
+              <li
+                key={f.platformId}
+                className="flex flex-wrap items-center gap-2 text-sm text-neutral-200"
+              >
+                <span className="font-medium">{f.platformName}</span>
+                <span className="text-xs text-neutral-500">{f.error}</span>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="ml-auto"
+                  disabled={loading}
+                  onClick={() => onRetryFailed(f.platformId)}
+                >
+                  ↻ Retry
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+
       <Tabs tabs={tabs} active={tab} onSelect={(id) => setTab(id as TabId)} />
 
       {strategy && show("overview") && (
@@ -458,7 +497,19 @@ function ChannelBlock({
   return (
     <div>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-        <h3 className="text-lg font-semibold">{content.platformName}</h3>
+        <div>
+          <h3 className="text-lg font-semibold">{content.platformName}</h3>
+          {content.meta && (
+            <p
+              className="text-[10px] text-neutral-600"
+              title="Which model wrote this draft, with which prompt version, when"
+            >
+              {content.meta.provider} · {content.meta.model} · prompt{" "}
+              {content.meta.promptVersion} ·{" "}
+              {content.meta.generatedAt.slice(0, 16).replace("T", " ")}
+            </p>
+          )}
+        </div>
         <span className="no-print flex gap-2">
           <Button size="sm" variant="outline" disabled={loading} onClick={onRegenerate}>
             ↻ Regenerate

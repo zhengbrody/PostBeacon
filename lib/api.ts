@@ -4,10 +4,13 @@ import type {
   ProductProfile,
   MarketingStrategy,
   GenerateResult,
+  GenerationMeta,
   PlatformPost,
   PlatformPlaybook,
+  ClarifyingQuestion,
   CopilotReply,
   CopilotRequest,
+  Fact,
 } from "./types";
 
 export interface UsageInfo {
@@ -57,21 +60,31 @@ export const api = {
       providers: Provider[];
     }>,
   analyze: (url: string, provider: Provider) =>
-    post<{ profile: ProductProfile; page: { url: string; title: string } }>(
-      "/api/analyze",
-      { url, provider }
-    ),
-  strategy: (profile: ProductProfile, provider: Provider) =>
-    post<MarketingStrategy>("/api/strategy", { profile, provider }),
+    post<{
+      profile: ProductProfile;
+      facts: Fact[];
+      questions: ClarifyingQuestion[];
+      meta: GenerationMeta;
+      page: { url: string; title: string };
+    }>("/api/analyze", { url, provider }),
+  strategy: (profile: ProductProfile, provider: Provider, facts: Fact[]) =>
+    post<MarketingStrategy>("/api/strategy", { profile, provider, facts }),
   generate: (
     profile: ProductProfile,
     platformIds: string[],
-    provider: Provider
-  ) => post<GenerateResult>("/api/generate", { profile, platformIds, provider }),
-  regenerate: (profile: ProductProfile, platformId: string, provider: Provider) =>
-    post<{ posts: PlatformPost[]; playbook?: PlatformPlaybook }>(
+    provider: Provider,
+    facts: Fact[]
+  ) =>
+    post<GenerateResult>("/api/generate", { profile, platformIds, provider, facts }),
+  regenerate: (
+    profile: ProductProfile,
+    platformId: string,
+    provider: Provider,
+    facts: Fact[]
+  ) =>
+    post<{ posts: PlatformPost[]; playbook?: PlatformPlaybook; meta?: GenerationMeta }>(
       "/api/regenerate",
-      { profile, platformId, provider }
+      { profile, platformId, provider, facts }
     ),
   copilot: (body: CopilotRequest) => post<CopilotReply>("/api/copilot", body),
   usage: async (): Promise<UsageInfo> => {

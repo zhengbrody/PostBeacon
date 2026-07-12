@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
-import { generateJson } from "@/lib/llm";
-import { platformCatalogForStrategist, PLATFORMS } from "@/lib/platforms";
+import { generateJson, generateJsonMeta, modelFor } from "@/lib/llm";
 import { discoverChannels } from "@/lib/discovery";
 import { guardRoute } from "@/lib/usage";
+import { factsForPrompt } from "@/lib/facts";
+import {
+  groundRecommendations,
+  scoreAllPlatforms,
+  SCORING_PROMPT_VERSION,
+} from "@/lib/scoring";
 import { apiError, parseBody, readJsonBody, strategyBodySchema } from "@/lib/validate";
 import type {
   MarketingStrategy,
-  PlatformRecommendation,
   Confidence,
   AudienceSegment,
   GtmPhase,
@@ -15,7 +19,6 @@ import type {
   IterationMetric,
 } from "@/lib/types";
 
-const CONFIDENCE = new Set<Confidence>(["high", "medium", "low"]);
 const TIERS = new Set(["primary", "secondary", "early-adopter"]);
 const str = (v: any) => (typeof v === "string" ? v : "");
 const arr = (v: any) => (Array.isArray(v) ? v : []);
@@ -29,26 +32,28 @@ export async function POST(req: NextRequest) {
     const guard = await guardRoute(req);
     if ("response" in guard) return guard.response;
 
-    const { profile, provider } = parseBody(strategyBodySchema, await readJsonBody(req));
+    const { profile, provider, facts } = parseBody(
+      strategyBodySchema,
+      await readJsonBody(req)
+    );
+    const ledger = facts ?? [];
 
-    const catalog = platformCatalogForStrategist();
-
-    // Discovery runs concurrently with the main strategy call (best-effort).
-    const discoveriesPromise = discoverChannels(profile, provider);
-
-    // The strategist writes the full CMO plan AND scores every channel for fit.
-    const strategy = await generateJson({
+    // Three concurrent legs:
+    //  1. the CMO narrative plan (positioning, phases, checklist, risks…)
+    //  2. the per-dimension channel scoring pipeline (totals computed in code,
+    //     completeness guaranteed by retry + fallback — see lib/scoring.ts)
+    //  3. best-effort live discovery (whose validated hits later GROUND venues)
+    const planPromise = generateJsonMeta({
       provider,
-      maxTokens: 8000,
+      maxTokens: 4000,
       system:
-        "You are a world-class Chief Marketing Officer writing the 0→1 launch plan for an indie/vibecoded product. You are decisive: you make real trade-offs instead of spreading effort evenly, you tell the founder where NOT to waste time, and you ground every call in this specific product and audience. No generic marketing advice, no platitudes. Write the way you'd brief a founder you respect — direct, concrete, occasionally blunt.",
+        "You are a world-class Chief Marketing Officer writing the 0→1 launch plan for an indie/vibecoded product. You are decisive: you make real trade-offs instead of spreading effort evenly, you tell the founder where NOT to waste time, and you ground every call in this specific product and audience. No generic marketing advice, no platitudes. Write the way you'd brief a founder you respect — direct, concrete, occasionally blunt. Respect the fact ledger: build on established facts, hedge inferred ones, and never assume what's marked unknown.",
       user: `PRODUCT PROFILE:
 ${JSON.stringify(profile, null, 2)}
 
-CHANNEL UNIVERSE (score every one of these):
-${JSON.stringify(catalog, null, 2)}
+${factsForPrompt(ledger)}
 
-Produce a complete launch plan. Be specific to THIS product — a reader should not be able to swap in another product and have it still fit.
+Produce the strategic plan (channel scoring happens separately — do NOT rank channels here). Be specific to THIS product — a reader should not be able to swap in another product and have it still fit.
 
 Return JSON exactly:
 {
@@ -63,10 +68,6 @@ Return JSON exactly:
   "audienceSegments": [         // exactly 3
     { "tier": "primary"|"secondary"|"early-adopter", "label": string, "description": string, "whereTheyHang": string }
   ],
-  "recommendations": [          // ALL ${catalog.length} channels
-    { "platformId": string, "score": number, "priority": "high"|"medium"|"low",
-      "confidence": "high"|"medium"|"low", "rationale": string, "angle": string, "bestMove": string }
-  ],
   "founderChecklist": [         // 6-9 concrete actions the founder personally does
     { "when": string, "task": string }   // "when": "Day 1" | "Daily" | "Week 1"
   ],
@@ -79,34 +80,26 @@ Return JSON exactly:
 }
 
 Rules:
-- Score ALL ${catalog.length} channels 0-100 for fit to THIS product+audience. Be honest — low scores for poor fits. "bestMove" = the single highest-leverage action on that channel.
 - At least one risk must be about avoiding looking like an ad / getting flagged on the strict communities (HN, Reddit, Lobsters).
-- "bestMove" must name the exact venue — the specific subreddit, community, newsletter, or thread type (e.g. "r/selfhosted", "Indie Hackers milestone post") — never a vague "engage with the community".
 - Concrete over generic everywhere. Real numbers, real communities, real actions.`,
     });
 
-    // Normalize + enrich with platform names + effort (from the catalog), sort by score desc.
-    const byId = new Map(PLATFORMS.map((p) => [p.id, p]));
-    const recommendations: PlatformRecommendation[] = (
-      strategy.recommendations || []
-    )
-      .filter((r: any) => byId.has(r.platformId))
-      .map((r: any) => ({
-        platformId: r.platformId,
-        platformName: byId.get(r.platformId)!.name,
-        score: Math.max(0, Math.min(100, Number(r.score) || 0)),
-        priority: ["high", "medium", "low"].includes(r.priority)
-          ? r.priority
-          : "low",
-        effort: byId.get(r.platformId)!.effort,
-        confidence: CONFIDENCE.has(r.confidence) ? r.confidence : undefined,
-        rationale: str(r.rationale),
-        angle: str(r.angle),
-        bestMove: str(r.bestMove),
-      }))
-      .sort((a: PlatformRecommendation, b: PlatformRecommendation) => b.score - a.score);
+    const scoringPromise = scoreAllPlatforms(profile, ledger, (prompt) =>
+      generateJson({ provider, ...prompt })
+    );
+    const discoveriesPromise = discoverChannels(profile, provider);
 
-    const audienceSegments: AudienceSegment[] = arr(strategy.audienceSegments)
+    const [{ data: plan, meta: callMeta }, scoring, discoveries] = await Promise.all([
+      planPromise,
+      scoringPromise,
+      discoveriesPromise,
+    ]);
+
+    // "grounded" provenance is earned post-hoc from validated discoveries —
+    // never from model-written URLs.
+    const recommendations = groundRecommendations(scoring.recommendations, discoveries);
+
+    const audienceSegments: AudienceSegment[] = arr(plan.audienceSegments)
       .map((s: any) => ({
         tier: TIERS.has(s?.tier) ? s.tier : "primary",
         label: str(s?.label),
@@ -115,7 +108,7 @@ Rules:
       }))
       .filter((s: AudienceSegment) => s.label || s.description);
 
-    const phases: GtmPhase[] = arr(strategy.phases)
+    const phases: GtmPhase[] = arr(plan.phases)
       .map((p: any) => ({
         window: str(p?.window),
         focus: str(p?.focus),
@@ -123,11 +116,11 @@ Rules:
       }))
       .filter((p: GtmPhase) => p.focus || p.actions.length);
 
-    const founderChecklist: FounderTask[] = arr(strategy.founderChecklist)
+    const founderChecklist: FounderTask[] = arr(plan.founderChecklist)
       .map((t: any) => ({ when: str(t?.when), task: str(t?.task) }))
       .filter((t: FounderTask) => t.task);
 
-    const risks: RiskItem[] = arr(strategy.risks)
+    const risks: RiskItem[] = arr(plan.risks)
       .map((r: any) => ({
         area: str(r?.area),
         risk: str(r?.risk),
@@ -135,7 +128,7 @@ Rules:
       }))
       .filter((r: RiskItem) => r.risk);
 
-    const iterationLoop: IterationMetric[] = arr(strategy.iterationLoop)
+    const iterationLoop: IterationMetric[] = arr(plan.iterationLoop)
       .map((m: any) => ({
         signal: str(m?.signal),
         read: str(m?.read),
@@ -143,14 +136,12 @@ Rules:
       }))
       .filter((m: IterationMetric) => m.signal);
 
-    const discoveries = await discoveriesPromise;
-
     const result: MarketingStrategy = {
-      executiveSummary: str(strategy.executiveSummary),
-      positioning: str(strategy.positioning),
-      antiPositioning: str(strategy.antiPositioning),
-      overallStrategy: str(strategy.overallStrategy),
-      coldStart: str(strategy.coldStart),
+      executiveSummary: str(plan.executiveSummary),
+      positioning: str(plan.positioning),
+      antiPositioning: str(plan.antiPositioning),
+      overallStrategy: str(plan.overallStrategy),
+      coldStart: str(plan.coldStart),
       phases,
       audienceSegments,
       founderChecklist,
@@ -158,6 +149,12 @@ Rules:
       iterationLoop,
       recommendations,
       discoveries,
+      meta: {
+        provider: callMeta.provider,
+        model: modelFor(callMeta.provider),
+        promptVersion: SCORING_PROMPT_VERSION,
+        generatedAt: new Date().toISOString(),
+      },
     };
 
     return NextResponse.json(result);

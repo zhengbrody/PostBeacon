@@ -5,11 +5,20 @@ import { api } from "@/lib/api";
 import { loadDraft } from "@/lib/storage";
 import { DEMO_PROJECT } from "@/lib/demo";
 import { PLATFORMS } from "@/lib/platforms";
+import {
+  answerFact,
+  applyFactToProfile,
+  confirmFact,
+  correctFact,
+  type ContextField,
+} from "@/lib/facts";
 import type {
   Provider,
   ProductProfile,
   MarketingStrategy,
   GenerateResult,
+  ClarifyingQuestion,
+  Fact,
   PlatformContent,
   PlatformPost,
   PlatformRecommendation,
@@ -43,6 +52,8 @@ export function useLaunchFlow() {
   const [error, setError] = useState("");
 
   const [profile, setProfile] = useState<ProductProfile | null>(null);
+  const [facts, setFacts] = useState<Fact[]>([]); // M13 fact ledger
+  const [questions, setQuestions] = useState<ClarifyingQuestion[]>([]); // ≤3, from analyze
   const [strategy, setStrategy] = useState<MarketingStrategy | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
   const [result, setResult] = useState<GenerateResult | null>(null);
@@ -83,15 +94,17 @@ export function useLaunchFlow() {
   const analyze = () =>
     run(async () => {
       setDemo(false);
-      const { profile } = await api.analyze(url, provider);
+      const { profile, facts, questions } = await api.analyze(url, provider);
       setProfile(profile);
+      setFacts(facts ?? []);
+      setQuestions(questions ?? []);
       setStep("profile");
     }, "Reading your landing page…");
 
   const buildStrategy = () =>
     run(async () => {
       if (!profile) return;
-      const s = await api.strategy(profile, provider);
+      const s = await api.strategy(profile, provider, facts);
       setStrategy(s);
       setSelected(defaultSelection(s.recommendations));
       setStep("strategy");
@@ -102,7 +115,7 @@ export function useLaunchFlow() {
       if (!profile) return;
       setPaywall(null);
       try {
-        const r = await api.generate(profile, selected, provider);
+        const r = await api.generate(profile, selected, provider, facts);
         setResult(r);
         setStep("results");
         setGenerations((n) => n + 1);
@@ -117,10 +130,11 @@ export function useLaunchFlow() {
   const regeneratePost = (platformId: string) =>
     run(async () => {
       if (!profile) return;
-      const { posts, playbook } = await api.regenerate(
+      const { posts, playbook, meta } = await api.regenerate(
         profile,
         platformId,
-        provider
+        provider,
+        facts
       );
       setResult((r) =>
         r
@@ -128,13 +142,89 @@ export function useLaunchFlow() {
               ...r,
               content: r.content.map((c) =>
                 c.platformId === platformId
-                  ? { ...c, posts, playbook: playbook ?? c.playbook }
+                  ? { ...c, posts, playbook: playbook ?? c.playbook, meta: meta ?? c.meta }
                   : c
               ),
             }
           : r
       );
     }, "Rewriting this channel…");
+
+  // Retry ONE channel that failed during generation (partial-success flow).
+  // On success it moves from `failures` into content + calendar at its slot.
+  const retryFailed = (platformId: string) => {
+    const platform = PLATFORMS.find((p) => p.id === platformId);
+    if (!platform) return Promise.resolve();
+    return run(async () => {
+      if (!profile) return;
+      const { posts, playbook, meta } = await api.regenerate(
+        profile,
+        platformId,
+        provider,
+        facts
+      );
+      setResult((r) => {
+        if (!r) return r;
+        const block: PlatformContent = {
+          platformId,
+          platformName: platform.name,
+          posts,
+          playbook,
+          meta,
+        };
+        const rank = new Map(
+          (strategy?.recommendations ?? []).map((rec, i) => [rec.platformId, i])
+        );
+        return {
+          ...r,
+          content: [...r.content.filter((c) => c.platformId !== platformId), block].sort(
+            (a, b) =>
+              (rank.get(a.platformId) ?? Infinity) - (rank.get(b.platformId) ?? Infinity)
+          ),
+          schedule: [
+            ...r.schedule.filter((s) => s.platformId !== platformId),
+            {
+              day: platform.defaultDay,
+              platformId,
+              platformName: platform.name,
+              action: `Post to ${platform.name} — ${platform.blurb} (${platform.bestTime})`,
+            },
+          ].sort((a, b) => a.day - b.day),
+          failures: (r.failures ?? []).filter((f) => f.platformId !== platformId),
+        };
+      });
+    }, `Retrying ${platform.name}…`);
+  };
+
+  // ---- Fact Ledger operations (M13). The ONLY producers of "user-confirmed".
+
+  const confirmFactAction = (id: string) =>
+    setFacts((fs) => fs.map((f) => (f.id === id ? confirmFact(f) : f)));
+
+  // Correcting a fact also syncs the profile field it backs, so the ledger
+  // and the form never disagree.
+  const correctFactAction = (id: string, claim: string) => {
+    const target = facts.find((f) => f.id === id);
+    if (!target) return;
+    const fixed = correctFact(target, claim);
+    setFacts((fs) => fs.map((f) => (f.id === id ? fixed : f)));
+    setProfile((p) => (p ? applyFactToProfile(p, fixed) : p));
+  };
+
+  const deleteFactAction = (id: string) =>
+    setFacts((fs) => fs.filter((f) => f.id !== id));
+
+  // Answer (or skip) one clarifying question. Answers become user-confirmed
+  // facts + profile fields; skips leave the fact honestly unknown.
+  const answerQuestion = (id: ContextField, answer: string) => {
+    const trimmed = answer.trim();
+    if (trimmed) {
+      const fact = answerFact(id, trimmed);
+      setFacts((fs) => [...fs.filter((f) => f.id !== id), fact]);
+      setProfile((p) => (p ? applyFactToProfile(p, fact) : p));
+    }
+    setQuestions((qs) => qs.filter((q) => q.id !== id));
+  };
 
   // Inline edit of a single generated post — edits live in `result` so they
   // flow into export (and, once persisted, autosave) for free.
@@ -241,16 +331,18 @@ export function useLaunchFlow() {
       if (!profile) return;
       setPaywall(null);
       try {
-        const { posts, playbook } = await api.regenerate(
+        const { posts, playbook, meta } = await api.regenerate(
           profile,
           platformId,
-          provider
+          provider,
+          facts
         );
         const block: PlatformContent = {
           platformId,
           platformName: platform.name,
           posts,
           playbook,
+          meta,
         };
         setResult((r) => {
           if (!r || r.content.some((c) => c.platformId === platformId)) return r;
@@ -292,6 +384,8 @@ export function useLaunchFlow() {
     setStep("input");
     setUrl("");
     setProfile(null);
+    setFacts([]);
+    setQuestions([]);
     setStrategy(null);
     setResult(null);
     setSelected([]);
@@ -309,6 +403,10 @@ export function useLaunchFlow() {
     setPosted(p.posted || {});
     setLaunchDate(p.launchDate || p.meta?.launchDate || "");
     setProjectId(p.id || "");
+    // Facts: flat field (local draft) or meta (Supabase row); pre-M13 saves
+    // have neither → empty ledger (the UI offers re-analyze to build one).
+    setFacts(p.facts ?? p.meta?.facts ?? []);
+    setQuestions([]); // questions are an analyze-time artifact, not persisted
     // Three generations of saved data: flat `selected` (local draft), `meta`
     // (Supabase row), or neither (pre-M11 saves) → derive a fresh default.
     setSelected(
@@ -357,8 +455,8 @@ export function useLaunchFlow() {
   // Stable identity unless the contents change — lets autosave depend on the
   // object reference instead of re-serializing it every render.
   const snapshot = useMemo(
-    () => ({ url, profile, strategy, result, posted, selected }),
-    [url, profile, strategy, result, posted, selected]
+    () => ({ url, profile, strategy, result, posted, selected, facts }),
+    [url, profile, strategy, result, posted, selected, facts]
   );
 
   return {
@@ -374,6 +472,13 @@ export function useLaunchFlow() {
     error,
     profile,
     setProfile,
+    facts,
+    questions,
+    confirmFact: confirmFactAction,
+    correctFact: correctFactAction,
+    deleteFact: deleteFactAction,
+    answerQuestion,
+    retryFailed,
     strategy,
     selected,
     toggleSelected,

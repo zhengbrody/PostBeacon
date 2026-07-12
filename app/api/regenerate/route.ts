@@ -14,14 +14,19 @@ export async function POST(req: NextRequest) {
     if ("response" in guard) return guard.response;
 
     // platformId is schema-checked against the catalog, so this can't be empty.
-    const { profile, platformId, provider } = parseBody(
+    const { profile, platformId, provider, facts } = parseBody(
       regenerateBodySchema,
       await readJsonBody(req)
     );
     const [p] = getPlatforms([platformId]);
 
-    const { posts, playbook } = await generatePlatformPosts(profile, p, provider);
-    return NextResponse.json({ posts, playbook });
+    const { posts, playbook, meta } = await generatePlatformPosts(
+      profile,
+      p,
+      provider,
+      facts
+    );
+    return NextResponse.json({ posts, playbook, meta });
   } catch (err) {
     return apiError(err, "Regenerate failed");
   }

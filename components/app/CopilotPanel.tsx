@@ -7,6 +7,7 @@ import { api, type ApiError } from "@/lib/api";
 import type {
   CopilotAction,
   CopilotRewrite,
+  Fact,
   GenerateResult,
   MarketingStrategy,
   PlatformPost,
@@ -36,6 +37,7 @@ export function CopilotPanel({
   profile,
   strategy,
   result,
+  facts,
   launchDate,
   provider,
   onApplyRewrite,
@@ -44,6 +46,7 @@ export function CopilotPanel({
   profile: ProductProfile;
   strategy: MarketingStrategy;
   result: GenerateResult;
+  facts: Fact[];
   launchDate: string;
   provider: Provider;
   onApplyRewrite: (platformId: string, idx: number, patch: Partial<PlatformPost>) => void;
@@ -90,6 +93,7 @@ export function CopilotPanel({
         profile,
         strategy,
         result,
+        facts,
         launchDate,
         action,
         question,

@@ -1,5 +1,6 @@
 import { generateJson } from "./llm";
 import { ANTI_AI_RULES } from "./voice";
+import { factsForPrompt } from "./facts";
 import { getPlatforms, type PlatformDef } from "./platforms";
 import { scheduleDate } from "./dates";
 import type {
@@ -130,6 +131,11 @@ function buildContext(req: CopilotRequest): string {
   } else {
     out.push("", "DRAFTED POSTS: none generated yet.");
   }
+
+  // The ledger rides along so the copilot hedges inferred claims and never
+  // upgrades an unknown into a confident statement.
+  const ledger = factsForPrompt(list(req.facts));
+  if (ledger) out.push("", ledger);
 
   const ctx = out.join("\n");
   return ctx.length > 28000 ? ctx.slice(0, 28000) + "\n…[context truncated]" : ctx;

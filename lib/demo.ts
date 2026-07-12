@@ -1,8 +1,11 @@
 import type {
+  Fact,
   GenerateResult,
   MarketingStrategy,
   ProductProfile,
 } from "./types";
+import { PLATFORMS } from "./platforms";
+import { groundRecommendations, toRecommendation } from "./scoring";
 
 /**
  * A hand-authored, end-to-end example plan. It powers the in-app "See an example
@@ -36,6 +39,9 @@ const profile: ProductProfile = {
   ],
   tone: "plain, technical, slightly dry",
   category: "developer tool",
+  stage: "Just launched — first users trickling in",
+  conversionGoal: "Free signups that connect a first job",
+  assets: "≈1.2k X followers from building in public; no ad budget; ~10 hrs/week",
   whatItIs:
     "A dead-simple monitor for the scheduled jobs your app depends on. Each job pings a URL when it finishes; Cronwise yells if a ping doesn't arrive on time.",
   whyCare:
@@ -45,6 +51,424 @@ const profile: ProductProfile = {
   confidence: "high",
   confidenceNote: "",
 };
+
+// The demo ledger shows every provenance state the real pipeline produces:
+// observed (machine-checked page quotes), inferred (the model's read), and
+// user-confirmed (the founder answered the clarifying questions).
+const VERIFIED_AT = "2026-07-08T09:00:00.000Z";
+const facts: Fact[] = [
+  {
+    id: "tagline",
+    field: "tagline",
+    claim: "Know the second a background job silently dies.",
+    evidence: "Know the second a background job silently dies.",
+    sourceUrl: "https://cronwise.dev",
+    sourceType: "page",
+    status: "observed",
+    confidence: 0.95,
+    lastVerifiedAt: VERIFIED_AT,
+  },
+  {
+    id: "valueProp",
+    field: "valueProp",
+    claim:
+      "Watches cron jobs and workers and alerts the moment one stops checking in.",
+    evidence: "pings you the moment one stops checking in",
+    sourceUrl: "https://cronwise.dev",
+    sourceType: "page",
+    status: "observed",
+    confidence: 0.9,
+    lastVerifiedAt: VERIFIED_AT,
+  },
+  {
+    id: "audience",
+    field: "audience",
+    claim:
+      "Solo developers and small teams running scheduled jobs with no dedicated ops person.",
+    sourceType: "model",
+    status: "inferred",
+    confidence: 0.6,
+    lastVerifiedAt: VERIFIED_AT,
+  },
+  {
+    id: "category",
+    field: "category",
+    claim: "Developer tool — job/heartbeat monitoring.",
+    evidence: "watches your cron jobs and workers",
+    sourceUrl: "https://cronwise.dev",
+    sourceType: "page",
+    status: "observed",
+    confidence: 0.9,
+    lastVerifiedAt: VERIFIED_AT,
+  },
+  {
+    id: "pricing",
+    field: "pricing",
+    claim: "Flat $9/mo past the free tier, with a self-host option.",
+    evidence: "Flat $9/mo, not per-check pricing",
+    sourceUrl: "https://cronwise.dev",
+    sourceType: "page",
+    status: "observed",
+    confidence: 0.9,
+    lastVerifiedAt: VERIFIED_AT,
+  },
+  {
+    id: "stage",
+    field: "stage",
+    claim: "Just launched — first users trickling in",
+    sourceType: "user",
+    status: "user-confirmed",
+    confidence: 1,
+    lastVerifiedAt: VERIFIED_AT,
+  },
+  {
+    id: "conversionGoal",
+    field: "conversionGoal",
+    claim: "Free signups that connect a first job",
+    sourceType: "user",
+    status: "user-confirmed",
+    confidence: 1,
+    lastVerifiedAt: VERIFIED_AT,
+  },
+  {
+    id: "assets",
+    field: "assets",
+    claim: "≈1.2k X followers from building in public; no ad budget; ~10 hrs/week",
+    sourceType: "user",
+    status: "user-confirmed",
+    confidence: 1,
+    lastVerifiedAt: VERIFIED_AT,
+  },
+];
+
+// Validated niche channels (what the live discovery pass would find). These
+// are what GROUND the "✓ sourced" chips — venue text matching one of these
+// names earns provenance "grounded"; everything else stays "inferred".
+const discoveries = [
+  {
+    name: "r/selfhosted",
+    url: "https://www.reddit.com/r/selfhosted/",
+    why: "Self-hosters run fleets of unattended jobs and adopt tools with a self-host story fast.",
+    source: "subreddit",
+    validated: true,
+  },
+  {
+    name: "r/devops",
+    url: "https://www.reddit.com/r/devops/",
+    why: "Where the 'how do you monitor cron' complaint thread already exists.",
+    source: "subreddit",
+    validated: true,
+  },
+  {
+    name: "awesome-selfhosted",
+    url: "https://github.com/awesome-selfhosted/awesome-selfhosted",
+    why: "A PR into the monitoring section reaches self-hosters searching for exactly this.",
+    source: "GitHub list",
+    validated: true,
+  },
+];
+
+// Demo recommendations are assembled with the REAL production functions:
+// the model-shaped raw entries below carry only dimensions + reasons, and
+// toRecommendation() computes the 0-100 total, priority, effort (catalog)
+// and evidence quality exactly as the live pipeline does.
+const rawRecs = [
+  {
+    platformId: "hackernews",
+    dimensions: {
+      audienceFit: {
+        score: 10,
+        reason: "Senior devs who've been bitten by silent job failures are the core HN crowd.",
+        factIds: ["audience", "valueProp"],
+      },
+      intentFit: {
+        score: 9,
+        reason: "Show HN readers are actively hunting new tools to try that morning.",
+        factIds: ["stage"],
+      },
+      nativeContentFit: {
+        score: 9,
+        reason: "A failure story plus a curl one-liner is textbook Show HN material.",
+        factIds: ["valueProp"],
+      },
+      founderAccess: {
+        score: 8,
+        reason: "No karma needed to post a Show HN; comments decide everything.",
+        factIds: [],
+      },
+      risk: {
+        score: 7,
+        reason: "One marketing-scented sentence gets it flagged; the crowd is merciless.",
+        factIds: [],
+      },
+    },
+    confidence: "high",
+    rationale:
+      "Your exact buyer — senior devs who've been bitten by a silent failure — and one front-page Show HN beats months of any other channel.",
+    angle: "The honest failure story plus the one-line setup. No adjectives.",
+    bestMove: "Post Show HN Tue–Thu morning and live in the comments for six hours.",
+    venue: "Show HN",
+  },
+  {
+    platformId: "reddit",
+    dimensions: {
+      audienceFit: {
+        score: 9,
+        reason: "r/selfhosted and r/devops members run unattended jobs daily.",
+        factIds: ["audience"],
+      },
+      intentFit: {
+        score: 8,
+        reason: "Monitoring complaints already recur in both subs — the pain is pre-stated.",
+        factIds: [],
+      },
+      nativeContentFit: {
+        score: 9,
+        reason: "Self-host option makes it shareable in r/selfhosted, not just tolerated.",
+        factIds: ["pricing"],
+      },
+      founderAccess: {
+        score: 7,
+        reason: "Fresh accounts get filtered; needs genuine member behavior first.",
+        factIds: [],
+      },
+      risk: {
+        score: 8,
+        reason: "Cross-posted promo is a ban; each sub needs its own honest post.",
+        factIds: [],
+      },
+    },
+    confidence: "high",
+    rationale:
+      "r/selfhosted and r/devops run unattended jobs constantly and reward a self-hostable tool — if you post as a member, not a vendor.",
+    angle: "Open with the failure story and a real question about how they monitor today.",
+    bestMove: "One subreddit at a time, starting with r/selfhosted, flaired correctly, link last.",
+    venue: "r/selfhosted",
+  },
+  {
+    platformId: "twitter",
+    dimensions: {
+      audienceFit: {
+        score: 8,
+        reason: "The build-in-public crowd overlaps heavily with solo devs running crons.",
+        factIds: ["audience", "assets"],
+      },
+      intentFit: {
+        score: 6,
+        reason: "Feed browsing, not tool hunting — the story has to stop the scroll.",
+        factIds: [],
+      },
+      nativeContentFit: {
+        score: 8,
+        reason: "A 6-second setup GIF plus a real failure story is native here.",
+        factIds: ["valueProp"],
+      },
+      founderAccess: {
+        score: 8,
+        reason: "An existing 1.2k-follower build-in-public account seeds real distribution.",
+        factIds: ["assets"],
+      },
+      risk: {
+        score: 3,
+        reason: "Low ban risk; the cost is just being ignored.",
+        factIds: [],
+      },
+    },
+    confidence: "high",
+    rationale:
+      "The build-in-public crowd is your buyer and shares tools that solve a pain they recognize on sight — and you already have 1.2k followers here.",
+    angle: "One relatable story plus the 1-line setup recording.",
+    bestMove: "Post the silent-failure story with a 6-second setup GIF.",
+    venue: "build-in-public X",
+  },
+  {
+    platformId: "github",
+    dimensions: {
+      audienceFit: {
+        score: 8,
+        reason: "Every serious evaluator of a self-hostable monitor lands on the repo.",
+        factIds: ["pricing"],
+      },
+      intentFit: {
+        score: 7,
+        reason: "Repo visitors are already evaluating — the README just has to close.",
+        factIds: [],
+      },
+      nativeContentFit: {
+        score: 7,
+        reason: "A curl one-liner above the fold is exactly what this audience wants.",
+        factIds: ["valueProp"],
+      },
+      founderAccess: {
+        score: 9,
+        reason: "It's your own repo; no gatekeeper.",
+        factIds: [],
+      },
+      risk: {
+        score: 1,
+        reason: "No community to offend — worst case is an unstarred repo.",
+        factIds: [],
+      },
+    },
+    confidence: "high",
+    rationale:
+      "Devs will check the repo before trusting a monitor with their jobs; a clean README and a self-host path build the credibility that closes them.",
+    angle: "Show the curl one-liner above the fold; make self-host first-class.",
+    bestMove:
+      "Pin a 20-second demo GIF at the top of the README and PR the monitoring section of awesome-selfhosted.",
+    venue: "awesome-selfhosted",
+  },
+  {
+    platformId: "lobsters",
+    dimensions: {
+      audienceFit: {
+        score: 7,
+        reason: "Small but exactly the sysadmin/dev crowd that runs cron everywhere.",
+        factIds: ["audience"],
+      },
+      intentFit: {
+        score: 7,
+        reason: "Readers came for technical depth; a timing write-up fits that intent.",
+        factIds: [],
+      },
+      nativeContentFit: {
+        score: 8,
+        reason: "The per-job state machine is a genuinely Lobsters-worthy detail.",
+        factIds: [],
+      },
+      founderAccess: {
+        score: 4,
+        reason: "Invite-only; without an existing invite this channel is gated.",
+        factIds: [],
+      },
+      risk: {
+        score: 8,
+        reason: "Self-promotion rules are stricter than HN; must read as a write-up.",
+        factIds: [],
+      },
+    },
+    confidence: "medium",
+    rationale:
+      "Small but extremely high-signal audience that rewards technical depth over polish.",
+    angle: "Lead with the per-job timing state machine, not the product.",
+    bestMove: "Only post with an invite; frame it as a technical write-up.",
+    venue: "Lobsters",
+  },
+  {
+    platformId: "devto",
+    dimensions: {
+      audienceFit: {
+        score: 7,
+        reason: "Working devs searching 'monitor cron jobs' land here for years.",
+        factIds: ["audience"],
+      },
+      intentFit: {
+        score: 5,
+        reason: "Readers want to learn, not buy — conversion is slow-burn search traffic.",
+        factIds: [],
+      },
+      nativeContentFit: {
+        score: 8,
+        reason: "'How I built the timing logic' teaches first; the product is the example.",
+        factIds: [],
+      },
+      founderAccess: {
+        score: 9,
+        reason: "Open platform, no reputation needed to publish.",
+        factIds: [],
+      },
+      risk: {
+        score: 2,
+        reason: "Tolerant of maker posts as long as they teach something.",
+        factIds: [],
+      },
+    },
+    confidence: "medium",
+    rationale:
+      "A 'how I built the timing logic' post earns trust and keeps pulling search traffic long after launch day.",
+    angle: "Teach the hard part; the product is just the example.",
+    bestMove: "Write the state-machine post with a real code snippet.",
+    venue: "Dev.to",
+  },
+  {
+    platformId: "indiehackers",
+    dimensions: {
+      audienceFit: {
+        score: 6,
+        reason: "Founders run crons too, but ops pain is secondary to growth topics here.",
+        factIds: ["audience"],
+      },
+      intentFit: {
+        score: 5,
+        reason: "People browse for stories and numbers, not infrastructure tools.",
+        factIds: [],
+      },
+      nativeContentFit: {
+        score: 7,
+        reason: "A transparent $9-flat pricing story fits the milestone-post format.",
+        factIds: ["pricing"],
+      },
+      founderAccess: {
+        score: 8,
+        reason: "Open community that welcomes first-time posters with real numbers.",
+        factIds: [],
+      },
+      risk: {
+        score: 3,
+        reason: "Soft-sell tolerated; hard-sell just gets ignored.",
+        factIds: [],
+      },
+    },
+    confidence: "medium",
+    rationale:
+      "Founders here appreciate a transparent build story and the simple $9 model, though they're a softer fit than the dev communities.",
+    angle: "Share real launch numbers and what actually converted.",
+    bestMove: "Post a milestone with signup numbers a week after the HN launch.",
+    venue: "Indie Hackers milestones",
+  },
+  {
+    platformId: "producthunt",
+    dimensions: {
+      audienceFit: {
+        score: 6,
+        reason: "Makers browse PH, but infra tools convert worse than consumer apps.",
+        factIds: [],
+      },
+      intentFit: {
+        score: 6,
+        reason: "Hunters are actively trying new tools on launch day.",
+        factIds: [],
+      },
+      nativeContentFit: {
+        score: 5,
+        reason: "A monitoring tool demos less visually than PH favorites.",
+        factIds: [],
+      },
+      founderAccess: {
+        score: 7,
+        reason: "Anyone can launch; ranking without a follower base is the hard part.",
+        factIds: ["assets"],
+      },
+      risk: {
+        score: 4,
+        reason: "Low ban risk; real risk is a quiet launch that wastes the one shot.",
+        factIds: [],
+      },
+    },
+    confidence: "low",
+    rationale:
+      "Reaches makers, but this audience trusts dev communities more than PH for infra tools — worth a listing, not a campaign.",
+    angle: "A maker's note about the silent-failure itch.",
+    bestMove: "List it, but don't spend your one big launch day here.",
+    venue: "Product Hunt",
+  },
+];
+
+const platformById = new Map(PLATFORMS.map((p) => [p.id, p]));
+const recommendations = groundRecommendations(
+  rawRecs.map((r) => toRecommendation(r, platformById.get(r.platformId)!, facts)!),
+  discoveries
+).sort((a, b) => b.score - a.score);
 
 const strategy: MarketingStrategy = {
   executiveSummary:
@@ -102,104 +526,8 @@ const strategy: MarketingStrategy = {
       whereTheyHang: "r/selfhosted, r/homelab, Lobsters",
     },
   ],
-  recommendations: [
-    {
-      platformId: "hackernews",
-      platformName: "Hacker News",
-      score: 92,
-      priority: "high",
-      effort: "high",
-      confidence: "high",
-      rationale:
-        "Your exact buyer — senior devs who've been bitten by a silent failure — and one front-page Show HN beats months of any other channel.",
-      angle: "The honest failure story plus the one-line setup. No adjectives.",
-      bestMove: "Post Show HN Tue–Thu morning and live in the comments for six hours.",
-    },
-    {
-      platformId: "reddit",
-      platformName: "Reddit",
-      score: 88,
-      priority: "high",
-      effort: "high",
-      confidence: "high",
-      rationale:
-        "r/selfhosted and r/devops run unattended jobs constantly and reward a self-hostable tool — if you post as a member, not a vendor.",
-      angle: "Open with the failure story and a real question about how they monitor today.",
-      bestMove: "One subreddit at a time, flaired correctly, link last.",
-    },
-    {
-      platformId: "twitter",
-      platformName: "X / Twitter",
-      score: 80,
-      priority: "high",
-      effort: "medium",
-      confidence: "medium",
-      rationale:
-        "The build-in-public crowd is your buyer and shares tools that solve a pain they recognize on sight.",
-      angle: "One relatable story plus the 1-line setup recording.",
-      bestMove: "Post the silent-failure story with a 6-second setup GIF.",
-    },
-    {
-      platformId: "github",
-      platformName: "GitHub",
-      score: 78,
-      priority: "high",
-      effort: "medium",
-      confidence: "high",
-      rationale:
-        "Devs will check the repo before trusting a monitor with their jobs; a clean README and a self-host path build the credibility that closes them.",
-      angle: "Show the curl one-liner above the fold; make self-host first-class.",
-      bestMove: "Pin a 20-second demo GIF at the top of the README.",
-    },
-    {
-      platformId: "lobsters",
-      platformName: "Lobsters / specialist forums",
-      score: 74,
-      priority: "medium",
-      effort: "medium",
-      confidence: "medium",
-      rationale:
-        "Small but extremely high-signal audience that rewards technical depth over polish.",
-      angle: "Lead with the per-job timing state machine, not the product.",
-      bestMove: "Only post with an invite; frame it as a technical write-up.",
-    },
-    {
-      platformId: "devto",
-      platformName: "Dev.to",
-      score: 72,
-      priority: "medium",
-      effort: "medium",
-      confidence: "medium",
-      rationale:
-        "A 'how I built the timing logic' post earns trust and keeps pulling search traffic long after launch day.",
-      angle: "Teach the hard part; the product is just the example.",
-      bestMove: "Write the state-machine post with a real code snippet.",
-    },
-    {
-      platformId: "indiehackers",
-      platformName: "Indie Hackers",
-      score: 66,
-      priority: "medium",
-      effort: "medium",
-      confidence: "medium",
-      rationale:
-        "Founders here appreciate a transparent build story and the simple $9 model, though they're a softer fit than the dev communities.",
-      angle: "Share real launch numbers and what actually converted.",
-      bestMove: "Post a milestone with signup numbers a week after the HN launch.",
-    },
-    {
-      platformId: "producthunt",
-      platformName: "Product Hunt",
-      score: 58,
-      priority: "low",
-      effort: "high",
-      confidence: "low",
-      rationale:
-        "Reaches makers, but this audience trusts dev communities more than PH for infra tools — worth a listing, not a campaign.",
-      angle: "A maker's note about the silent-failure itch.",
-      bestMove: "List it, but don't spend your one big launch day here.",
-    },
-  ],
+  recommendations,
+  discoveries,
   founderChecklist: [
     {
       when: "Day 0",
@@ -431,6 +759,7 @@ export const DEMO_PROJECT = {
   id: "demo",
   url: "cronwise.dev",
   profile,
+  facts,
   strategy,
   result,
   posted: {} as Record<string, boolean>,

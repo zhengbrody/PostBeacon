@@ -105,6 +105,50 @@ export const profileSchema = z.object({
   useCase: s(5000).optional(),
   confidence: confidenceSchema.optional(),
   confidenceNote: s(2000).optional(),
+  stage: s(500).optional(),
+  conversionGoal: s(500).optional(),
+  assets: s(1000).optional(),
+});
+
+/** Fact Ledger entries as the wire accepts them (M13). The server re-derives
+ *  what matters (verifyFacts / evidenceQuality); this just bounds the shape. */
+export const factSchema = z.object({
+  id: s(60),
+  field: s(40).optional(),
+  claim: s(500).default(""),
+  evidence: s(300).optional(),
+  sourceUrl: s(2048).optional(),
+  sourceType: z.enum(["page", "user", "model", "search"]),
+  status: z.enum(["observed", "user-confirmed", "inferred", "unknown"]),
+  confidence: z.number().min(0).max(1),
+  lastVerifiedAt: s(40).default(""),
+});
+
+export const factsFieldSchema = z.array(factSchema).max(20).optional();
+
+/** Output provenance stamp (M13). */
+const generationMetaSchema = z.object({
+  provider: providerSchema,
+  model: s(80),
+  promptVersion: s(20),
+  generatedAt: s(40),
+});
+
+const scoreDimensionSchema = z.object({
+  score: z.number().finite().min(0).max(10),
+  reason: s(500).default(""),
+  evidence: s(300).optional(),
+  factIds: z.array(s(60)).max(6).optional(),
+});
+
+const breakdownSchema = z.object({
+  audienceFit: scoreDimensionSchema,
+  intentFit: scoreDimensionSchema,
+  nativeContentFit: scoreDimensionSchema,
+  founderAccess: scoreDimensionSchema,
+  effort: scoreDimensionSchema,
+  risk: scoreDimensionSchema,
+  evidenceQuality: scoreDimensionSchema,
 });
 
 const recommendationSchema = z.object({
@@ -117,6 +161,11 @@ const recommendationSchema = z.object({
   rationale: s(4000).default(""),
   angle: s(4000).default(""),
   bestMove: s(4000).optional(),
+  breakdown: breakdownSchema.optional(),
+  venue: s(200).optional(),
+  sources: z.array(s(2048)).max(3).optional(),
+  provenance: z.enum(["grounded", "inferred"]).optional(),
+  fallback: z.boolean().optional(),
 });
 
 /** MarketingStrategy as round-tripped from the client (plan-scoped copilot). */
@@ -184,6 +233,7 @@ export const strategySchema = z.object({
     )
     .max(20)
     .optional(),
+  meta: generationMetaSchema.optional(),
 });
 
 const postSchema = z.object({
@@ -212,10 +262,21 @@ export const resultSchema = z.object({
         platformName: s(200).default(""),
         posts: z.array(postSchema).max(12).default([]),
         playbook: playbookSchema.optional(),
+        meta: generationMetaSchema.optional(),
       })
     )
     .max(30)
     .default([]),
+  failures: z
+    .array(
+      z.object({
+        platformId: s(64),
+        platformName: s(200).default(""),
+        error: s(300).default(""),
+      })
+    )
+    .max(30)
+    .optional(),
   schedule: z
     .array(
       z.object({
@@ -241,18 +302,21 @@ export const analyzeBodySchema = z.object({
 export const strategyBodySchema = z.object({
   profile: profileSchema,
   provider: providerSchema.optional(),
+  facts: factsFieldSchema,
 });
 
 export const generateBodySchema = z.object({
   profile: profileSchema,
   platformIds: platformIdsSchema,
   provider: providerSchema.optional(),
+  facts: factsFieldSchema,
 });
 
 export const regenerateBodySchema = z.object({
   profile: profileSchema,
   platformId: knownPlatformSchema,
   provider: providerSchema.optional(),
+  facts: factsFieldSchema,
 });
 
 export const copilotBodySchema = z.object({
@@ -260,6 +324,7 @@ export const copilotBodySchema = z.object({
   profile: profileSchema,
   strategy: strategySchema,
   result: resultSchema.nullable().optional(),
+  facts: factsFieldSchema,
   launchDate: s(40).optional(),
   action: z.enum([
     "explain-plan",

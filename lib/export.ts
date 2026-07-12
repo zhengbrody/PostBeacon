@@ -1,4 +1,5 @@
 import type {
+  Fact,
   ProductProfile,
   GenerateResult,
   MarketingStrategy,
@@ -12,6 +13,7 @@ export interface ExportSnapshot {
   strategy?: MarketingStrategy | null;
   result: GenerateResult | null;
   launchDate?: string;
+  facts?: Fact[];
 }
 
 export function toJson(snap: ExportSnapshot): string {
@@ -20,10 +22,26 @@ export function toJson(snap: ExportSnapshot): string {
 
 /** Render the whole CMO launch plan as portable Markdown. */
 export function toMarkdown(snap: ExportSnapshot): string {
-  const { profile, strategy, result, launchDate = "" } = snap;
+  const { profile, strategy, result, launchDate = "", facts } = snap;
   const out: string[] = [];
   out.push(`# ${profile?.name || "Launch"} — launch plan`, "");
   if (profile?.tagline) out.push(`> ${profile.tagline}`, "");
+
+  if (facts?.length) {
+    out.push("## Fact ledger", "");
+    for (const f of facts) {
+      if (f.status === "unknown" && !f.claim) {
+        out.push(`- **${f.field || f.id}** — _unknown (not assumed)_`);
+      } else {
+        out.push(
+          `- **${f.field || f.id}** [${f.status}] — ${f.claim}${
+            f.evidence ? ` _(page: “${f.evidence}”)_` : ""
+          }`
+        );
+      }
+    }
+    out.push("");
+  }
 
   if (strategy) appendStrategy(out, strategy);
 

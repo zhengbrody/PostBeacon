@@ -10,7 +10,13 @@ import {
   FREE_LAUNCHES,
 } from "@/lib/usage";
 import { apiError, generateBodySchema, parseBody, readJsonBody } from "@/lib/validate";
-import type { PlatformContent, ScheduleItem, GenerateResult } from "@/lib/types";
+import { PublicError, publicMessage } from "@/lib/errors";
+import type {
+  PlatformContent,
+  ScheduleItem,
+  GenerateResult,
+  GenerationFailure,
+} from "@/lib/types";
 
 export const maxDuration = 300;
 
@@ -43,7 +49,7 @@ export async function POST(req: NextRequest) {
     const userId = guard.userId;
 
     // platformIds arrive deduped, bounded, and catalog-known from the schema.
-    const { profile, platformIds, provider } = parseBody(
+    const { profile, platformIds, provider, facts } = parseBody(
       generateBodySchema,
       await readJsonBody(req)
     );
@@ -66,14 +72,51 @@ export async function POST(req: NextRequest) {
     const platforms = getPlatforms(platformIds);
 
     // Generate content per platform (each has its own voice), capped at 6
-    // concurrent calls so large selections stay within the time/rate budget.
-    const content: PlatformContent[] = await mapLimit(platforms, 6, async (p) => {
-      const { posts, playbook } = await generatePlatformPosts(profile, p, provider);
-      return { platformId: p.id, platformName: p.name, posts, playbook };
+    // concurrent calls. Partial success by design: one channel failing must
+    // never sink the others — failures come back listed and retryable.
+    const outcomes = await mapLimit(platforms, 6, async (p) => {
+      try {
+        const { posts, playbook, meta } = await generatePlatformPosts(
+          profile,
+          p,
+          provider,
+          facts
+        );
+        const ok: PlatformContent = {
+          platformId: p.id,
+          platformName: p.name,
+          posts,
+          playbook,
+          meta,
+        };
+        return { ok };
+      } catch (err) {
+        // Config errors (no API key) abort the whole run — every channel
+        // would fail identically, so partial semantics add nothing.
+        if (err instanceof PublicError && err.status === 503) throw err;
+        const failure: GenerationFailure = {
+          platformId: p.id,
+          platformName: p.name,
+          error: publicMessage(err, "Generation failed for this channel."),
+        };
+        return { failure };
+      }
     });
 
-    // Build a deterministic launch sequence from the platform playbook.
+    const content = outcomes.flatMap((o) => (o.ok ? [o.ok] : []));
+    const failures = outcomes.flatMap((o) => (o.failure ? [o.failure] : []));
+
+    if (!content.length) {
+      return NextResponse.json(
+        { error: "Generation failed for every selected channel. Try again." },
+        { status: 502 }
+      );
+    }
+
+    // Deterministic launch sequence — only for channels that actually have content.
+    const generated = new Set(content.map((c) => c.platformId));
     const schedule: ScheduleItem[] = platforms
+      .filter((p) => generated.has(p.id))
       .map((p) => ({
         day: p.defaultDay,
         platformId: p.id,
@@ -84,7 +127,7 @@ export async function POST(req: NextRequest) {
 
     if (userId && billingEnabled()) await incrementLaunch(userId);
 
-    const result: GenerateResult = { content, schedule };
+    const result: GenerateResult = { content, schedule, failures };
     return NextResponse.json(result);
   } catch (err) {
     return apiError(err, "Generate failed");

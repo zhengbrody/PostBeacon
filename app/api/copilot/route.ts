@@ -43,6 +43,7 @@ export async function POST(req: NextRequest) {
       profile: body.profile,
       strategy: body.strategy,
       result: body.result,
+      facts: body.facts,
       launchDate: body.launchDate,
       action,
       question,

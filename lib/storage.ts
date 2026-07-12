@@ -12,6 +12,7 @@ export interface Draft {
   posted?: Record<string, boolean>;
   selected?: string[]; // channels checked for generation
   launchDate?: string;
+  facts?: any[]; // M13 fact ledger (provenance for the profile)
 }
 
 export function loadDraft(): Draft | null {

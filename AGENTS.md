@@ -42,7 +42,12 @@ app/
 lib/
   types.ts              All shared types (Provider, ProductProfile, MarketingStrategy, ...)
   platforms.ts          THE platform universe (catalog + per-platform voice rules). Most-tuned file.
-  llm.ts                Claude/OpenAI/DeepSeek abstraction → generateJson()
+  llm.ts                Claude/OpenAI/DeepSeek abstraction → generateJson() / generateJsonMeta()
+  facts.ts              Fact Ledger engine: quote-verified statuses (observed/user-confirmed/
+                        inferred/unknown), ≤3 clarifying-question picker, prompt partitioning
+  analysis.ts           Analyze engine (profile + enforced facts + questions) — route & evals share it
+  scoring.ts            Explainable scoring: model rates dimensions, CODE computes the 0-100 total,
+                        19-platform completeness pipeline (retry→fallback), venue grounding
   generate.ts           Per-platform content prompt (generatePlatformPosts) — shared by generate+regenerate
   copilot.ts            Launch Copilot: compact plan-context builder + per-action prompts (runCopilot)
   voice.ts              ANTI_AI_RULES — house rules injected into content prompts to kill AI tells
@@ -73,10 +78,15 @@ hooks/
   useAutosave.ts        Debounced persist: localStorage (anon) / Supabase upsert (signed-in)
 components/
   ui/                   Button, Card, Badge, Spinner, Field, Tabs (design system primitives)
-  app/                  Stepper, UrlStep, ProfileForm, StrategyView, ResultsView, PlanSummary,
-                        CopilotPanel, ProjectBar, SignIn, AuthScreen, Paywall, UsageBadge, FeedbackCTA
+  app/                  Stepper, UrlStep, ProfileForm, FactLedger (provenance UI + questions),
+                        StrategyView (score breakdowns), ResultsView (failures panel + retry),
+                        PlanSummary, CopilotPanel, ProjectBar, SignIn, AuthScreen, Paywall,
+                        UsageBadge, FeedbackCTA
   landing/              Nav, Hero, HowItWorks, PlatformShowcase, Pricing, FAQ, Footer
-tests/                  vitest suites: urlPolicy, safeFetch, billing, webhook route, validate
+docs/M13-trust-layer.md Design + migration doc for the trust layer (facts/scoring/partial success)
+tests/                  vitest suites: urlPolicy, safeFetch, billing, webhook route, validate,
+                        golden (12-fixture offline evals), generateRoute; eval.live (gated)
+tests/golden/           fixtures.ts — 12 product-type golden fixtures with ground truth
 supabase/schema.sql     projects + entitlements + webhook_events tables, row-level security
 ```
 
@@ -122,9 +132,10 @@ npm install
 cp .env.example .env     # ANTHROPIC_API_KEY and/or OPENAI_API_KEY (Supabase keys optional)
 npm run dev              # landing at /, tool at /app
 npm run typecheck        # tsc --noEmit
-npm test                 # vitest (security suites in tests/)
+npm test                 # vitest (security + golden suites in tests/; offline, no API keys)
 npm run lint             # next lint (eslint-config-next)
 npm run build            # must stay green
+RUN_LIVE_EVAL=1 npx vitest run tests/eval.live.test.ts   # live provider eval → eval-results/
 ```
 
 ## Deploy (Vercel)
@@ -145,6 +156,22 @@ left unset → accounts off (anon + localStorage), generation open/unmetered, `P
 Redeploy: `npx vercel --prod --yes`. Push env from `.env.local`: `~/push-env.sh`.
 
 ## Status / changelog
+- **2026-07-12**: **M13 — trust layer.** Facts, inference and recommendations separated; design +
+  migration doc in `docs/M13-trust-layer.md` (no SQL migration — new data rides existing jsonb;
+  all new type fields optional so pre-M13 saves keep rendering). Fact Ledger with code-enforced
+  provenance (observed requires a machine-verified page quote; model can't emit user-confirmed;
+  unknown discards guesses) + user confirm/correct/delete; ≤3 code-picked clarifying questions
+  (stage/conversionGoal/assets) instead of hallucinated fill; explainable platform scoring
+  (model rates 5 dimensions with reasons+factIds; effort from catalog, evidenceQuality computed,
+  0-100 total & priority deterministic in code) with breakdown UI; guaranteed 19 unique
+  recommendations via validate→dedupe→scoped-retry→flagged-fallbacks, venue "grounded" only from
+  validated live discoveries; generation is partial-success (failures listed + per-channel retry)
+  and every output stamped with provider/model/promptVersion/generatedAt. 12 golden fixtures +
+  offline eval suites + gated live eval (`RUN_LIVE_EVAL=1`, writes eval-results/). Live numbers
+  (2026-07-12): deepseek 9% fabricated-evidence (caught), 96% unknown-honesty, 114/114 first-pass
+  scoring completeness, 92% drafts banned-phrase-free; gpt-4o 58% fabricated-evidence (all
+  caught), 37% fact-citing recs; claude 401 = invalid local API key (env, not code). Gates green
+  (typecheck / 168 tests / lint / build); UI verified in browser incl. a real analyze round-trip.
 - **2026-07-11**: **M12 — P0 security hardening** (no product changes). (1) **SSRF**: new
   `lib/urlPolicy.ts` + `lib/safeFetch.ts` shared by scrape, discovery URL checks, and
   Firecrawl input; DNS validated at connect time (anti-rebinding), redirects re-validated

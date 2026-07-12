@@ -12,6 +12,7 @@ interface AutosaveFlow {
     result: any;
     posted: Record<string, boolean>;
     selected: string[];
+    facts: any[];
   };
   launchDate: string;
   projectId: string;
@@ -69,8 +70,8 @@ export function useAutosave(f: AutosaveFlow) {
             result: snap.result,
             posted: snap.posted,
             // Client-side plan state that isn't a server response: channel
-            // selection + launch date (the latter was silently dropped pre-M11).
-            meta: { selected: snap.selected, launchDate },
+            // selection, launch date, and the M13 fact ledger.
+            meta: { selected: snap.selected, launchDate, facts: snap.facts },
             updated_at: new Date().toISOString(),
           },
           { onConflict: "id" }
@@ -89,6 +90,7 @@ export function useAutosave(f: AutosaveFlow) {
           posted: snap.posted,
           selected: snap.selected,
           launchDate,
+          facts: snap.facts,
         });
         setLastSaved(timeNow());
       }

@@ -3,6 +3,52 @@ export type Provider = "claude" | "openai" | "deepseek";
 /** How grounded a model's conclusion is vs. inferred from a thin page. */
 export type Confidence = "high" | "medium" | "low";
 
+// ---- Fact Ledger (M13): every claim carries provenance ----
+
+/**
+ * observed       — evidence quote verified against the scraped page BY CODE.
+ * user-confirmed — set only by an explicit user action, never by the model.
+ * inferred       — model conclusion without verifying evidence.
+ * unknown        — the source doesn't say; must not be filled by guessing.
+ */
+export type FactStatus = "observed" | "user-confirmed" | "inferred" | "unknown";
+export type FactSourceType = "page" | "user" | "model" | "search";
+
+export interface Fact {
+  id: string;
+  field?: string; // profile field this fact backs (name/audience/stage/…)
+  claim: string; // "" when unknown
+  evidence?: string; // verbatim page quote — required for observed
+  sourceUrl?: string;
+  sourceType: FactSourceType;
+  status: FactStatus;
+  confidence: number; // 0..1
+  lastVerifiedAt: string; // ISO — evidence verified / user confirmed
+}
+
+/** One of the ≤3 high-value questions asked when key context is missing. */
+export interface ClarifyingQuestion {
+  id: "stage" | "conversionGoal" | "assets";
+  question: string;
+  why: string; // what the answer unlocks in the plan
+  options?: string[]; // quick-pick chips; free text always allowed
+}
+
+// ---- Output provenance (M13): who produced this, with which prompt, when ----
+
+export interface GenerationMeta {
+  provider: Provider;
+  model: string;
+  promptVersion: string;
+  generatedAt: string; // ISO
+}
+
+export interface GenerationFailure {
+  platformId: string;
+  platformName: string;
+  error: string; // user-safe message
+}
+
 export interface ProductProfile {
   name: string;
   tagline: string;
@@ -18,6 +64,11 @@ export interface ProductProfile {
   useCase?: string; // a concrete moment where someone reaches for it
   confidence?: Confidence; // how much of this is grounded vs. inferred
   confidenceNote?: string; // what had to be inferred (shown when not "high")
+  // --- launch context (M13) — usually unknown from the page; filled by the
+  // --- clarifying questions, never by model guesses.
+  stage?: string; // where the product is right now (pre-launch / launched / growing)
+  conversionGoal?: string; // the single conversion that matters most right now
+  assets?: string; // existing audience / assets / constraints
 }
 
 export interface PlatformPost {
@@ -43,6 +94,7 @@ export interface PlatformContent {
   platformName: string;
   posts: PlatformPost[];
   playbook?: PlatformPlaybook; // M7 — per-platform operating guidance
+  meta?: GenerationMeta; // M13 — provider/model/promptVersion/time of this output
 }
 
 export interface ScheduleItem {
@@ -56,20 +108,47 @@ export interface ScheduleItem {
 export interface GenerateResult {
   content: PlatformContent[];
   schedule: ScheduleItem[];
+  failures?: GenerationFailure[]; // M13 — channels that failed (individually retryable)
 }
 
 export type Priority = "high" | "medium" | "low";
 
+// ---- Explainable scoring (M13): the model rates dimensions with reasons; the
+// ---- total and priority are computed deterministically in code (lib/scoring.ts).
+
+export interface ScoreDimension {
+  score: number; // 0..10
+  reason: string; // grounded one-liner
+  evidence?: string; // supporting quote/fact text
+  factIds?: string[]; // ledger facts this rating leans on
+}
+
+export type ScoreDimensionKey =
+  | "audienceFit" // is this product's audience actually here
+  | "intentFit" // are they here with intent this product can catch
+  | "nativeContentFit" // does the product make content natives upvote
+  | "founderAccess" // can THIS founder credibly show up here
+  | "effort" // code-derived from the catalog (cost, inverted in the total)
+  | "risk" // 10 = most likely to get flagged/buried (inverted in the total)
+  | "evidenceQuality"; // code-derived from fact grounding
+
+export type ScoreBreakdown = Record<ScoreDimensionKey, ScoreDimension>;
+
 export interface PlatformRecommendation {
   platformId: string;
   platformName: string;
-  score: number; // 0-100 fit for this product
-  priority: Priority;
+  score: number; // 0-100 — computed by code from the breakdown (never by the model)
+  priority: Priority; // derived from score thresholds in code
   effort?: "low" | "medium" | "high"; // attached from the platform catalog
   confidence?: Confidence; // the model's confidence in this fit call
   rationale: string; // why this platform, for this product
   angle: string; // the specific marketing angle to use here
   bestMove?: string; // the single highest-leverage action on this channel
+  breakdown?: ScoreBreakdown; // M13 — per-dimension scores + reasons (absent on legacy saves)
+  venue?: string; // M13 — the exact community/venue the bestMove targets
+  sources?: string[]; // M13 — grounding URLs (only ever from validated discoveries)
+  provenance?: "grounded" | "inferred"; // M13 — "grounded" only with real sources
+  fallback?: boolean; // M13 — deterministic placeholder (model never assessed it)
 }
 
 // ---- The CMO plan (M7): the strategic narrative around the channel ranking ----
@@ -118,6 +197,7 @@ export interface MarketingStrategy {
   recommendations: PlatformRecommendation[]; // ALL platforms, scored & ranked
   // Phase-2: communities/subreddits/competitor mentions discovered live on the web
   discoveries?: DiscoveredChannel[];
+  meta?: GenerationMeta; // M13 — provider/model/promptVersion/time of this plan
 }
 
 export interface DiscoveredChannel {
@@ -164,6 +244,7 @@ export interface CopilotRequest {
   profile: ProductProfile;
   strategy: MarketingStrategy;
   result?: GenerateResult | null;
+  facts?: Fact[]; // M13 — the copilot answers with the same provenance discipline
   launchDate?: string;
   action: CopilotAction;
   question?: string; // free question / rewrite direction / pasted feedback

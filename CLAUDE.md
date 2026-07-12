@@ -42,7 +42,12 @@ app/
 lib/
   types.ts              All shared types (Provider, ProductProfile, MarketingStrategy, ...)
   platforms.ts          THE platform universe (catalog + per-platform voice rules). Most-tuned file.
-  llm.ts                Claude/OpenAI abstraction → generateJson()
+  llm.ts                Claude/OpenAI/DeepSeek abstraction → generateJson() / generateJsonMeta()
+  facts.ts              Fact Ledger engine: quote-verified statuses (observed/user-confirmed/
+                        inferred/unknown), ≤3 clarifying-question picker, prompt partitioning
+  analysis.ts           Analyze engine (profile + enforced facts + questions) — route & evals share it
+  scoring.ts            Explainable scoring: model rates dimensions, CODE computes the 0-100 total,
+                        19-platform completeness pipeline (retry→fallback), venue grounding
   generate.ts           Per-platform content+playbook prompt (generatePlatformPosts) — shared by generate+regenerate
   copilot.ts            Launch Copilot: compact plan-context builder + per-action prompts (runCopilot)
   voice.ts              ANTI_AI_RULES — house rules injected into content prompts to kill AI tells
@@ -78,7 +83,10 @@ components/
                         PlanSummary (shared plan-section cards), CopilotPanel (Launch Copilot drawer),
                         ProjectBar, SignIn, Paywall, UsageBadge
   landing/              Nav, Hero, HowItWorks, PlatformShowcase, Pricing, FAQ, Footer
-tests/                  vitest suites: urlPolicy, safeFetch, billing, webhook route, validate
+docs/M13-trust-layer.md Design + migration doc for the trust layer (facts/scoring/partial success)
+tests/                  vitest suites: urlPolicy, safeFetch, billing, webhook route, validate,
+                        golden (12-fixture offline evals), generateRoute; eval.live (gated, live)
+tests/golden/           fixtures.ts — 12 product-type golden fixtures with ground truth
 supabase/schema.sql     projects (+ meta jsonb) + entitlements + webhook_events, row-level security
 ```
 
@@ -100,9 +108,10 @@ npm install
 cp .env.example .env     # ANTHROPIC_API_KEY and/or OPENAI_API_KEY (Supabase keys optional)
 npm run dev              # landing at /, tool at /app
 npm run typecheck        # tsc --noEmit
-npm test                 # vitest (security suites in tests/)
+npm test                 # vitest (security + golden suites in tests/; offline, no API keys)
 npm run lint             # next lint (eslint-config-next)
 npm run build            # must stay green
+RUN_LIVE_EVAL=1 npx vitest run tests/eval.live.test.ts   # live provider eval → eval-results/
 ```
 
 ## Deploy (Vercel)
@@ -123,6 +132,48 @@ left unset → accounts off (anon + localStorage), generation open/unmetered, `P
 Redeploy: `npx vercel --prod --yes`. Push env from `.env.local`: `~/push-env.sh`.
 
 ## Status / changelog
+- **2026-07-12**: **M13 — trust layer: facts / inference / recommendations separated.** Design doc:
+  `docs/M13-trust-layer.md` (written first, incl. data-migration plan — no SQL change, all new
+  data rides existing jsonb + localStorage; every new type field optional so old saves render).
+  (1) **Fact Ledger** (`lib/facts.ts`): every claim carries status
+  observed/user-confirmed/inferred/unknown + confidence + sourceUrl + lastVerifiedAt. Enforced in
+  CODE: "observed" survives only when the model's evidence quote verifies against the scraped
+  page (verifyFacts); fabricated quotes demote to inferred (confidence capped), model-emitted
+  "user-confirmed" demotes, claims on unknowns are discarded. Users confirm/correct/delete via
+  new `FactLedger` component; corrections sync the backing profile field. Ledger is partitioned
+  into ESTABLISHED/INFERRED/UNKNOWN in every downstream prompt (strategy, generate, copilot).
+  (2) **≤3 clarifying questions** (code-picked, never model): stage / conversionGoal / assets
+  asked only when unknown or weakly inferred; answers → user-confirmed facts + new optional
+  profile fields; skipping leaves an honest unknown (prompts told not to assume).
+  (3) **Explainable scoring** (`lib/scoring.ts`): model rates audienceFit/intentFit/
+  nativeContentFit/founderAccess/risk (0-10 + reason + factIds); effort comes from the catalog,
+  evidenceQuality is computed from cited fact statuses; the 0-100 total = fixed weighted sum in
+  code (weights exported), priority derived from thresholds. StrategyView shows the full
+  per-dimension breakdown. (4) **19-platform guarantee**: zod-ish validation → dedupe → one
+  scoped retry for missing/invalid ids → deterministic flagged fallbacks; unknown platform ids
+  never invented. bestMove/venue get provenance: "grounded" ONLY when matching a validated live
+  discovery (URLs never taken from the model); otherwise labeled "inferred" in the UI.
+  (5) **Partial-success generation**: per-platform failures are caught → `failures[]` +
+  ResultsView panel with per-channel retry (splices into content/calendar at rank); every output
+  stamped with `meta {provider, model, promptVersion, generatedAt}` (PROMPT_VERSION consts in
+  analysis/scoring/generate). (6) **Golden evals**: 12 product-type fixtures
+  (`tests/golden/fixtures.ts`) + offline suites (faithfulness enforcement, completeness/repair,
+  dedupe, grounding, banned-phrase lint via `lintVoice` — voice.ts now exports BANNED_PHRASES as
+  the single source for both prompt and linter; demo content passes) + gated live eval
+  (`RUN_LIVE_EVAL=1`) writing eval-results/report.md. **Live results (2026-07-12)**: deepseek —
+  12/12 analyze ok, 100% name accuracy, 9% fabricated-evidence rate (7/81 caught+demoted), 96%
+  unknown-honesty, scoring first-pass 114/114 complete with 0 dupes/0 fallbacks, 92% of drafts
+  banned-phrase-free; openai (gpt-4o, subset) — 100% name accuracy but **58% fabricated-evidence
+  rate** (15/26, all caught by enforcement), only 37% of recs cite ledger facts (deepseek: 96%);
+  claude — HTTP 401, the ANTHROPIC_API_KEY in .env.local is invalid/expired (environment issue,
+  not code; production runs DEFAULT_PROVIDER=deepseek). Venue grounding was 0 in this run because
+  SEARCH_API_KEY is unset locally (mechanism covered by offline tests + demo). Demo rebuilt with
+  the production assembly functions (facts incl. all statuses, 8 breakdowns, computed totals,
+  grounded reddit/github chips). Gates green: typecheck ✓, 168 offline tests ✓, lint ✓, build ✓;
+  verified in browser (demo breakdown/ledger UIs + real deepseek analyze of example.com →
+  observed-with-quote vs inferred chips, 3 questions → answer → user-confirmed + question count
+  drops). Known gap: demo has 8 hand-authored recommendations, not 19 (pre-M13 posture; real runs
+  always return 19).
 - **2026-07-11**: **M12 — P0 security hardening** (no product changes). (1) **SSRF**: new
   `lib/urlPolicy.ts` + `lib/safeFetch.ts` shared by scrape, discovery URL checks, and Firecrawl
   input — http/https+standard ports only; localhost/private/loopback/link-local/multicast/

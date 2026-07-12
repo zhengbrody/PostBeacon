@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { scrapeUrl } from "@/lib/scrape";
-import { generateJson } from "@/lib/llm";
+import { analyzeScrapedPage } from "@/lib/analysis";
 import { guardRoute } from "@/lib/usage";
 import { analyzeBodySchema, apiError, parseBody, readJsonBody } from "@/lib/validate";
 
@@ -16,39 +16,15 @@ export async function POST(req: NextRequest) {
     const { url, provider } = parseBody(analyzeBodySchema, await readJsonBody(req));
 
     const page = await scrapeUrl(url);
+    const { profile, facts, questions, meta } = await analyzeScrapedPage(page, provider);
 
-    const profile = await generateJson({
-      provider,
-      maxTokens: 2000,
-      system:
-        "You are a sharp product strategist doing a first-pass diagnosis of a product from its landing page. Don't just lift the marketing copy — form a real point of view on what this is, who would actually pay attention, and why. Be concrete and specific, no fluff. Landing pages oversell; translate hype into the plain underlying truth. If the page is thin, infer sensibly and lower your confidence — never fabricate specifics the page doesn't support, and name what you inferred in confidenceNote.",
-      user: `Here is the scraped landing page.
-
-URL: ${page.url}
-TITLE: ${page.title}
-META: ${page.description}
-HEADINGS: ${page.headings.join(" | ")}
-BODY (truncated): ${page.text}
-
-Return a JSON object with exactly these keys:
-{
-  "name": string,            // product name
-  "tagline": string,         // one crisp line
-  "valueProp": string,       // the core promise, 1-2 sentences
-  "audience": string,        // who it's for, specific
-  "differentiators": string[], // 2-4 things that genuinely set it apart
-  "features": string[],      // 3-6 key features
-  "tone": string,            // the product's own voice, e.g. "playful, technical"
-  "category": string,        // e.g. "dev tool", "SaaS", "AI app"
-  "whatItIs": string,        // plain language, no marketing: what it actually does for a person
-  "whyCare": string,         // the real pain or desire that makes someone care — be honest
-  "useCase": string,         // one concrete moment where someone reaches for this
-  "confidence": "high"|"medium"|"low", // how grounded this read is vs. inferred from a thin page
-  "confidenceNote": string   // one line on what you had to infer (empty string if confidence is high)
-}`,
+    return NextResponse.json({
+      profile,
+      facts,
+      questions,
+      meta,
+      page: { url: page.url, title: page.title },
     });
-
-    return NextResponse.json({ profile, page: { url: page.url, title: page.title } });
   } catch (err) {
     return apiError(err, "Analyze failed");
   }
