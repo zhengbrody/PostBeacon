@@ -6,6 +6,7 @@ import { loadDraft } from "@/lib/storage";
 import { DEMO_PROJECT } from "@/lib/demo";
 import { PLATFORMS } from "@/lib/platforms";
 import type { ContextField } from "@/lib/facts";
+import { variantDirection } from "@/lib/today";
 import {
   flowReducer,
   initialFlowState,
@@ -14,11 +15,14 @@ import {
 } from "./launchFlowReducer";
 import type {
   Provider,
+  Experiment,
   MarketingStrategy,
+  Outcome,
   PlatformPost,
   PlatformRecommendation,
   ProductProfile,
   ScheduleItem,
+  TaskRecord,
 } from "@/lib/types";
 
 export type { Step };
@@ -155,6 +159,43 @@ export function useLaunchFlow() {
     return upsertChannel(platformId, `Retrying ${name}…`);
   };
 
+  // Follow-up variant for an analyzed experiment: the ONLY model call in the
+  // loop, on demand. Direction is built in code from the outcome data; the
+  // rewrite lands as a new draft on that channel. Never auto-posts.
+  const generateVariant = (experiment: Experiment) => {
+    const verdict = experiment.verdict;
+    if (!verdict) return Promise.resolve();
+    return run(async () => {
+      if (!profile || !state.strategy) return;
+      const platform = PLATFORMS.find((p) => p.id === experiment.platformId);
+      const res = await api.copilot({
+        provider,
+        profile,
+        strategy: state.strategy,
+        result: state.result,
+        facts,
+        launchDate: state.launchDate,
+        action: "rewrite",
+        targetPlatformId: experiment.platformId,
+        question: variantDirection(experiment, verdict),
+      });
+      const rw = res.rewrites?.[0];
+      if (!rw?.body) throw new Error("No variant came back — try again.");
+      dispatch({
+        type: "VARIANT_ADDED",
+        platformId: experiment.platformId,
+        post: {
+          hook: rw.hook || rw.label,
+          body: rw.body,
+          imageSuggestion: "",
+          bestTime: platform?.bestTime ?? "",
+          caveats: "",
+        },
+        note: `Generated a follow-up variant for ${experiment.platformName}`,
+      });
+    }, `Writing a follow-up variant for ${experiment.platformName}…`);
+  };
+
   const loadProject = (p: LoadedProject) =>
     dispatch({ type: "PROJECT_LOADED", project: p, demo: false });
 
@@ -199,6 +240,7 @@ export function useLaunchFlow() {
       posted: state.posted,
       selected: state.selected,
       facts: state.facts,
+      workspace: state.workspace,
     }),
     [
       state.url,
@@ -208,6 +250,7 @@ export function useLaunchFlow() {
       state.posted,
       state.selected,
       state.facts,
+      state.workspace,
     ]
   );
 
@@ -273,6 +316,18 @@ export function useLaunchFlow() {
     reset: () => dispatch({ type: "RESET" }),
     loadProject,
     snapshot,
+    // ---- workspace (M15) ----
+    workspace: state.workspace,
+    setWeeklyMinutes: (minutes?: number) =>
+      dispatch({ type: "WEEKLY_MINUTES_SET", minutes }),
+    actTask: (record: TaskRecord) => dispatch({ type: "TASK_ACTED", record }),
+    publishExperiment: (experiment: Experiment, taskId?: string) =>
+      dispatch({ type: "EXPERIMENT_CREATED", experiment, taskId }),
+    recordOutcome: (experimentId: string, outcome: Outcome) =>
+      dispatch({ type: "OUTCOME_RECORDED", experimentId, outcome }),
+    stopExperiment: (experimentId: string) =>
+      dispatch({ type: "EXPERIMENT_STOPPED", experimentId }),
+    generateVariant,
   };
 }
 

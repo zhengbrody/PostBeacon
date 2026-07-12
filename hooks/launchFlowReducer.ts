@@ -7,17 +7,22 @@ import {
   type ContextField,
 } from "@/lib/facts";
 import { orderByRecommendation, scheduleEntryFor, sortSchedule } from "@/lib/plan";
+import { verdictFor } from "@/lib/today";
 import type {
   ClarifyingQuestion,
+  Experiment,
   Fact,
   GenerateResult,
   GenerationMeta,
   MarketingStrategy,
+  Outcome,
   PlatformPlaybook,
   PlatformPost,
   PlatformRecommendation,
   ProductProfile,
   ScheduleItem,
+  TaskRecord,
+  WorkspaceState,
 } from "@/lib/types";
 
 /**
@@ -44,7 +49,10 @@ export interface FlowState {
   launchDate: string;
   projectId: string; // stable id for autosave upsert
   demo: boolean; // viewing the baked-in example (autosave paused)
+  workspace: WorkspaceState; // M15 — experiments, task log, weekly budget
 }
+
+export const emptyWorkspace: WorkspaceState = { experiments: [], taskLog: [] };
 
 export const initialFlowState: FlowState = {
   step: "input",
@@ -59,6 +67,7 @@ export const initialFlowState: FlowState = {
   launchDate: "",
   projectId: "",
   demo: false,
+  workspace: emptyWorkspace,
 };
 
 /** Payload for one channel's freshly generated content (regenerate/add/retry). */
@@ -80,7 +89,13 @@ export interface LoadedProject {
   selected?: string[];
   launchDate?: string;
   facts?: Fact[];
-  meta?: { selected?: string[]; launchDate?: string; facts?: Fact[] } | null;
+  workspace?: WorkspaceState;
+  meta?: {
+    selected?: string[];
+    launchDate?: string;
+    facts?: Fact[];
+    workspace?: WorkspaceState;
+  } | null;
 }
 
 export type FlowAction =
@@ -117,7 +132,14 @@ export type FlowAction =
   | { type: "SCHEDULE_ITEM_ADDED"; item: ScheduleItem }
   | { type: "POSTED_TOGGLED"; id: string }
   | { type: "LAUNCH_DATE_SET"; date: string }
-  | { type: "PROJECT_ID_SET"; id: string };
+  | { type: "PROJECT_ID_SET"; id: string }
+  // ---- workspace (M15) ----
+  | { type: "WEEKLY_MINUTES_SET"; minutes?: number }
+  | { type: "TASK_ACTED"; record: TaskRecord }
+  | { type: "EXPERIMENT_CREATED"; experiment: Experiment; taskId?: string }
+  | { type: "OUTCOME_RECORDED"; experimentId: string; outcome: Outcome }
+  | { type: "EXPERIMENT_STOPPED"; experimentId: string }
+  | { type: "VARIANT_ADDED"; platformId: string; post: PlatformPost; note: string };
 
 // Default channel set: the 4 best-scoring recommendations. A tight default —
 // content is only written for checked channels, and a focused plan beats a
@@ -164,6 +186,14 @@ export function normalize(s: FlowState): FlowState {
   }
   if (!next.result && Object.keys(next.posted).length) {
     next = { ...next, posted: {} };
+  }
+  if (
+    !next.result &&
+    (next.workspace.experiments.length || next.workspace.taskLog.length)
+  ) {
+    // No generated plan ⇒ no workspace history (fresh analyze / rebuilt
+    // strategy start a fresh campaign; per-channel edits never clear this).
+    next = { ...next, workspace: { ...next.workspace, experiments: [], taskLog: [] } };
   }
   if (next.result && Object.keys(next.posted).length) {
     const valid = new Set(
@@ -212,6 +242,9 @@ function transition(s: FlowState, a: FlowAction): FlowState {
         // (pre-M11) → derive a fresh default.
         selected:
           p.selected ?? p.meta?.selected ?? defaultSelection(p.strategy?.recommendations),
+        // Workspace: flat field (local draft v4) or meta (Supabase row);
+        // pre-M15 saves have neither → empty loop history.
+        workspace: p.workspace ?? p.meta?.workspace ?? emptyWorkspace,
         demo: a.demo,
         // Open at the deepest step the loaded data supports.
         ...(p.result
@@ -238,6 +271,7 @@ function transition(s: FlowState, a: FlowAction): FlowState {
         selected: [],
         result: null,
         posted: {},
+        workspace: { ...emptyWorkspace, weeklyMinutes: s.workspace.weeklyMinutes },
         step: "profile",
       };
 
@@ -452,6 +486,116 @@ function transition(s: FlowState, a: FlowAction): FlowState {
 
     case "PROJECT_ID_SET":
       return { ...s, projectId: a.id };
+
+    // ---- workspace (M15) ----
+
+    case "WEEKLY_MINUTES_SET":
+      return { ...s, workspace: { ...s.workspace, weeklyMinutes: a.minutes } };
+
+    case "TASK_ACTED":
+      // One record per card id — acting twice replaces (idempotent).
+      return {
+        ...s,
+        workspace: {
+          ...s.workspace,
+          taskLog: [...s.workspace.taskLog.filter((t) => t.id !== a.record.id), a.record],
+        },
+      };
+
+    case "EXPERIMENT_CREATED": {
+      // Publishing by hand: the experiment starts the loop, the draft is
+      // marked posted, and the Today card (if any) is logged done — one
+      // transition so they can never drift apart.
+      const taskLog = a.taskId
+        ? [
+            ...s.workspace.taskLog.filter((t) => t.id !== a.taskId),
+            {
+              id: a.taskId,
+              kind: "post" as const,
+              title: `Post to ${a.experiment.platformName}`,
+              status: "done" as const,
+              estMinutes: 0,
+              at: a.experiment.publishedAt,
+            },
+          ]
+        : s.workspace.taskLog;
+      return {
+        ...s,
+        posted: {
+          ...s.posted,
+          [`${a.experiment.platformId}-${a.experiment.postIdx}`]: true,
+        },
+        workspace: {
+          ...s.workspace,
+          experiments: [...s.workspace.experiments, a.experiment],
+          taskLog,
+        },
+      };
+    }
+
+    case "OUTCOME_RECORDED": {
+      // Verdict is computed HERE, deterministically — recording results and
+      // getting the read are one atomic step (a completed learning loop).
+      return {
+        ...s,
+        workspace: {
+          ...s.workspace,
+          experiments: s.workspace.experiments.map((e) => {
+            if (e.id !== a.experimentId) return e;
+            const verdict = verdictFor(a.outcome, {
+              platformName: e.platformName,
+              angle: e.angle,
+              goal: s.profile?.conversionGoal,
+            });
+            return {
+              ...e,
+              outcomes: [...e.outcomes, a.outcome],
+              verdict,
+              status: e.status === "stopped" ? e.status : ("analyzed" as const),
+            };
+          }),
+        },
+      };
+    }
+
+    case "EXPERIMENT_STOPPED":
+      return {
+        ...s,
+        workspace: {
+          ...s.workspace,
+          experiments: s.workspace.experiments.map((e) =>
+            e.id === a.experimentId ? { ...e, status: "stopped" as const } : e
+          ),
+        },
+      };
+
+    case "VARIANT_ADDED":
+      // Append the follow-up variant as a new draft on that channel, and log
+      // it so the timeline shows the loop continuing.
+      if (!s.result) return s;
+      return {
+        ...s,
+        result: {
+          ...s.result,
+          content: s.result.content.map((c) =>
+            c.platformId === a.platformId ? { ...c, posts: [...c.posts, a.post] } : c
+          ),
+        },
+        workspace: {
+          ...s.workspace,
+          taskLog: [
+            ...s.workspace.taskLog,
+            {
+              id: `variant:${a.platformId}:${Date.now()}`,
+              kind: "custom",
+              title: a.note,
+              status: "done",
+              estMinutes: 0,
+              at: new Date().toISOString(),
+            },
+          ],
+        },
+      };
   }
 }
 

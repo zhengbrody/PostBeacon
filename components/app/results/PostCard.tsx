@@ -11,11 +11,13 @@ export function PostCard({
   post,
   posted,
   onTogglePosted,
+  onPublish,
   onUpdate,
 }: {
   post: PlatformPost;
   posted: boolean;
-  onTogglePosted: () => void;
+  onTogglePosted: () => void; // un-mark only (the experiment record stays)
+  onPublish: () => void; // marking published goes through the experiment dialog
   onUpdate: (patch: Partial<PlatformPost>) => void;
 }) {
   const [copied, setCopied] = useState(false);
@@ -99,7 +101,7 @@ export function PostCard({
         <Button
           size="sm"
           variant={posted ? "primary" : "outline"}
-          onClick={onTogglePosted}
+          onClick={posted ? onTogglePosted : onPublish}
           className={posted ? "bg-emerald-700 hover:bg-emerald-600" : ""}
         >
           {posted ? "✓ Posted" : "Mark as posted"}

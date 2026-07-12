@@ -2,35 +2,44 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { flushSync } from "react-dom";
-import { Button } from "@/components/ui/Button";
 import { Tabs, type TabDef } from "@/components/ui/Tabs";
 import { FailuresCard } from "@/components/app/results/FailuresCard";
-import { OverviewTab } from "@/components/app/results/OverviewTab";
-import { ContentTab } from "@/components/app/results/ContentTab";
-import { CalendarTab } from "@/components/app/results/CalendarTab";
-import { ExecuteTab, hasExecuteContent } from "@/components/app/results/ExecuteTab";
-import { orderByRecommendation } from "@/lib/plan";
-import { toMarkdown, toJson, downloadFile, type ExportSnapshot } from "@/lib/export";
+import { TodayTab } from "@/components/app/results/TodayTab";
+import { PlanReport } from "@/components/app/results/PlanReport";
+import { TimelineTab } from "@/components/app/results/TimelineTab";
+import { ReviewTab } from "@/components/app/results/ReviewTab";
+import { PublishDialog, type PublishDetails } from "@/components/app/results/PublishDialog";
+import { OutcomePanel } from "@/components/app/results/OutcomePanel";
+import { deriveToday, type TodayAction } from "@/lib/today";
 import type {
+  Experiment,
   Fact,
   GenerateResult,
   MarketingStrategy,
+  Outcome,
+  OutcomeCheckpoint,
   PlatformPost,
   PlatformRecommendation,
   ProductProfile,
   ScheduleItem,
+  TaskRecord,
+  WorkspaceState,
 } from "@/lib/types";
 
-type TabId = "overview" | "content" | "calendar" | "execute";
+type Surface = "today" | "plan" | "timeline" | "review";
 
-/** The results operating dashboard: failure retries, four tabs (each its own
- *  module under results/), print force-mount, and export. Orchestration only —
- *  all tab UI lives in components/app/results/. */
+/**
+ * The launch workspace (M15). Post-generation home is TODAY — at most three
+ * actions; the full report, timeline, and weekly review each live one tap
+ * away (progressive disclosure: nothing is inlined into Today). Publishing
+ * and outcome dialogs are the only overlays, opened by their own actions.
+ */
 export function ResultsView({
   result,
   strategy,
   profile,
   facts,
+  workspace,
   posted,
   onTogglePosted,
   onRegenerate,
@@ -43,6 +52,11 @@ export function ResultsView({
   onRemoveChannel,
   onAddChannel,
   onRetryFailed,
+  onActTask,
+  onPublishExperiment,
+  onRecordOutcome,
+  onStopExperiment,
+  onGenerateVariant,
   launchDate,
   setLaunchDate,
   loading,
@@ -53,6 +67,7 @@ export function ResultsView({
   strategy: MarketingStrategy | null;
   profile: ProductProfile | null;
   facts: Fact[];
+  workspace: WorkspaceState;
   posted: Record<string, boolean>;
   onTogglePosted: (id: string) => void;
   onRegenerate: (platformId: string) => void;
@@ -68,42 +83,33 @@ export function ResultsView({
   onRemoveChannel: (platformId: string) => void;
   onAddChannel: (platformId: string) => void;
   onRetryFailed: (platformId: string) => void;
+  onActTask: (record: TaskRecord) => void;
+  onPublishExperiment: (experiment: Experiment, taskId?: string) => void;
+  onRecordOutcome: (experimentId: string, outcome: Outcome) => void;
+  onStopExperiment: (experimentId: string) => void;
+  onGenerateVariant: (experiment: Experiment) => void;
   launchDate: string;
   setLaunchDate: (v: string) => void;
   loading: boolean;
   demo: boolean;
   onReset: () => void;
 }) {
-  function exportSnapshot(): ExportSnapshot {
-    return { url: undefined, profile, strategy, result, launchDate, facts };
-  }
-  const slug = useMemo(
-    () =>
-      (profile?.name || "launch-plan")
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/(^-|-$)/g, ""),
-    [profile?.name]
+  const [surface, setSurface] = useState<Surface>("today");
+  const [publishFor, setPublishFor] = useState<{
+    platformId: string;
+    postIdx: number;
+  } | null>(null);
+  const [outcomeFor, setOutcomeFor] = useState<{
+    experimentId: string;
+    checkpoint: OutcomeCheckpoint;
+  } | null>(null);
+
+  const today = useMemo(
+    () => deriveToday({ launchDate, strategy, result, workspace }, new Date()),
+    [launchDate, strategy, result, workspace]
   );
 
-  // Channels in their ranked order (generate returns catalog order).
-  const orderedContent = useMemo(
-    () => orderByRecommendation(result.content, strategy?.recommendations),
-    [strategy, result.content]
-  );
-
-  const hasExecute = hasExecuteContent(strategy);
-
-  const tabs: TabDef[] = [
-    ...(strategy ? [{ id: "overview", label: "Overview" }] : []),
-    { id: "content", label: "Content", count: result.content.length },
-    { id: "calendar", label: "Calendar", count: result.schedule.length },
-    ...(hasExecute ? [{ id: "execute", label: "Execute" }] : []),
-  ];
-  const [tab, setTab] = useState<TabId>(strategy ? "overview" : "content");
-
-  // Print / Cmd+P: force-mount every tab body so the PDF is the full plan.
-  // flushSync makes React commit before the browser snapshots the page.
+  // Print / Cmd+P: force-mount the FULL report so the PDF is the whole plan.
   const [printing, setPrinting] = useState(false);
   useEffect(() => {
     const before = () => flushSync(() => setPrinting(true));
@@ -116,7 +122,69 @@ export function ResultsView({
     };
   }, []);
 
-  const show = (id: TabId) => printing || tab === id;
+  const surfaces: TabDef[] = [
+    {
+      id: "today",
+      label: "Today",
+      ...(today.dueRecordCount ? { count: today.dueRecordCount } : {}),
+    },
+    { id: "plan", label: "Full plan" },
+    { id: "timeline", label: "Timeline" },
+    { id: "review", label: "Review" },
+  ];
+
+  const publishContent = publishFor
+    ? result.content.find((c) => c.platformId === publishFor.platformId)
+    : undefined;
+  const outcomeExperiment = outcomeFor
+    ? workspace.experiments.find((e) => e.id === outcomeFor.experimentId)
+    : undefined;
+
+  function confirmPublish(details: PublishDetails) {
+    if (!publishContent) return;
+    const rec = strategy?.recommendations.find(
+      (r) => r.platformId === publishContent.platformId
+    );
+    const goal = profile?.conversionGoal || "conversion";
+    const experiment: Experiment = {
+      id: crypto.randomUUID(),
+      platformId: publishContent.platformId,
+      platformName: publishContent.platformName,
+      community: details.community,
+      angle: details.angle || rec?.angle || "",
+      variant: details.variant,
+      hypothesis: `"${details.angle || rec?.angle || "this angle"}" on ${
+        details.community || publishContent.platformName
+      } will produce ${goal} signal within 72h`,
+      trackedUrl: details.trackedUrl || undefined,
+      publishedAt: new Date().toISOString(),
+      status: "live",
+      postIdx: details.postIdx,
+      outcomes: [],
+    };
+    onPublishExperiment(experiment, `post:${publishContent.platformId}`);
+    setPublishFor(null);
+  }
+
+  const skipTask = (a: TodayAction) =>
+    onActTask({
+      id: a.id,
+      kind: a.kind === "record" ? "record" : a.kind === "post" ? "post" : "custom",
+      title: a.title,
+      status: "skipped",
+      estMinutes: a.estMinutes,
+      at: new Date().toISOString(),
+    });
+
+  const doneCustom = (a: TodayAction) =>
+    onActTask({
+      id: a.id,
+      kind: "custom",
+      title: a.title,
+      status: "done",
+      estMinutes: a.estMinutes,
+      at: new Date().toISOString(),
+    });
 
   return (
     <div className="space-y-6">
@@ -128,76 +196,93 @@ export function ResultsView({
         />
       )}
 
-      <Tabs tabs={tabs} active={tab} onSelect={(id) => setTab(id as TabId)} />
+      <div className="no-print">
+        <Tabs
+          tabs={surfaces}
+          active={surface}
+          onSelect={(id) => setSurface(id as Surface)}
+        />
+      </div>
 
-      {strategy && show("overview") && (
-        <OverviewTab
-          strategy={strategy}
-          printing={printing}
-          onUpdateStrategy={onUpdateStrategy}
+      {surface === "today" && !printing && (
+        <TodayTab
+          view={today}
+          loading={loading}
+          onPublish={(platformId) => {
+            const content = result.content.find((c) => c.platformId === platformId);
+            const firstUnposted =
+              content?.posts.findIndex((_, i) => !posted[`${platformId}-${i}`]) ?? 0;
+            setPublishFor({ platformId, postIdx: Math.max(0, firstUnposted) });
+          }}
+          onRecord={(a) => {
+            if (a.experimentId && a.checkpoint) {
+              setOutcomeFor({ experimentId: a.experimentId, checkpoint: a.checkpoint });
+            }
+          }}
+          onSkip={skipTask}
+          onDoneCustom={doneCustom}
+          onOpenContent={() => setSurface("plan")}
+          onOpenReview={() => setSurface("review")}
         />
       )}
 
-      {show("content") && (
-        <ContentTab
-          orderedContent={orderedContent}
+      {(surface === "plan" || printing) && (
+        <PlanReport
           result={result}
           strategy={strategy}
+          profile={profile}
+          facts={facts}
           posted={posted}
-          loading={loading}
-          demo={demo}
-          printing={printing}
           onTogglePosted={onTogglePosted}
           onRegenerate={onRegenerate}
           onUpdatePost={onUpdatePost}
+          onUpdateStrategy={onUpdateStrategy}
           onUpdateRecommendation={onUpdateRecommendation}
+          onUpdateScheduleItem={onUpdateScheduleItem}
+          onRemoveScheduleItem={onRemoveScheduleItem}
+          onAddScheduleItem={onAddScheduleItem}
           onRemoveChannel={onRemoveChannel}
           onAddChannel={onAddChannel}
-        />
-      )}
-
-      {show("calendar") && (
-        <CalendarTab
-          schedule={result.schedule}
+          onRequestPublish={(platformId, postIdx) => setPublishFor({ platformId, postIdx })}
+          printing={printing}
           launchDate={launchDate}
           setLaunchDate={setLaunchDate}
-          printing={printing}
-          onUpdateItem={onUpdateScheduleItem}
-          onRemoveItem={onRemoveScheduleItem}
-          onAddItem={onAddScheduleItem}
+          loading={loading}
+          demo={demo}
+          onReset={onReset}
         />
       )}
 
-      {hasExecute && show("execute") && strategy && (
-        <ExecuteTab strategy={strategy} printing={printing} />
+      {surface === "timeline" && !printing && <TimelineTab workspace={workspace} />}
+
+      {surface === "review" && !printing && (
+        <ReviewTab workspace={workspace} strategy={strategy} />
       )}
 
-      <div className="no-print flex flex-wrap gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() =>
-            downloadFile(`${slug}.md`, toMarkdown(exportSnapshot()), "text/markdown")
-          }
-        >
-          ⬇ Markdown
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() =>
-            downloadFile(`${slug}.json`, toJson(exportSnapshot()), "application/json")
-          }
-        >
-          ⬇ JSON
-        </Button>
-        <Button variant="outline" size="sm" onClick={() => window.print()}>
-          🖨 Print / PDF
-        </Button>
-        <Button variant="outline" size="sm" onClick={onReset} className="ml-auto">
-          ← New product
-        </Button>
-      </div>
+      {publishFor && publishContent && (
+        <PublishDialog
+          content={publishContent}
+          rec={strategy?.recommendations.find(
+            (r) => r.platformId === publishFor.platformId
+          )}
+          defaultPostIdx={publishFor.postIdx}
+          onConfirm={confirmPublish}
+          onClose={() => setPublishFor(null)}
+        />
+      )}
+
+      {outcomeFor && outcomeExperiment && (
+        <OutcomePanel
+          experiment={outcomeExperiment}
+          checkpoint={outcomeFor.checkpoint}
+          strategy={strategy}
+          loading={loading}
+          onSave={(outcome) => onRecordOutcome(outcomeExperiment.id, outcome)}
+          onGenerateVariant={() => onGenerateVariant(outcomeExperiment)}
+          onStop={() => onStopExperiment(outcomeExperiment.id)}
+          onClose={() => setOutcomeFor(null)}
+        />
+      )}
     </div>
   );
 }

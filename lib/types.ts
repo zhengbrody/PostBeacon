@@ -251,3 +251,67 @@ export interface CopilotRequest {
   targetPlatformId?: string; // required for "rewrite" and "first-replies"
   history?: CopilotMessage[]; // last few turns, session-scoped (not persisted)
 }
+
+// ---- Launch workspace (M15): the continuing loop after the plan ----
+// PostBeacon NEVER auto-posts. Experiments record what the founder published
+// by hand; outcomes are typed or pasted in; verdicts are computed in code.
+
+export type ExperimentStatus = "live" | "analyzed" | "stopped";
+export type OutcomeCheckpoint = "24h" | "72h" | "manual";
+export type VerdictCall = "supported" | "promising" | "weak" | "no-signal";
+
+/** One check-in's results. Absent numbers mean "not measured", never 0. */
+export interface Outcome {
+  id: string;
+  checkpoint: OutcomeCheckpoint;
+  recordedAt: string; // ISO
+  impressions?: number;
+  replies?: number;
+  clicks?: number;
+  signups?: number;
+  revenue?: number;
+  qualitativeFeedback?: string; // typed or pasted — comments, DMs, notes
+}
+
+/** The code-computed read on an experiment (rule-based, explainable). */
+export interface ExperimentVerdict {
+  call: VerdictCall;
+  reason: string; // the rule that fired, in plain language
+  advice: string; // continue/stop + which angle/channel
+  decidedAt: string; // ISO — a completed learning loop counts from here
+}
+
+/** One hand-published post being tracked. Created by the Publish dialog. */
+export interface Experiment {
+  id: string;
+  platformId: string;
+  platformName: string;
+  community: string; // e.g. "r/selfhosted"
+  angle: string;
+  variant: string; // the hook actually used
+  hypothesis: string;
+  trackedUrl?: string;
+  publishedAt: string; // ISO
+  status: ExperimentStatus;
+  postIdx: number; // which draft was published
+  outcomes: Outcome[];
+  verdict?: ExperimentVerdict;
+}
+
+/** A Today card the user acted on (done/skipped). Cards themselves are
+ *  derived fresh each render; only actions taken are stored. */
+export interface TaskRecord {
+  id: string; // the derived card's stable id
+  kind: "post" | "record" | "custom";
+  title: string;
+  status: "done" | "skipped";
+  estMinutes: number;
+  at: string; // ISO
+}
+
+/** Everything the workspace persists beyond the plan itself. */
+export interface WorkspaceState {
+  weeklyMinutes?: number; // intake: weekly time budget
+  experiments: Experiment[];
+  taskLog: TaskRecord[];
+}

@@ -34,6 +34,27 @@ describe("draft schema migrations", () => {
     expect(once.facts).toEqual(current.facts);
   });
 
+  it("v3 (M13) drafts gain an empty workspace (v4 migration)", () => {
+    const d = migrateDraft({
+      schemaVersion: 3,
+      url: "x.com",
+      facts: [{ id: "audience", claim: "devs" }],
+    })!;
+    expect(d.schemaVersion).toBe(DRAFT_SCHEMA_VERSION);
+    expect(d.workspace).toEqual({ experiments: [], taskLog: [] });
+    expect(d.facts).toHaveLength(1); // untouched
+  });
+
+  it("current (v4) drafts keep their workspace untouched", () => {
+    const workspace = {
+      weeklyMinutes: 300,
+      experiments: [{ id: "e1" }],
+      taskLog: [{ id: "t1" }],
+    };
+    const d = migrateDraft({ schemaVersion: 4, url: "x.com", workspace })!;
+    expect(d.workspace).toEqual(workspace);
+  });
+
   it("rejects non-object garbage instead of throwing", () => {
     expect(migrateDraft(null)).toBeNull();
     expect(migrateDraft("corrupt")).toBeNull();

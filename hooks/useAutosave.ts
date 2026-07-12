@@ -3,7 +3,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSupabaseUser } from "@/components/app/SignIn";
 import { saveDraft, clearDraft, DRAFT_SCHEMA_VERSION } from "@/lib/storage";
-import type { Fact, GenerateResult, MarketingStrategy, ProductProfile } from "@/lib/types";
+import { syncWorkspaceTables } from "@/lib/workspace";
+import type {
+  Fact,
+  GenerateResult,
+  MarketingStrategy,
+  ProductProfile,
+  WorkspaceState,
+} from "@/lib/types";
 
 interface AutosaveFlow {
   snapshot: {
@@ -14,6 +21,7 @@ interface AutosaveFlow {
     posted: Record<string, boolean>;
     selected: string[];
     facts: Fact[];
+    workspace: WorkspaceState;
   };
   launchDate: string;
   projectId: string;
@@ -83,6 +91,7 @@ export function useAutosave(f: AutosaveFlow) {
               selected: snap.selected,
               launchDate,
               facts: snap.facts,
+              workspace: snap.workspace,
             },
             updated_at: new Date().toISOString(),
           },
@@ -91,6 +100,14 @@ export function useAutosave(f: AutosaveFlow) {
         if (!error) {
           clearDraft(); // migrated to the account
           setLastSaved(timeNow());
+          // Write-through to the normalized workspace tables (best-effort,
+          // feature-detected; meta.workspace above remains the hydration
+          // source — see docs/M15-workspace.md §11).
+          void syncWorkspaceTables(supabase, u.user.id, id, {
+            workspace: snap.workspace,
+            profile: snap.profile,
+            launchDate,
+          });
         }
       } else {
         saveDraft({
@@ -103,6 +120,7 @@ export function useAutosave(f: AutosaveFlow) {
           selected: snap.selected,
           launchDate,
           facts: snap.facts,
+          workspace: snap.workspace,
         });
         setLastSaved(timeNow());
       }

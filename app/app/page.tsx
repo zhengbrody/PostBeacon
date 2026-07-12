@@ -7,6 +7,7 @@ import { Stepper } from "@/components/app/Stepper";
 import { UrlStep } from "@/components/app/UrlStep";
 import { ProfileForm } from "@/components/app/ProfileForm";
 import { FactLedger } from "@/components/app/FactLedger";
+import { LaunchSetup } from "@/components/app/LaunchSetup";
 import { StrategyView } from "@/components/app/StrategyView";
 import { ResultsView } from "@/components/app/ResultsView";
 import { ProjectBar } from "@/components/app/ProjectBar";
@@ -152,6 +153,12 @@ function AppFlow({ f }: { f: ReturnType<typeof useLaunchFlow> }) {
             onDelete={f.deleteFact}
             onAnswer={f.answerQuestion}
           />
+          <LaunchSetup
+            launchDate={f.launchDate}
+            setLaunchDate={f.setLaunchDate}
+            weeklyMinutes={f.workspace.weeklyMinutes}
+            setWeeklyMinutes={f.setWeeklyMinutes}
+          />
           <ProfileForm
             profile={f.profile}
             setProfile={f.setProfile}
@@ -179,6 +186,7 @@ function AppFlow({ f }: { f: ReturnType<typeof useLaunchFlow> }) {
           strategy={f.strategy}
           profile={f.profile}
           facts={f.facts}
+          workspace={f.workspace}
           posted={f.posted}
           onTogglePosted={f.togglePosted}
           onRegenerate={f.regeneratePost}
@@ -191,6 +199,11 @@ function AppFlow({ f }: { f: ReturnType<typeof useLaunchFlow> }) {
           onRemoveChannel={f.removeChannel}
           onAddChannel={f.addChannel}
           onRetryFailed={f.retryFailed}
+          onActTask={f.actTask}
+          onPublishExperiment={f.publishExperiment}
+          onRecordOutcome={f.recordOutcome}
+          onStopExperiment={f.stopExperiment}
+          onGenerateVariant={f.generateVariant}
           launchDate={f.launchDate}
           setLaunchDate={f.setLaunchDate}
           loading={f.loading}

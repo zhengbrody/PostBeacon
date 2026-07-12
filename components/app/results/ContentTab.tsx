@@ -30,6 +30,7 @@ export function ContentTab({
   onUpdateRecommendation,
   onRemoveChannel,
   onAddChannel,
+  onRequestPublish,
 }: {
   orderedContent: PlatformContent[];
   result: GenerateResult;
@@ -47,6 +48,7 @@ export function ContentTab({
   ) => void;
   onRemoveChannel: (platformId: string) => void;
   onAddChannel: (platformId: string) => void;
+  onRequestPublish: (platformId: string, postIdx: number) => void;
 }) {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [addPick, setAddPick] = useState("");
@@ -83,6 +85,7 @@ export function ContentTab({
       onUpdatePost={onUpdatePost}
       onUpdateRec={(patch) => onUpdateRecommendation(c.platformId, patch)}
       onRemove={() => onRemoveChannel(c.platformId)}
+      onRequestPublish={(postIdx) => onRequestPublish(c.platformId, postIdx)}
     />
   );
 

@@ -61,6 +61,10 @@ lib/
   auth.ts               bearer(req) — read the Supabase token from a request
   usage.ts              Entitlement read/increment + FREE_LAUNCHES + daily cap (server metering)
   plan.ts               Shared plan shaping: rank ordering, canonical calendar entries (M14)
+  today.ts              Workspace engine (M15): Today derivation (≤3 actions), 24h/72h
+                        check-in due logic, rule-based verdicts, timeline, weekly review
+  workspace.ts          Write-through sync to the campaigns/experiments/outcomes/tasks
+                        tables (feature-detected, best-effort; meta.workspace hydrates)
   coerce.ts             unknown-typed coercers for loose JSON (replaces per-file any helpers, M14)
   async.ts              mapLimit — bounded-concurrency runner (route + evals share it, M14)
   errors.ts             PublicError/BlockedUrlError + ApiErrorBody/ApiErrorCode — THE error
@@ -90,19 +94,24 @@ hooks/
 components/
   ui/                   Button, Card, Badge, Spinner, Field, Tabs (design system primitives)
   app/                  Stepper, UrlStep, ProfileForm, FactLedger (provenance UI + questions),
-                        StrategyView (score breakdowns), ResultsView (tab orchestrator),
+                        LaunchSetup (M15 intake: date + weekly budget),
+                        StrategyView (score breakdowns), ResultsView (workspace orchestrator:
+                        Today default + Full plan/Timeline/Review),
                         PlanSummary, CopilotPanel, ProjectBar, SignIn, AuthScreen, Paywall,
                         UsageBadge, FeedbackCTA
-  app/results/          The results dashboard, one module per tab (M14): OverviewTab,
-                        ContentTab (master-detail) + ChannelBlock + PostCard, CalendarTab,
-                        ExecuteTab, FailuresCard, PrintHeading
+  app/results/          Workspace surfaces (M15): TodayTab, PublishDialog, OutcomePanel,
+                        TimelineTab, ReviewTab — plus the full report (PlanReport wrapping
+                        the M14 per-tab modules: OverviewTab, ContentTab + ChannelBlock +
+                        PostCard, CalendarTab, ExecuteTab, FailuresCard, PrintHeading)
   landing/              Nav, Hero, HowItWorks, PlatformShowcase, Pricing, FAQ, Footer
 docs/M13-trust-layer.md Design + migration doc for the trust layer (facts/scoring/partial success)
+docs/M15-workspace.md   PRD + state diagram + acceptance criteria for the launch workspace
 tests/                  vitest suites: urlPolicy, safeFetch, billing, webhook route, validate,
                         golden (12-fixture offline evals), generateRoute, flowReducer
                         (state-machine invariants), storage (draft migrations); eval.live (gated)
 tests/golden/           fixtures.ts — 12 product-type golden fixtures with ground truth
-supabase/schema.sql     projects + entitlements + webhook_events tables, row-level security
+supabase/schema.sql     projects + entitlements + webhook_events + M15 campaigns/
+                        experiments/outcomes/tasks tables (owner-only RLS)
 .github/workflows/ci.yml  typecheck · lint · format:check · offline tests · build on every push/PR
 eslint.config.mjs / .prettierrc.json   non-interactive lint + format (next lint is deprecated)
 ```
@@ -177,6 +186,30 @@ left unset → accounts off (anon + localStorage), generation open/unmetered, `P
 Redeploy: `npx vercel --prod --yes`. Push env from `.env.local`: `~/push-env.sh`.
 
 ## Status / changelog
+- **2026-07-12**: **M15 — Launch Workspace: from one-shot report to a continuing loop**
+  (PRD + state diagram + acceptance criteria written first: docs/M15-workspace.md; still
+  ZERO auto-posting). (1) Intake: Diagnose step now asks goal/stage/assets (M13 questions)
+  + launch date + weekly time budget (new LaunchSetup card; all skippable). (2) Post-
+  generation home is **Today** — ≤3 derived action cards (why-now, est minutes, linked
+  drafts, done/skip) with a weekly-budget line; the full report moved intact under
+  "Full plan" (Today · Full plan · Timeline · Review nav, progressive disclosure).
+  (3) Marking published opens a prefilled dialog → creates an **experiment**
+  {platform, community, angle, variant, publishedAt, trackedUrl, hypothesis}. (4) 24h/72h
+  check-ins surface on Today (+nav badge): impressions/replies/clicks/signups/revenue/
+  qualitative paste — manual only, absent ≠ 0. (5) Saving outcomes returns the read
+  IMMEDIATELY, computed in code (supported/promising/weak/no-signal + the rule that
+  fired + continue/stop advice + ≤3 next actions) and offers one-click follow-up
+  variant (the only LLM call in the loop, via the existing copilot rewrite) or stop.
+  (6) Timeline (event projection) + Weekly Review with the **north star: weekly
+  completed learning loops** (published→outcomes→verdict), channel scoreboard, ≤3
+  next-week suggestions. (7) Persistence: draft v4 (workspace migration + tests),
+  projects.meta.workspace (signed-in, zero SQL), and normalized campaigns/experiments/
+  outcomes/tasks tables with owner-only RLS (schema.sql, additive) written through
+  best-effort with feature detection (lib/workspace.ts). Engine (lib/today.ts) is pure
+  and unit-tested (20 tests); full loop verified in the browser: seeded 30h-old
+  experiment → Today badge + record card → outcomes → "hypothesis supported" verdict →
+  publish dialog (prefilled r/selfhosted) → Timeline/Review update → v4 draft survives
+  reload. 207 offline tests, all gates green.
 - **2026-07-12**: **M14 — behavior-preserving engineering cleanup.** (1) ResultsView (865
   lines) split into `components/app/results/` — one module per tab + ChannelBlock/PostCard/
   FailuresCard/PrintHeading; ResultsView is now a ~200-line orchestrator. (2) Plan state moved

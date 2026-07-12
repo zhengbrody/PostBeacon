@@ -20,6 +20,7 @@ export function ChannelBlock({
   onUpdatePost,
   onUpdateRec,
   onRemove,
+  onRequestPublish,
 }: {
   content: PlatformContent;
   rec?: PlatformRecommendation;
@@ -31,6 +32,7 @@ export function ChannelBlock({
   onUpdatePost: (platformId: string, idx: number, patch: Partial<PlatformPost>) => void;
   onUpdateRec: (patch: Partial<PlatformRecommendation>) => void;
   onRemove: () => void;
+  onRequestPublish: (postIdx: number) => void;
 }) {
   const pb = content.playbook;
   const [editingRec, setEditingRec] = useState(false);
@@ -139,6 +141,7 @@ export function ChannelBlock({
               post={post}
               posted={!!posted[id]}
               onTogglePosted={() => onTogglePosted(id)}
+              onPublish={() => onRequestPublish(i)}
               onUpdate={(patch) => onUpdatePost(content.platformId, i, patch)}
             />
           );
