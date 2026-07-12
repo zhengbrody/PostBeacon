@@ -14,6 +14,7 @@
  */
 
 import { fetchWithTimeout } from "./fetch";
+import { assertPublicHttpUrl } from "./urlPolicy";
 
 const RENDER_ENDPOINT =
   process.env.SCRAPE_API_URL || "https://api.firecrawl.dev/v1/scrape";
@@ -27,6 +28,9 @@ export function renderConfigured(): boolean {
 export async function renderUrl(url: string): Promise<string> {
   const key = process.env.SCRAPE_API_KEY;
   if (!key) throw new Error("SCRAPE_API_KEY not set");
+  // Same SSRF policy as our own fetches: never hand the renderer a private or
+  // internal target either (its requests come from infrastructure we pay for).
+  assertPublicHttpUrl(url);
 
   const res = await fetchWithTimeout(
     RENDER_ENDPOINT,

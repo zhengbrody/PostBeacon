@@ -169,7 +169,7 @@ export function CopilotPanel({
           {msgs.length === 0 && (
             <p className="text-xs leading-relaxed text-neutral-500">
               I wrote this launch plan. Ask why a channel ranks where it does, what to do
-              first, or paste the comments you got — I'll read them against the plan. For
+              first, or paste the comments you got — I&apos;ll read them against the plan. For
               rewrites, I hand back copy-ready versions you can apply to your drafts.
             </p>
           )}
@@ -279,7 +279,7 @@ export function CopilotPanel({
                 checked={feedbackMode}
                 onChange={(e) => setFeedbackMode(e.target.checked)}
               />
-              I'm pasting feedback I got
+              I&apos;m pasting feedback I got
             </label>
             <Button size="sm" disabled={busy || !input.trim()} onClick={submitFree}>
               Send

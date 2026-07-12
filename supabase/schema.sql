@@ -54,3 +54,13 @@ drop policy if exists "read own entitlement" on public.entitlements;
 create policy "read own entitlement" on public.entitlements
   for select
   using (auth.uid() = user_id);
+
+-- Webhook idempotency ledger: one row per processed webhook-id, so a replayed
+-- (or re-delivered) Polar event is acked without being processed twice.
+-- Written by the service role only; RLS with no policies denies everyone else.
+create table if not exists public.webhook_events (
+  id text primary key,
+  received_at timestamptz not null default now()
+);
+
+alter table public.webhook_events enable row level security;

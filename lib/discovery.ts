@@ -1,6 +1,8 @@
 import { generateJson } from "./llm";
 import { searchWeb, searchConfigured } from "./search";
-import { fetchWithTimeout } from "./fetch";
+import { safeFetch } from "./safeFetch";
+import { BlockedUrlError, PublicError } from "./errors";
+import { isPublicHttpUrl } from "./urlPolicy";
 import type { DiscoveredChannel, ProductProfile, Provider } from "./types";
 
 /**
@@ -58,13 +60,16 @@ Return JSON: { "channels": [ { "name": string, "url": string, "why": string, "so
     const channels = Array.isArray(data.channels) ? data.channels : [];
     const normalized = channels
       .filter((c: any) => c?.name && c?.url)
-      .slice(0, 10)
       .map((c: any) => ({
-        name: String(c.name),
-        url: String(c.url),
-        why: String(c.why || ""),
-        source: String(c.source || (hasGrounding ? "Tavily" : "AI")),
-      })) as DiscoveredChannel[];
+        name: String(c.name).slice(0, 300),
+        url: String(c.url).slice(0, 2048),
+        why: String(c.why || "").slice(0, 1000),
+        source: String(c.source || (hasGrounding ? "Tavily" : "AI")).slice(0, 100),
+      }))
+      // Model/search output is untrusted: drop anything that isn't a plain
+      // public http(s) URL before it's probed, rendered as a link, or saved.
+      .filter((c: DiscoveredChannel) => isPublicHttpUrl(c.url))
+      .slice(0, 10) as DiscoveredChannel[];
 
     const liveness = await Promise.all(normalized.map((c) => checkUrl(c.url)));
 
@@ -102,10 +107,21 @@ type Liveness = "live" | "dead" | "unknown";
 async function checkUrl(url: string): Promise<Liveness> {
   const probe = async (method: "HEAD" | "GET"): Promise<Liveness> => {
     try {
-      const res = await fetchWithTimeout(url, { method, redirect: "follow" }, 6000);
+      // safeFetch validates every redirect hop, so a "live" community link
+      // can't bounce the server into a private address.
+      const res = await safeFetch(url, {
+        method,
+        timeoutMs: 6000,
+        maxRedirects: 3,
+        maxBytes: 65_536, // liveness only — never pull a whole page here
+      });
       if (res.status === 404 || res.status === 410) return "dead";
       return "live"; // 403/401/405 etc. = exists but gated — still real
-    } catch {
+    } catch (err) {
+      // A policy rejection (e.g. redirect into a private range) means the URL
+      // is unusable as a recommendation — treat as dead so it's never validated.
+      if (err instanceof BlockedUrlError) return "dead";
+      if (err instanceof PublicError && err.status === 502) return "dead";
       return "unknown";
     }
   };

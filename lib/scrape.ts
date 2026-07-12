@@ -1,6 +1,8 @@
 import * as cheerio from "cheerio";
 import { renderUrl, renderConfigured } from "./render";
-import { fetchWithTimeout } from "./fetch";
+import { PublicError } from "./errors";
+import { assertPublicHttpUrl } from "./urlPolicy";
+import { safeFetch } from "./safeFetch";
 
 export interface ScrapedPage {
   url: string;
@@ -49,18 +51,22 @@ function looksEmpty(page: ScrapedPage): boolean {
 }
 
 async function fetchStatic(url: string): Promise<string> {
-  const res = await fetchWithTimeout(
-    url,
-    {
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (compatible; PostBeaconBot/1.0; +https://postbeacon.app)",
-      },
+  const res = await safeFetch(url, {
+    headers: {
+      "User-Agent":
+        "Mozilla/5.0 (compatible; PostBeaconBot/1.0; +https://postbeacon.app)",
     },
-    15000
-  );
-  if (!res.ok) throw new Error(`Fetch failed: ${res.status} ${res.statusText}`);
-  return res.text();
+    timeoutMs: 15000,
+    maxRedirects: 3,
+    maxBytes: 2_000_000,
+    // A landing page must be text; anything else (pdf, zip, image) is useless
+    // to the extractor and shouldn't be pulled at all.
+    contentTypes: /^(text\/html|application\/xhtml\+xml|text\/plain)\b/i,
+  });
+  if (!res.ok) {
+    throw new PublicError(`Fetch failed: ${res.status} ${res.statusText}`.trim(), 502);
+  }
+  return res.body;
 }
 
 /**
@@ -72,7 +78,11 @@ async function fetchStatic(url: string): Promise<string> {
  * static result if rendering is unavailable or fails.
  */
 export async function scrapeUrl(rawUrl: string): Promise<ScrapedPage> {
-  const url = rawUrl.startsWith("http") ? rawUrl : `https://${rawUrl}`;
+  const trimmed = rawUrl.trim();
+  const url = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  // Reject disallowed targets up front — before any fetch, and before the URL
+  // could reach the headless renderer.
+  assertPublicHttpUrl(url);
 
   let staticPage: ScrapedPage | null = null;
   try {

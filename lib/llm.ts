@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
+import { PublicError } from "./errors";
 import type { Provider } from "./types";
 
 const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-6";
@@ -25,8 +26,10 @@ export function availableProviders(): Provider[] {
 function resolveProvider(requested?: Provider): Provider {
   const avail = availableProviders();
   if (avail.length === 0) {
-    throw new Error(
-      "No model API key configured. Set ANTHROPIC_API_KEY, OPENAI_API_KEY, or DEEPSEEK_API_KEY in .env."
+    // PublicError: this exact message is safe (and useful) to show the user.
+    throw new PublicError(
+      "No model API key configured. Set ANTHROPIC_API_KEY, OPENAI_API_KEY, or DEEPSEEK_API_KEY in .env.",
+      503
     );
   }
   if (requested && avail.includes(requested)) return requested;

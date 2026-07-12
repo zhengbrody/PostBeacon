@@ -37,17 +37,30 @@ app/
   app/page.tsx          The tool — thin; wires useLaunchFlow to components/app/*
   api/
     analyze|strategy|generate|regenerate|providers|usage/route.ts   server endpoints
+    copilot/route.ts                                                 Launch Copilot (plan-scoped CMO chat)
     billing/{checkout,webhook}/route.ts                              Polar checkout + webhook
 lib/
   types.ts              All shared types (Provider, ProductProfile, MarketingStrategy, ...)
   platforms.ts          THE platform universe (catalog + per-platform voice rules). Most-tuned file.
-  llm.ts                Claude/OpenAI abstraction → generateJson()
+  llm.ts                Claude/OpenAI/DeepSeek abstraction → generateJson()
   generate.ts           Per-platform content prompt (generatePlatformPosts) — shared by generate+regenerate
+  copilot.ts            Launch Copilot: compact plan-context builder + per-action prompts (runCopilot)
+  voice.ts              ANTI_AI_RULES — house rules injected into content prompts to kill AI tells
+  demo.ts               DEMO_PROJECT — hand-authored full example plan (the no-API-key showcase)
+  site.ts               Public config (REPO_URL, FEEDBACK_URL) — NEXT_PUBLIC_* overridable
   export.ts             Launch plan → Markdown / JSON; downloadFile helper
   dates.ts              scheduleDate(launchDate, day) for the calendar
   auth.ts               bearer(req) — read the Supabase token from a request
-  usage.ts              Entitlement read/increment + FREE_LAUNCHES (server metering)
-  scrape.ts             Landing-page fetch + extract (static → render fallback)
+  usage.ts              Entitlement read/increment + FREE_LAUNCHES + daily cap (server metering)
+  errors.ts             PublicError/BlockedUrlError — the only error messages routes may expose
+  urlPolicy.ts          SSRF URL policy (schemes/ports/hostnames/IPv4+IPv6 ranges); isomorphic,
+                        also guards external <a href>s (isSafeExternalHref)
+  safeFetch.ts          SSRF-safe fetch for user/model URLs: DNS validated at connect time
+                        (anti-rebinding), per-hop redirect revalidation, size/type/time caps
+  validate.ts           zod schemas for every API body + readJsonBody size cap + apiError
+  billing.ts            Polar webhook verify (signature+timestamp) / event evaluation / idempotency
+  fetch.ts              fetchWithTimeout — OPERATOR-configured endpoints only (never user URLs)
+  scrape.ts             Landing-page fetch + extract (static → render fallback), via safeFetch
   render.ts             Headless render seam for SPA pages (Firecrawl; SCRAPE_API_KEY)
   search.ts             Live web search seam (Tavily; SEARCH_API_KEY) for grounding
   discovery.ts          Niche-channel discovery: search→ground→URL-validate, LLM fallback
@@ -59,11 +72,42 @@ hooks/
   useLaunchFlow.ts      The 4-step state machine + actions + project load/restore + draft hydrate
   useAutosave.ts        Debounced persist: localStorage (anon) / Supabase upsert (signed-in)
 components/
-  ui/                   Button, Card, Badge, Spinner, Field (design system primitives)
-  app/                  Stepper, UrlStep, ProfileForm, StrategyView, ResultsView, ProjectBar, SignIn, Paywall, UsageBadge
+  ui/                   Button, Card, Badge, Spinner, Field, Tabs (design system primitives)
+  app/                  Stepper, UrlStep, ProfileForm, StrategyView, ResultsView, PlanSummary,
+                        CopilotPanel, ProjectBar, SignIn, AuthScreen, Paywall, UsageBadge, FeedbackCTA
   landing/              Nav, Hero, HowItWorks, PlatformShowcase, Pricing, FAQ, Footer
-supabase/schema.sql     projects table + row-level security
+tests/                  vitest suites: urlPolicy, safeFetch, billing, webhook route, validate
+supabase/schema.sql     projects + entitlements + webhook_events tables, row-level security
 ```
+
+## Security posture
+- **SSRF**: every URL that originates from a user, a model, or search results is fetched
+  ONLY through `lib/safeFetch.ts` (scrape static fetch, discovery liveness probes) after
+  `lib/urlPolicy.ts` validation (http/https only, standard ports, credentials rejected,
+  localhost/private/loopback/link-local/multicast/CGNAT/cloud-metadata/reserved IPv4 ranges
+  blocked, IPv6 allowlisted to global unicast 2000::/3 minus doc/6to4/Teredo). DNS results
+  are validated inside the socket's own lookup (any blocked A/AAAA record rejects — no
+  rebinding TOCTOU), redirects are never auto-followed (each hop re-validated, capped),
+  responses are size/content-type/time capped. Firecrawl input URLs pass the same policy
+  before leaving the box. Operator-configured endpoints (SCRAPE/SEARCH/POLAR API URLs) use
+  `lib/fetch.ts` and may point at private infra. External hrefs in the UI render only for
+  `isSafeExternalHref` (absolute http/https) URLs.
+- **Input validation**: every POST body is parsed with `lib/validate.ts` (zod) — bounded
+  strings/arrays, deduped + catalog-checked platformIds, provider/action allowlists,
+  history capped, 1MB raw-body cap (webhook 256KB). No `as`-assertion trust anywhere.
+- **Error/log hygiene**: routes return only `PublicError` messages (validation, scrape
+  status, provider-config); everything else collapses to a generic line. Validation errors
+  name the field but never echo the submitted value. Nothing (input, tokens, prompts,
+  keys) is logged server-side.
+- **Polar**: webhook fails closed (503) without `POLAR_WEBHOOK_SECRET`; verifies Standard
+  Webhooks HMAC + timestamp (±300s), dedupes by webhook-id in `webhook_events`, and only
+  acts on allowlisted event types whose product id matches `POLAR_PRODUCT_ID` and whose
+  user id is a UUID. Checkout `success_url` comes from the `SITE_URL` allowlist — the
+  Origin header is honored only when it's in that list.
+- **Headers**: global CSP + nosniff/DENY/referrer/permissions/HSTS in `next.config.mjs`
+  (dev adds `unsafe-eval` + the Vercel Analytics debug script host).
+- **Known accepted**: `npm audit` reports a moderate advisory on Next's internally pinned
+  postcss (build-time only; every Next release is flagged — revisit on the next Next major).
 
 ## Conventions
 - TS strict. Components are presentational; state/effects live in `hooks/` or route handlers.
@@ -77,6 +121,9 @@ supabase/schema.sql     projects table + row-level security
 npm install
 cp .env.example .env     # ANTHROPIC_API_KEY and/or OPENAI_API_KEY (Supabase keys optional)
 npm run dev              # landing at /, tool at /app
+npm run typecheck        # tsc --noEmit
+npm test                 # vitest (security suites in tests/)
+npm run lint             # next lint (eslint-config-next)
 npm run build            # must stay green
 ```
 
@@ -86,9 +133,10 @@ Import repo → set env (`ANTHROPIC_API_KEY`/`OPENAI_API_KEY`, `NEXT_PUBLIC_SUPA
 `supabase/schema.sql` run once in the Supabase SQL editor.
 
 Optional env (each degrades gracefully if unset): `SCRAPE_API_KEY` (Firecrawl, SPA scraping),
-`SEARCH_API_KEY` (Tavily, grounded discovery), and for metering/billing
+`SEARCH_API_KEY` (Tavily, grounded discovery), `SITE_URL` (comma-separated allowlist for the
+post-checkout redirect; defaults to https://postbeacon.app), and for metering/billing
 `SUPABASE_SERVICE_ROLE_KEY` + `POLAR_ACCESS_TOKEN` + `POLAR_PRODUCT_ID` + `POLAR_WEBHOOK_SECRET`
-(point the Polar webhook at `/api/billing/webhook`).
+(point the Polar webhook at `/api/billing/webhook`; without the secret the webhook fails closed).
 
 **Live (2026-06-24):** Vercel project `zhengbrodys-projects/postbeacon` → **https://postbeacon.app** + www.
 Porkbun DNS: apex `A 76.76.21.21`, www `CNAME cname.vercel-dns.com` (nameservers stay on Porkbun).
@@ -97,6 +145,23 @@ left unset → accounts off (anon + localStorage), generation open/unmetered, `P
 Redeploy: `npx vercel --prod --yes`. Push env from `.env.local`: `~/push-env.sh`.
 
 ## Status / changelog
+- **2026-07-11**: **M12 — P0 security hardening** (no product changes). (1) **SSRF**: new
+  `lib/urlPolicy.ts` + `lib/safeFetch.ts` shared by scrape, discovery URL checks, and
+  Firecrawl input; DNS validated at connect time (anti-rebinding), redirects re-validated
+  per hop, size/type/timeout caps; discovery drops non-public URLs; StrategyView links only
+  safe hrefs. (2) **Runtime validation**: `lib/validate.ts` (zod) replaces every `as`-cast
+  request body across analyze/strategy/generate/regenerate/copilot — bounded fields, deduped
+  + catalog-checked platformIds, provider/action allowlists, 1MB body cap; new
+  `lib/errors.ts` PublicError keeps internal error detail out of responses. (3) **Polar**:
+  webhook fails closed without secret, verifies timestamp (±300s) + HMAC, dedupes by
+  webhook-id (`webhook_events` table in schema.sql), acts only on allowlisted event types
+  matching `POLAR_PRODUCT_ID` with UUID user ids; checkout success_url now uses the
+  `SITE_URL` allowlist instead of trusting Origin. (4) **Headers**: global CSP + security
+  headers in next.config.mjs. (5) **Tooling**: vitest (133 tests: urlPolicy/safeFetch/
+  billing/webhook-route/validate), eslint (next/core-web-vitals), `typecheck`+`test`
+  scripts. typecheck/test/lint/build green; SSRF rejections, schema 400s, webhook 503,
+  body-cap 413, headers, and the happy path (live analyze incl. real redirects) verified
+  against a running dev server. See "Security posture" above.
 - **2026-06-24**: **DEPLOYED to production** — live at https://postbeacon.app (+ www) on Vercel.
   Beta posture: no Supabase / service-role / Polar configured → fully open & free, no payment UI.
 - **2026-06-24**: All platform `blurb`s translated to English (they surface in the launch-calendar

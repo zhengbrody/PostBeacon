@@ -3,9 +3,8 @@ import { generateJson } from "@/lib/llm";
 import { platformCatalogForStrategist, PLATFORMS } from "@/lib/platforms";
 import { discoverChannels } from "@/lib/discovery";
 import { guardRoute } from "@/lib/usage";
+import { apiError, parseBody, readJsonBody, strategyBodySchema } from "@/lib/validate";
 import type {
-  Provider,
-  ProductProfile,
   MarketingStrategy,
   PlatformRecommendation,
   Confidence,
@@ -30,13 +29,7 @@ export async function POST(req: NextRequest) {
     const guard = await guardRoute(req);
     if ("response" in guard) return guard.response;
 
-    const { profile, provider } = (await req.json()) as {
-      profile?: ProductProfile;
-      provider?: Provider;
-    };
-    if (!profile) {
-      return NextResponse.json({ error: "Missing profile" }, { status: 400 });
-    }
+    const { profile, provider } = parseBody(strategyBodySchema, await readJsonBody(req));
 
     const catalog = platformCatalogForStrategist();
 
@@ -168,10 +161,7 @@ Rules:
     };
 
     return NextResponse.json(result);
-  } catch (err: any) {
-    return NextResponse.json(
-      { error: err?.message || "Strategy failed" },
-      { status: 500 }
-    );
+  } catch (err) {
+    return apiError(err, "Strategy failed");
   }
 }

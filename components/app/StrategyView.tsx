@@ -7,6 +7,7 @@ import {
   PositioningCard,
 } from "@/components/app/PlanSummary";
 import { PLATFORMS } from "@/lib/platforms";
+import { isSafeExternalHref } from "@/lib/urlPolicy";
 import type { MarketingStrategy, PlatformRecommendation } from "@/lib/types";
 
 const effortLabel: Record<NonNullable<PlatformRecommendation["effort"]>, string> = {
@@ -84,9 +85,14 @@ export function StrategyView({
           <ul className="space-y-2 text-sm">
             {strategy.discoveries.map((d, i) => (
               <li key={i} className="rounded-lg bg-surface-2 px-3 py-2">
-                <a href={d.url} target="_blank" rel="noreferrer" className="font-medium text-accent-300">
-                  {d.name}
-                </a>
+                {/* Discovery URLs come from model/search output — only link http(s). */}
+                {isSafeExternalHref(d.url) ? (
+                  <a href={d.url} target="_blank" rel="noreferrer" className="font-medium text-accent-300">
+                    {d.name}
+                  </a>
+                ) : (
+                  <span className="font-medium text-accent-300">{d.name}</span>
+                )}
                 {d.validated && (
                   <span className="ml-2 align-middle text-xs text-emerald-400">✓ link checked</span>
                 )}

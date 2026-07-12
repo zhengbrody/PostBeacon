@@ -1,86 +1,62 @@
 import { NextRequest, NextResponse } from "next/server";
-import crypto from "crypto";
 import { setPlan } from "@/lib/usage";
+import { recordWebhookEvent, resolvePlanChange, verifyWebhook } from "@/lib/billing";
 
 export const runtime = "nodejs";
 
+const MAX_WEBHOOK_BYTES = 262_144; // Polar events are small; anything bigger is noise
+
 /**
- * Polar webhook → flip a user's plan. Polar signs webhooks with the
- * "Standard Webhooks" scheme (webhook-id / webhook-timestamp / webhook-signature).
- * We verify before trusting the body. Event shapes are handled defensively;
- * confirm against live events when wiring up the Polar account.
+ * Polar webhook → flip a user's plan. Every request must clear, in order:
+ * a configured secret (fail closed), a fresh signed timestamp + HMAC
+ * signature (Standard Webhooks scheme), the idempotency ledger (replays are
+ * acked but not reprocessed), and event evaluation (allowlisted event types,
+ * matching POLAR_PRODUCT_ID, UUID user id) before any state changes.
  */
 export async function POST(req: NextRequest) {
   const secret = process.env.POLAR_WEBHOOK_SECRET;
-  const body = await req.text();
+  if (!secret) {
+    // Never process unsigned webhooks. If billing isn't fully configured,
+    // this endpoint is closed.
+    return NextResponse.json({ error: "Webhook not configured" }, { status: 503 });
+  }
 
-  if (secret && !verifySignature(req, body, secret)) {
+  const declared = Number(req.headers.get("content-length") || 0);
+  if (declared > MAX_WEBHOOK_BYTES) {
+    return NextResponse.json({ error: "Body too large" }, { status: 413 });
+  }
+  const body = await req.text();
+  if (body.length > MAX_WEBHOOK_BYTES) {
+    return NextResponse.json({ error: "Body too large" }, { status: 413 });
+  }
+
+  const verdict = verifyWebhook(
+    {
+      id: req.headers.get("webhook-id"),
+      timestamp: req.headers.get("webhook-timestamp"),
+      signature: req.headers.get("webhook-signature"),
+    },
+    body,
+    secret
+  );
+  if (!verdict.ok) {
     return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
   }
 
-  let event: any;
+  let event: unknown;
   try {
     event = JSON.parse(body);
   } catch {
     return NextResponse.json({ error: "Bad body" }, { status: 400 });
   }
 
-  const type: string = event?.type || "";
-  const data = event?.data ?? {};
-  const userId =
-    data?.metadata?.user_id ||
-    data?.customer?.metadata?.user_id ||
-    data?.subscription?.metadata?.user_id;
-
-  if (userId) {
-    const status: string = data?.status || "";
-    if (type.startsWith("subscription.")) {
-      const active =
-        ["active", "trialing"].includes(status) ||
-        type === "subscription.active" ||
-        type === "subscription.created";
-      const ended =
-        ["canceled", "revoked", "unpaid", "past_due"].includes(status) ||
-        type === "subscription.canceled" ||
-        type === "subscription.revoked";
-      await setPlan(userId, active && !ended ? "pro" : "free");
-    } else if (type === "order.created" || type === "order.paid") {
-      await setPlan(userId, "pro");
-    }
+  // Idempotency: a webhook-id we've already recorded is acked without effect.
+  if ((await recordWebhookEvent(verdict.id)) === "duplicate") {
+    return NextResponse.json({ received: true });
   }
+
+  const change = resolvePlanChange(event, process.env.POLAR_PRODUCT_ID);
+  if (change) await setPlan(change.userId, change.plan);
 
   return NextResponse.json({ received: true });
-}
-
-/** Standard Webhooks HMAC-SHA256 verification. */
-function verifySignature(
-  req: NextRequest,
-  payload: string,
-  secret: string
-): boolean {
-  try {
-    const id = req.headers.get("webhook-id");
-    const ts = req.headers.get("webhook-timestamp");
-    const header = req.headers.get("webhook-signature");
-    if (!id || !ts || !header) return false;
-
-    const key = secret.startsWith("whsec_")
-      ? Buffer.from(secret.slice(6), "base64")
-      : Buffer.from(secret, "utf8");
-    const expected = crypto
-      .createHmac("sha256", key)
-      .update(`${id}.${ts}.${payload}`)
-      .digest("base64");
-
-    // header is a space-separated list of "v1,<sig>" entries.
-    return header.split(" ").some((part) => {
-      const sig = part.includes(",") ? part.split(",")[1] : part;
-      return (
-        sig.length === expected.length &&
-        crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))
-      );
-    });
-  } catch {
-    return false;
-  }
 }

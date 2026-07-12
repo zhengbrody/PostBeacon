@@ -9,13 +9,8 @@ import {
   incrementLaunch,
   FREE_LAUNCHES,
 } from "@/lib/usage";
-import type {
-  Provider,
-  ProductProfile,
-  PlatformContent,
-  ScheduleItem,
-  GenerateResult,
-} from "@/lib/types";
+import { apiError, generateBodySchema, parseBody, readJsonBody } from "@/lib/validate";
+import type { PlatformContent, ScheduleItem, GenerateResult } from "@/lib/types";
 
 export const maxDuration = 300;
 
@@ -41,23 +36,17 @@ async function mapLimit<T, R>(
 
 export async function POST(req: NextRequest) {
   try {
-    const { profile, platformIds, provider } = (await req.json()) as {
-      profile?: ProductProfile;
-      platformIds?: string[];
-      provider?: Provider;
-    };
-    if (!profile || !platformIds?.length) {
-      return NextResponse.json(
-        { error: "Missing profile or platformIds" },
-        { status: 400 }
-      );
-    }
-
     // Require sign-in + daily cap (protects the model budget). No-ops when
     // Supabase is unconfigured, so the keyless app stays open.
     const guard = await guardRoute(req);
     if ("response" in guard) return guard.response;
     const userId = guard.userId;
+
+    // platformIds arrive deduped, bounded, and catalog-known from the schema.
+    const { profile, platformIds, provider } = parseBody(
+      generateBodySchema,
+      await readJsonBody(req)
+    );
 
     // Lifetime free-launch paywall — only once billing (Polar) is wired up, so
     // the free beta isn't paywalled by merely turning metering on.
@@ -97,10 +86,7 @@ export async function POST(req: NextRequest) {
 
     const result: GenerateResult = { content, schedule };
     return NextResponse.json(result);
-  } catch (err: any) {
-    return NextResponse.json(
-      { error: err?.message || "Generate failed" },
-      { status: 500 }
-    );
+  } catch (err) {
+    return apiError(err, "Generate failed");
   }
 }

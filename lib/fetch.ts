@@ -1,4 +1,10 @@
-/** fetch() with an AbortController timeout. Shared by the lib/* network helpers. */
+/**
+ * fetch() with an AbortController timeout — for OPERATOR-CONFIGURED endpoints
+ * only (Firecrawl/Tavily/Polar API URLs set via env by the deployer, which may
+ * legitimately live on private infrastructure). Any URL that originates from
+ * user input or model/search output MUST go through lib/safeFetch.ts instead,
+ * which enforces the SSRF policy.
+ */
 export async function fetchWithTimeout(
   url: string,
   init: RequestInit,

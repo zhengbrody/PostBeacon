@@ -52,7 +52,15 @@ lib/
   dates.ts              scheduleDate(launchDate, day) for the calendar
   auth.ts               bearer(req) — read the Supabase token from a request
   usage.ts              Entitlement read/increment + FREE_LAUNCHES (server metering)
-  scrape.ts             Landing-page fetch + extract (static → render fallback)
+  errors.ts             PublicError/BlockedUrlError — the only error messages routes may expose
+  urlPolicy.ts          SSRF URL policy (schemes/ports/hostnames/IPv4+IPv6 ranges); isomorphic,
+                        also guards external <a href>s (isSafeExternalHref)
+  safeFetch.ts          SSRF-safe fetch for user/model URLs: DNS validated at connect time
+                        (anti-rebinding), per-hop redirect revalidation, size/type/time caps
+  validate.ts           zod schemas for every API body + readJsonBody size cap + apiError
+  billing.ts            Polar webhook verify (signature+timestamp) / event evaluation / idempotency
+  fetch.ts              fetchWithTimeout — OPERATOR-configured endpoints only (never user URLs)
+  scrape.ts             Landing-page fetch + extract (static → render fallback), via safeFetch
   render.ts             Headless render seam for SPA pages (Firecrawl; SCRAPE_API_KEY)
   search.ts             Live web search seam (Tavily; SEARCH_API_KEY) for grounding
   discovery.ts          Niche-channel discovery: search→ground→URL-validate, LLM fallback
@@ -70,7 +78,8 @@ components/
                         PlanSummary (shared plan-section cards), CopilotPanel (Launch Copilot drawer),
                         ProjectBar, SignIn, Paywall, UsageBadge
   landing/              Nav, Hero, HowItWorks, PlatformShowcase, Pricing, FAQ, Footer
-supabase/schema.sql     projects table (+ meta jsonb: selection/launchDate) + row-level security
+tests/                  vitest suites: urlPolicy, safeFetch, billing, webhook route, validate
+supabase/schema.sql     projects (+ meta jsonb) + entitlements + webhook_events, row-level security
 ```
 
 ## Conventions
@@ -79,12 +88,20 @@ supabase/schema.sql     projects table (+ meta jsonb: selection/launchDate) + ro
 - Reuse `components/ui/*` primitives; don't re-style buttons/cards inline.
 - No dead code. Self-review each change for duplication and consistency before moving on.
 - LLM calls go through `lib/llm.ts`; browser calls through `lib/api.ts`.
+- Security invariants (M12): any user/model/search-supplied URL is fetched ONLY via
+  `lib/safeFetch.ts` (`lib/fetch.ts` is for operator-configured endpoints); every API body is
+  parsed with a `lib/validate.ts` schema (never `as`-casts); routes expose only `PublicError`
+  messages via `apiError`; never log or echo user input, tokens, prompts, or keys. Full
+  contract: "Security posture" in AGENTS.md.
 
 ## Run
 ```bash
 npm install
 cp .env.example .env     # ANTHROPIC_API_KEY and/or OPENAI_API_KEY (Supabase keys optional)
 npm run dev              # landing at /, tool at /app
+npm run typecheck        # tsc --noEmit
+npm test                 # vitest (security suites in tests/)
+npm run lint             # next lint (eslint-config-next)
 npm run build            # must stay green
 ```
 
@@ -94,9 +111,10 @@ Import repo → set env (`ANTHROPIC_API_KEY`/`OPENAI_API_KEY`, `NEXT_PUBLIC_SUPA
 `supabase/schema.sql` run once in the Supabase SQL editor.
 
 Optional env (each degrades gracefully if unset): `SCRAPE_API_KEY` (Firecrawl, SPA scraping),
-`SEARCH_API_KEY` (Tavily, grounded discovery), and for metering/billing
+`SEARCH_API_KEY` (Tavily, grounded discovery), `SITE_URL` (comma-separated allowlist for the
+post-checkout redirect; defaults to https://postbeacon.app), and for metering/billing
 `SUPABASE_SERVICE_ROLE_KEY` + `POLAR_ACCESS_TOKEN` + `POLAR_PRODUCT_ID` + `POLAR_WEBHOOK_SECRET`
-(point the Polar webhook at `/api/billing/webhook`).
+(point the Polar webhook at `/api/billing/webhook`; without the secret the webhook fails closed).
 
 **Live (2026-06-24):** Vercel project `zhengbrodys-projects/postbeacon` → **https://postbeacon.app** + www.
 Porkbun DNS: apex `A 76.76.21.21`, www `CNAME cname.vercel-dns.com` (nameservers stay on Porkbun).
@@ -105,6 +123,24 @@ left unset → accounts off (anon + localStorage), generation open/unmetered, `P
 Redeploy: `npx vercel --prod --yes`. Push env from `.env.local`: `~/push-env.sh`.
 
 ## Status / changelog
+- **2026-07-11**: **M12 — P0 security hardening** (no product changes). (1) **SSRF**: new
+  `lib/urlPolicy.ts` + `lib/safeFetch.ts` shared by scrape, discovery URL checks, and Firecrawl
+  input — http/https+standard ports only; localhost/private/loopback/link-local/multicast/
+  CGNAT/cloud-metadata/reserved IPv4 blocked and IPv6 allowlisted to global unicast; DNS
+  validated inside the socket lookup (anti-rebinding); redirects re-validated per hop (max 3);
+  response size/content-type/timeout caps; discovery drops non-public URLs; StrategyView only
+  links `isSafeExternalHref` URLs. (2) **Runtime validation**: `lib/validate.ts` (zod) replaces
+  every `as`-cast body across analyze/strategy/generate/regenerate/copilot — bounded strings/
+  arrays/history, deduped catalog-checked platformIds, provider/action allowlists, 1MB body
+  cap; `lib/errors.ts` PublicError so routes never leak internal error detail and validation
+  errors never echo input. (3) **Polar**: webhook fails closed (503) without
+  `POLAR_WEBHOOK_SECRET`; timestamp (±300s) + HMAC verification, webhook-id idempotency
+  (`webhook_events` table), event-type allowlist + `POLAR_PRODUCT_ID` match + UUID user id
+  (all in testable `lib/billing.ts`); checkout success_url from `SITE_URL` allowlist, Origin
+  no longer trusted. (4) **Headers**: global CSP + nosniff/DENY/referrer/permissions/HSTS in
+  next.config.mjs. (5) **Tooling**: vitest (133 tests), eslint, `typecheck`/`test` scripts.
+  All four gates green; SSRF rejections, schema 400s, webhook 503, 413 cap, headers, and the
+  live happy path (analyze incl. real redirect chain) verified against a running dev server.
 - **2026-07-02**: **M11 — editable, focused, navigable** (founder feedback: plan not individually
   editable, too much content, one giant scroll). (1) **Focused generation**: default selection is
   now the **top-4 channels by score** (`defaultSelection` in useLaunchFlow, replaces "all non-low");

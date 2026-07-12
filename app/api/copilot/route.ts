@@ -2,76 +2,28 @@ import { NextRequest, NextResponse } from "next/server";
 import { runCopilot } from "@/lib/copilot";
 import { getPlatforms } from "@/lib/platforms";
 import { guardRoute } from "@/lib/usage";
-import type {
-  CopilotAction,
-  CopilotMessage,
-  GenerateResult,
-  MarketingStrategy,
-  ProductProfile,
-  Provider,
-} from "@/lib/types";
+import { apiError, copilotBodySchema, parseBody, readJsonBody } from "@/lib/validate";
 
 export const maxDuration = 120;
-
-const ACTIONS = new Set<CopilotAction>([
-  "explain-plan",
-  "next-steps",
-  "improve-posts",
-  "rewrite",
-  "first-replies",
-  "review-feedback",
-  "ask",
-]);
 
 export async function POST(req: NextRequest) {
   try {
     const guard = await guardRoute(req);
     if ("response" in guard) return guard.response;
 
-    const {
-      provider,
-      profile,
-      strategy,
-      result,
-      launchDate,
-      action,
-      question,
-      targetPlatformId,
-      history,
-    } = (await req.json()) as {
-      provider?: Provider;
-      profile?: ProductProfile;
-      strategy?: MarketingStrategy;
-      result?: GenerateResult | null;
-      launchDate?: string;
-      action?: CopilotAction;
-      question?: string;
-      targetPlatformId?: string;
-      history?: CopilotMessage[];
-    };
+    const body = parseBody(copilotBodySchema, await readJsonBody(req));
+    const { action, question, targetPlatformId, result } = body;
 
-    if (!profile) {
-      return NextResponse.json({ error: "Missing profile" }, { status: 400 });
-    }
-    if (!strategy) {
-      return NextResponse.json({ error: "Missing strategy" }, { status: 400 });
-    }
-    if (!action || !ACTIONS.has(action)) {
-      return NextResponse.json({ error: "Unknown action" }, { status: 400 });
-    }
+    // Cross-field rules the schema can't express: some actions need a target
+    // platform with drafted posts, others need a question.
     if (action === "rewrite" || action === "first-replies") {
       if (!targetPlatformId) {
         return NextResponse.json({ error: "Missing targetPlatformId" }, { status: 400 });
       }
       if (getPlatforms([targetPlatformId]).length === 0) {
-        return NextResponse.json(
-          { error: `Unknown platform: ${targetPlatformId}` },
-          { status: 400 }
-        );
+        return NextResponse.json({ error: "Unknown platform" }, { status: 400 });
       }
-      const drafted =
-        Array.isArray(result?.content) &&
-        result.content.some((c) => c?.platformId === targetPlatformId);
+      const drafted = result?.content.some((c) => c.platformId === targetPlatformId);
       if (!drafted) {
         return NextResponse.json(
           { error: "No drafted posts for that platform yet." },
@@ -79,32 +31,26 @@ export async function POST(req: NextRequest) {
         );
       }
     }
-    if (action === "improve-posts" && !(Array.isArray(result?.content) && result.content.length)) {
+    if (action === "improve-posts" && !result?.content.length) {
       return NextResponse.json({ error: "Generate content first." }, { status: 400 });
     }
-    if (
-      (action === "ask" || action === "review-feedback") &&
-      !(typeof question === "string" && question.trim())
-    ) {
+    if ((action === "ask" || action === "review-feedback") && !question?.trim()) {
       return NextResponse.json({ error: "Missing question" }, { status: 400 });
     }
 
     const reply = await runCopilot({
-      provider,
-      profile,
-      strategy,
-      result,
-      launchDate,
+      provider: body.provider,
+      profile: body.profile,
+      strategy: body.strategy,
+      result: body.result,
+      launchDate: body.launchDate,
       action,
       question,
       targetPlatformId,
-      history: Array.isArray(history) ? history.slice(-6) : [],
+      history: (body.history ?? []).slice(-6),
     });
     return NextResponse.json(reply);
-  } catch (err: any) {
-    return NextResponse.json(
-      { error: err?.message || "Copilot failed" },
-      { status: 500 }
-    );
+  } catch (err) {
+    return apiError(err, "Copilot failed");
   }
 }

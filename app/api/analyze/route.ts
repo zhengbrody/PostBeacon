@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { scrapeUrl } from "@/lib/scrape";
 import { generateJson } from "@/lib/llm";
 import { guardRoute } from "@/lib/usage";
-import type { Provider } from "@/lib/types";
+import { analyzeBodySchema, apiError, parseBody, readJsonBody } from "@/lib/validate";
 
 export const maxDuration = 60;
 
@@ -13,13 +13,7 @@ export async function POST(req: NextRequest) {
     const guard = await guardRoute(req);
     if ("response" in guard) return guard.response;
 
-    const { url, provider } = (await req.json()) as {
-      url?: string;
-      provider?: Provider;
-    };
-    if (!url) {
-      return NextResponse.json({ error: "Missing url" }, { status: 400 });
-    }
+    const { url, provider } = parseBody(analyzeBodySchema, await readJsonBody(req));
 
     const page = await scrapeUrl(url);
 
@@ -55,10 +49,7 @@ Return a JSON object with exactly these keys:
     });
 
     return NextResponse.json({ profile, page: { url: page.url, title: page.title } });
-  } catch (err: any) {
-    return NextResponse.json(
-      { error: err?.message || "Analyze failed" },
-      { status: 500 }
-    );
+  } catch (err) {
+    return apiError(err, "Analyze failed");
   }
 }
