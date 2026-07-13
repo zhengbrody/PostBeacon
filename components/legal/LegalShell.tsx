@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { PRIVACY_LAST_UPDATED } from "@/lib/privacy";
-import { FEEDBACK_URL } from "@/lib/site";
+import { PRIVACY_CONTACT_URL, PRIVACY_EMAIL } from "@/lib/site";
 
 /**
  * Shared shell for the /privacy, /terms and /subprocessors pages: minimal
@@ -52,12 +52,12 @@ export function LegalShell({
         <p className="mt-12 border-t border-line/60 pt-6 text-xs text-neutral-500">
           Questions or requests about your data:{" "}
           <a
-            href={FEEDBACK_URL}
+            href={PRIVACY_CONTACT_URL}
             className="text-accent-300 hover:underline"
-            rel="noopener noreferrer"
-            target="_blank"
+            rel={PRIVACY_EMAIL ? undefined : "noopener noreferrer"}
+            target={PRIVACY_EMAIL ? undefined : "_blank"}
           >
-            contact us
+            {PRIVACY_EMAIL || "contact us"}
           </a>
           . © {new Date().getFullYear()} PostBeacon · postbeacon.app
         </p>

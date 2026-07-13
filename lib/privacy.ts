@@ -7,7 +7,7 @@
 import type { Provider } from "./types";
 
 /** Bump when the published policy text meaningfully changes. */
-export const PRIVACY_LAST_UPDATED = "2026-07-12";
+export const PRIVACY_LAST_UPDATED = "2026-07-13";
 
 /**
  * How each LLM provider handles API data, per its PUBLIC policy as of

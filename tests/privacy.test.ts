@@ -67,10 +67,18 @@ describe("provider default ordering (M17 §5: unclear policy never the silent de
     expect(availableProviders()).toEqual(["deepseek"]);
   });
 
-  it("an explicit DEFAULT_PROVIDER remains an operator override", () => {
+  it("an unclear-policy DEFAULT_PROVIDER cannot silently opt users in", () => {
     process.env.ANTHROPIC_API_KEY = "k";
     process.env.DEEPSEEK_API_KEY = "k";
     process.env.DEFAULT_PROVIDER = "deepseek";
-    expect(availableProviders()[0]).toBe("deepseek");
+    expect(availableProviders()).toEqual(["claude", "deepseek"]);
+  });
+
+  it("a clear-policy DEFAULT_PROVIDER is still honored", () => {
+    process.env.ANTHROPIC_API_KEY = "k";
+    process.env.OPENAI_API_KEY = "k";
+    process.env.DEEPSEEK_API_KEY = "k";
+    process.env.DEFAULT_PROVIDER = "openai";
+    expect(availableProviders()).toEqual(["openai", "claude", "deepseek"]);
   });
 });

@@ -64,7 +64,8 @@ lib/
                         — the ONLY proposal→state bridge, used on explicit confirm
   voice.ts              ANTI_AI_RULES — house rules injected into content prompts to kill AI tells
   demo.ts               DEMO_PROJECT — hand-authored full example plan (the no-API-key showcase)
-  site.ts               Public config (REPO_URL, FEEDBACK_URL) — NEXT_PUBLIC_* overridable
+  site.ts               Public config (feedback + monitored privacy contact) —
+                        NEXT_PUBLIC_* overridable with safe fallbacks
   privacy.ts            M17 single source for public privacy claims: data inventory,
                         subprocessor list, per-provider API-data notes + clear-policy
                         flag (orders the default), retentionDays — /privacy, /terms,
@@ -139,6 +140,7 @@ tests/                  vitest suites: urlPolicy, safeFetch, billing, webhook ro
 tests/golden/           fixtures.ts — 12 product-type golden fixtures with ground truth
 supabase/schema.sql     projects + entitlements + webhook_events + M15 campaigns/
                         experiments/outcomes/tasks tables (owner-only RLS)
+supabase/audit.sql      read-only production verification for RLS, policies and FK cascades
 .github/workflows/ci.yml  typecheck · lint · format:check · offline tests · build on every push/PR
 eslint.config.mjs / .prettierrc.json   non-interactive lint + format (next lint is deprecated)
 ```
@@ -202,17 +204,26 @@ Import repo → set env (`ANTHROPIC_API_KEY`/`OPENAI_API_KEY`, `NEXT_PUBLIC_SUPA
 
 Optional env (each degrades gracefully if unset): `SCRAPE_API_KEY` (Firecrawl, SPA scraping),
 `SEARCH_API_KEY` (Tavily, grounded discovery), `SITE_URL` (comma-separated allowlist for the
-post-checkout redirect; defaults to https://postbeacon.app), and for metering/billing
+post-checkout redirect; defaults to https://postbeacon.app),
+`NEXT_PUBLIC_PRIVACY_EMAIL` (shown on legal pages only after inbound mail is working), and for metering/billing
 `SUPABASE_SERVICE_ROLE_KEY` + `POLAR_ACCESS_TOKEN` + `POLAR_PRODUCT_ID` + `POLAR_WEBHOOK_SECRET`
 (point the Polar webhook at `/api/billing/webhook`; without the secret the webhook fails closed).
 
-**Live (2026-06-24):** Vercel project `zhengbrodys-projects/postbeacon` → **https://postbeacon.app** + www.
+**Live (verified 2026-07-13):** Vercel project `zhengbrodys-projects/postbeacon` → **https://postbeacon.app** + www.
 Porkbun DNS: apex `A 76.76.21.21`, www `CNAME cname.vercel-dns.com` (nameservers stay on Porkbun).
-Set in Vercel: ANTHROPIC/OPENAI/DEEPSEEK keys + `DEFAULT_PROVIDER=deepseek`. Supabase & billing
-left unset → accounts off (anon + localStorage), generation open/unmetered, `Pricing` hidden (beta).
+Set in Vercel: ANTHROPIC/OPENAI/DEEPSEEK keys. Supabase public configuration is enabled and the
+production login gate is active; schema/RLS/cascade application and the server-only service-role
+key still require operator verification in the Supabase/Vercel dashboards. Billing remains
+unverified/off unless all Polar variables are set. `Pricing` is hidden during beta.
 Redeploy: `npx vercel --prod --yes`. Push env from `.env.local`: `~/push-env.sh`.
 
 ## Status / changelog
+- **2026-07-13**: **M17.1 privacy follow-up.** An unclear-policy provider can no longer
+  outrank a configured clear-policy provider through `DEFAULT_PROVIDER`; DeepSeek remains an
+  explicit per-run choice (or usable when it is the only configured provider). Legal pages now
+  support a monitored `NEXT_PUBLIC_PRIVACY_EMAIL` with a GitHub fallback until inbound mail is
+  tested. Footer copy distinguishes PostBeacon's no-training commitment from the selected AI
+  provider's separate policy. Production notes corrected: Supabase login is enabled.
 - **2026-07-12**: **M17 — Privacy & trust foundation** (engineering + draft copy for
   LEGAL REVIEW, not legal advice; full data-flow map, per-category inventory
   (purpose/legal-basis suggestion/retention/region/deletion/subprocessors), threat

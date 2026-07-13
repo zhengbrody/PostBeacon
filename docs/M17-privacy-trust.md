@@ -97,13 +97,12 @@ contractual:
 | OpenAI | Not by default for API traffic | Up to ~30 days (abuse monitoring) | US | OK as default |
 | DeepSeek | **Not clearly excluded** in public API terms | Unclear; data processed/stored in China | China | **Never the code default.** Selectable, but labeled with a caution; users told not to paste confidential material when it's active |
 
-Enforcement in code (`lib/llm.ts` + `lib/privacy.ts`): when no
-`DEFAULT_PROVIDER` is pinned by the operator, `availableProviders()` orders
-clear-policy providers first, so an unclear-policy provider can never become
-the silent default. An explicit `DEFAULT_PROVIDER=deepseek` (today's production
-setting) is an operator decision — the UI still shows the caution note beside
-the picker. **Flagged for the operator + counsel: reconsider the production
-default, or obtain/verify DeepSeek terms that exclude training use.**
+Enforcement in code (`lib/llm.ts` + `lib/privacy.ts`):
+`availableProviders()` orders clear-policy providers first. `DEFAULT_PROVIDER`
+may choose among configured clear-policy providers, but cannot silently put an
+unclear-policy provider ahead of one. DeepSeek remains available for explicit
+per-run selection (and remains usable when it is the only configured provider),
+with a caution beside the picker.
 
 ## 5. Threat model
 
@@ -117,7 +116,7 @@ numbers the user types, (A4) operator API keys, (A5) billing state.
 | SSRF / internal-network pivot | Attacker-supplied URL | `lib/urlPolicy.ts` + `lib/safeFetch.ts` (M12): scheme/port/IP-range allowlist, connect-time DNS pinning, per-hop redirect revalidation, size/time caps | Low; covered by 60+ tests |
 | Cross-user data access | Forged/absent auth | Supabase RLS owner-only on every user table; server verifies bearer via GoTrue; service role never in client code | RLS depends on schema.sql being applied — deployment checklist item |
 | Prompt injection via scraped page or pasted feedback | Malicious page text / comment paste | Page text treated as data; facts require verified quotes (M13); copilot input delimited «…» and declared data; action validator refuses minted verbs/fabricated ids; human confirm is the only state bridge (M16) | Model may still be *influenced* in tone; injection cannot reach state |
-| LLM provider retains/trains on confidential ideas | Normal API use | Provider notes at the picker; unclear-policy providers never the code default; no chat transcript storage on our side | Operator's DEFAULT_PROVIDER can still pin an unclear provider — surfaced, needs decision |
+| LLM provider retains/trains on confidential ideas | Normal API use | Provider notes at the picker; an unclear-policy provider cannot silently outrank a configured clear-policy provider; no chat transcript storage on our side | User can still explicitly select an unclear-policy provider; counsel must review the disclosure and regional availability |
 | Secrets/PII in logs | App logging, error paths | **Zero `console.*` in app code today**, now locked in by ESLint `no-console`; the two allowed sinks route through `lib/log.ts` which strips query strings, emails, bearer/JWT/`sk-` tokens and truncates | Vercel platform request logs still record IP/path — disclosed |
 | Token theft via URL params | Careless link building | No user data in query strings (policy + review); magic-link/OAuth tokens are handled by Supabase in fragments, `detectSessionInUrl` consumes them | — |
 | Shared/stolen device reads the anonymous draft | localStorage | Disclosed honestly (FAQ + privacy page); **Clear local draft** control on the input step | localStorage is by-design unencrypted; users warned |
@@ -132,15 +131,15 @@ numbers the user types, (A4) operator API keys, (A5) billing state.
 |-------|---------|-----------|
 | Clear local draft | Input step (anon) | `clearDraft()` + flow reset — wipes the single localStorage slot |
 | Export account data | Project bar → Data & privacy | `GET /api/account/export` (bearer) — RLS-scoped read of projects, campaigns, experiments, outcomes, tasks, entitlement + identity; downloads as JSON. Works with anon key only (no service role needed) |
-| Delete a project | Project bar (existing ×, now confirm-gated) | Row delete; FKs cascade campaigns→experiments→outcomes→tasks; `projects.meta` carried memory/workspace so nothing survives |
 | Delete account | Project bar → Data & privacy (type-DELETE confirm) | `POST /api/account/delete` (bearer + literal confirm string): FK-ordered wipe of all six user tables, then `auth.admin.deleteUser`. Requires service role; **fails closed (503)** when the deployment can't do it — never pretends |
 | Retention | Operator | `GET/POST /api/retention`: 503 without CRON_SECRET, 401 on wrong secret, `{enabled:false}` no-op without RETENTION_DAYS/service role; else deletes projects with `updated_at < now-days` (cascades) + old webhook ids. `vercel.json` cron wired daily; Vercel injects `Authorization: Bearer $CRON_SECRET` automatically |
 
 ## 7. Open questions for counsel
 
 1. **Entity + contact**: legal entity name, registered address, and a monitored
-   privacy contact email (pages currently point at the GitHub feedback link —
-   placeholder, must be replaced).
+   privacy contact email. Legal pages use `NEXT_PUBLIC_PRIVACY_EMAIL` when set
+   and otherwise fall back to the GitHub feedback link; set the env only after
+   inbound delivery has been tested.
 2. **Governing law / venue** for the Terms (placeholders marked `[COUNSEL]`).
 3. **GDPR posture**: are we targeting EU users (site is English, founder-tool)?
    If yes: confirm legal bases per inventory row, Art. 28 DPAs with every

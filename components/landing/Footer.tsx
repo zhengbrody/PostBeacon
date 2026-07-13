@@ -26,8 +26,9 @@ export function Footer() {
           </Link>
         </div>
         <p className="mt-4 text-xs text-neutral-600">
-          © {new Date().getFullYear()} PostBeacon · postbeacon.app · No auto-posting, no
-          training on your content.
+          © {new Date().getFullYear()} PostBeacon · postbeacon.app · No auto-posting.
+          PostBeacon does not train on your content; your selected AI provider’s policy
+          applies.
         </p>
       </div>
     </footer>

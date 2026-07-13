@@ -94,7 +94,7 @@ export async function deleteAccountData(sb: SupabaseClient, userId: string): Pro
     // Missing table (42P01) is fine — older installs never wrote it.
     if (error && error.code !== "42P01") {
       throw new PublicError(
-        "Account deletion failed — nothing was left half-deleted where possible. Try again or contact us.",
+        "Account deletion stopped before the account record was removed. Some data may already be deleted; retry or contact us.",
         500
       );
     }

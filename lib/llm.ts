@@ -15,16 +15,17 @@ export function availableProviders(): Provider[] {
   if (process.env.OPENAI_API_KEY) out.push("openai");
   if (process.env.DEEPSEEK_API_KEY) out.push("deepseek");
 
-  // Optional DEFAULT_PROVIDER pins which one the UI selects first — an explicit
-  // operator decision that overrides the privacy ordering below.
+  // DEFAULT_PROVIDER may choose among clear-policy providers. An unclear-policy
+  // provider must be selected explicitly by the user whenever a clear-policy
+  // option is configured; an operator env var cannot silently opt users in.
   const preferred = process.env.DEFAULT_PROVIDER as Provider | undefined;
-  if (preferred && out.includes(preferred)) {
+  const clear = new Set(clearPolicyProviders());
+  if (preferred && out.includes(preferred) && clear.has(preferred)) {
     return [preferred, ...out.filter((p) => p !== preferred)];
   }
   // Privacy posture (M17): a provider whose API data policy doesn't clearly
   // exclude training use must never become the silent default, so order
   // clear-policy providers first. Stable within each group.
-  const clear = new Set(clearPolicyProviders());
   return [...out.filter((p) => clear.has(p)), ...out.filter((p) => !clear.has(p))];
 }
 

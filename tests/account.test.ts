@@ -83,6 +83,45 @@ describe("deletion cleanup coverage (the 'nothing survives' proof)", () => {
       expect(block.includes("user_id"), `${table} lacks user_id`).toBe(true);
     }
   });
+
+  it("every user table enables RLS and declares an owner-scoped policy", () => {
+    const schema = readFileSync(join(__dirname, "../supabase/schema.sql"), "utf-8");
+    for (const table of USER_TABLES_DELETE_ORDER) {
+      expect(schema).toMatch(
+        new RegExp(`alter table public\\.${table} enable row level security`, "i")
+      );
+      expect(schema).toMatch(
+        new RegExp(
+          `create policy [\\s\\S]{0,80} on public\\.${table}[\\s\\S]{0,160}auth\\.uid\\(\\) = user_id`,
+          "i"
+        )
+      );
+    }
+  });
+
+  it("every user table cascades from auth.users and workspace parents cascade", () => {
+    const schema = readFileSync(join(__dirname, "../supabase/schema.sql"), "utf-8");
+    for (const table of USER_TABLES_DELETE_ORDER) {
+      const block = schema
+        .split(`create table if not exists public.${table}`)[1]
+        ?.split(";")[0];
+      expect(block, `${table} table definition missing`).toBeTruthy();
+      expect(block, `${table} must cascade when its auth user is removed`).toMatch(
+        /user_id uuid[^,]*references auth\.users \(id\) on delete cascade/i
+      );
+    }
+    expect(schema).toMatch(
+      /project_id uuid[^,]*references public\.projects \(id\) on delete cascade/i
+    );
+    expect(
+      schema.match(
+        /campaign_id uuid[^,]*references public\.campaigns \(id\) on delete cascade/gi
+      )
+    ).toHaveLength(2);
+    expect(schema).toMatch(
+      /experiment_id uuid[^,]*references public\.experiments \(id\) on delete cascade/i
+    );
+  });
 });
 
 describe("deleteAccountData", () => {
