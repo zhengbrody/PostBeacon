@@ -3,11 +3,10 @@ import { PublicError } from "./errors";
 
 /**
  * Account data rights (M17): export everything, delete everything.
- * Both take the Supabase client as a seam so tests can assert exactly which
- * tables are touched and in what order. Deletion is belt-and-braces: the
- * schema's FKs cascade from auth.users, but we delete each table explicitly
- * (child → parent order) so cleanup doesn't silently depend on cascades
- * existing on older installs — then remove the auth user itself.
+ * Both take the Supabase client as a seam so tests can assert the complete
+ * boundary. Deletion prefers one transactional database RPC; the explicit
+ * child → parent path remains only as a compatibility fallback for older
+ * installs until their migration is applied.
  */
 
 /** Every user-owned table, child-before-parent so explicit deletes never hit FK errors. */
@@ -19,6 +18,8 @@ export const USER_TABLES_DELETE_ORDER = [
   "projects",
   "entitlements",
 ] as const;
+
+export const DELETE_USER_DATA_RPC = "delete_postbeacon_user_data";
 
 export interface AccountExport {
   exportedAt: string;
@@ -82,23 +83,37 @@ export async function exportAccountData(
 }
 
 /**
- * Erase the account: every owned row in child→parent order, then the auth
- * user (which removes email/OAuth identity and display name). Requires the
- * SERVICE-ROLE client — RLS lets users delete most of their rows, but not
- * entitlements (read-only policy) or the auth record, and a partial delete
- * that pretends to be total is worse than refusing. Callers gate on that.
+ * Erase the account: the database RPC deletes every owned row in one
+ * transaction, then the auth user is removed (email/OAuth identity and display
+ * name). Older installs without the RPC retain the explicit child→parent
+ * fallback until their migration is applied. Requires the SERVICE-ROLE client.
  */
 export async function deleteAccountData(sb: SupabaseClient, userId: string): Promise<void> {
-  for (const table of USER_TABLES_DELETE_ORDER) {
-    const { error } = await sb.from(table).delete().eq("user_id", userId);
-    // Missing table (42P01) is fine — older installs never wrote it.
-    if (error && error.code !== "42P01") {
-      throw new PublicError(
-        "Account deletion stopped before the account record was removed. Some data may already be deleted; retry or contact us.",
-        500
-      );
+  const { error: rpcError } = await sb.rpc(DELETE_USER_DATA_RPC, {
+    target_user_id: userId,
+  });
+
+  // PGRST202/42883 = migration not installed or PostgREST schema cache has not
+  // seen it yet. Keep old deployments functional, but prefer the atomic RPC.
+  if (rpcError && !["PGRST202", "42883"].includes(rpcError.code)) {
+    throw new PublicError(
+      "Account deletion stopped before database changes were committed. Retry or contact us.",
+      500
+    );
+  }
+  if (rpcError) {
+    for (const table of USER_TABLES_DELETE_ORDER) {
+      const { error } = await sb.from(table).delete().eq("user_id", userId);
+      // Missing table (42P01) is fine — older installs never wrote it.
+      if (error && error.code !== "42P01") {
+        throw new PublicError(
+          "Account deletion stopped before the account record was removed. Some data may already be deleted; retry or contact us.",
+          500
+        );
+      }
     }
   }
+
   const { error } = await sb.auth.admin.deleteUser(userId);
   if (error) {
     throw new PublicError(

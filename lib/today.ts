@@ -48,6 +48,45 @@ export interface TodayView {
   dueRecordCount: number; // nav badge: check-ins waiting
   plannedMinutes: number; // sum of shown due actions
   weeklyMinutes?: number;
+  activation: ActivationProgress;
+}
+
+export interface ActivationProgress {
+  completed: number;
+  total: number;
+  loopsClosed: number;
+  activated: boolean;
+  milestones: { id: "plan" | "publish" | "learn"; label: string; done: boolean }[];
+  nextStep: string;
+}
+
+/** The first-value path, derived locally from the user's own workspace. No
+ * cross-user event collection is needed to make the next success obvious. */
+export function activationProgress(workspace: WorkspaceState): ActivationProgress {
+  const published = workspace.experiments.length > 0;
+  const loopsClosed = workspace.experiments.filter((e) => e.verdict).length;
+  const learned = loopsClosed > 0;
+  const milestones: ActivationProgress["milestones"] = [
+    { id: "plan", label: "Plan ready", done: true },
+    { id: "publish", label: "First post", done: published },
+    { id: "learn", label: "First learning", done: learned },
+  ];
+  const nextStep = !published
+    ? "Publish one draft to start your first measured experiment."
+    : !learned
+      ? "Come back for the 24h result check — the verdict closes your first loop."
+      : loopsClosed === 1
+        ? "First value reached. Close a second loop this week to make the workflow repeatable."
+        : `${loopsClosed} learning loops closed. Keep the weekly rhythm going.`;
+
+  return {
+    completed: milestones.filter((m) => m.done).length,
+    total: milestones.length,
+    loopsClosed,
+    activated: learned,
+    milestones,
+    nextStep,
+  };
 }
 
 const HOUR = 3_600_000;
@@ -179,6 +218,7 @@ export function deriveToday(plan: PlanSlice, now: Date): TodayView {
     dueRecordCount: records.length,
     plannedMinutes: shown.filter((a) => a.due).reduce((n, a) => n + a.estMinutes, 0),
     weeklyMinutes: workspace.weeklyMinutes,
+    activation: activationProgress(workspace),
   };
 }
 

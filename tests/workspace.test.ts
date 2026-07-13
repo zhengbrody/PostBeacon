@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  activationProgress,
   deriveToday,
   dueCheckpoints,
   timelineEvents,
@@ -187,6 +188,54 @@ describe("deriveToday", () => {
     const dueSum = view.actions.filter((a) => a.due).reduce((n, a) => n + a.estMinutes, 0);
     expect(view.plannedMinutes).toBe(dueSum);
     expect(view.weeklyMinutes).toBe(300);
+  });
+});
+
+describe("activationProgress — first value without cross-user tracking", () => {
+  it("moves from plan → publish → first completed learning loop", () => {
+    const planOnly = activationProgress(ws());
+    expect(planOnly.completed).toBe(1);
+    expect(planOnly.nextStep).toMatch(/publish/i);
+
+    const published = activationProgress(ws({ experiments: [experiment()] }));
+    expect(published.completed).toBe(2);
+    expect(published.nextStep).toMatch(/24h/i);
+
+    const learned = activationProgress(
+      ws({
+        experiments: [
+          experiment({
+            verdict: {
+              call: "promising",
+              reason: "real engagement",
+              advice: "continue",
+              decidedAt: NOW.toISOString(),
+            },
+          }),
+        ],
+      })
+    );
+    expect(learned.completed).toBe(3);
+    expect(learned.activated).toBe(true);
+    expect(learned.nextStep).toMatch(/second loop/i);
+  });
+
+  it("turns repeated loops into the habit signal", () => {
+    const decided = (id: string): Experiment =>
+      experiment({
+        id,
+        verdict: {
+          call: "supported",
+          reason: "converted",
+          advice: "repeat",
+          decidedAt: NOW.toISOString(),
+        },
+      });
+    const progress = activationProgress(
+      ws({ experiments: [decided("one"), decided("two")] })
+    );
+    expect(progress.loopsClosed).toBe(2);
+    expect(progress.nextStep).toMatch(/weekly rhythm/i);
   });
 });
 

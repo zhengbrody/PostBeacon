@@ -234,9 +234,19 @@ RLS on all four: `user_id = auth.uid()` for select/insert/update/delete
 (same pattern as `projects`). All statements `create table if not exists` —
 safe to re-run.
 
+Production verification on 2026-07-13 found that these four mirror tables had
+not been installed: the app was correctly using `projects.meta.workspace`, so
+the user loop kept working, but normalized queries and database-level cascades
+were absent. Apply the atomic repair in
+`supabase/migrations/20260713_workspace_and_delete_rpc.sql`, then run the whole
+`supabase/audit.sql`; all seven report rows must say `PASS`.
+
 ## 12. Progressive disclosure rules
 
 - Post-generation lands on **Today only** — 3 cards max, one budget line.
+- A compact **Launch momentum** path makes first value explicit: Plan ready →
+  First post → First learning. It is derived from this user's workspace only;
+  no cross-user analytics or new stored event stream is introduced.
 - Full plan / Timeline / Review are one tap away, never inlined into Today.
 - The Publish dialog appears only on "Done/Mark as posted"; outcome form only
   from a due card or an experiment row; the feedback panel only right after
@@ -256,6 +266,8 @@ Today
 - [ ] B3. Every card shows why-now, estimated minutes, links to the content it uses, and Done/Skip controls.
 - [ ] B4. The full report is reachable under "Full plan" and is unchanged (Overview/Content/Calendar/Execute, printing included).
 - [ ] B5. Skipped cards don't reappear; done post-cards require the Publish dialog.
+- [ ] B6. Launch momentum advances only from real state (plan, experiment,
+  verdict) and points to the next first-value action.
 
 Experiments
 - [ ] C1. Confirming the Publish dialog creates an experiment with platform, community, angle, variant, publishedAt, trackedUrl (optional) and a generated hypothesis.

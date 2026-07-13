@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
+  DELETE_USER_DATA_RPC,
   deleteAccountData,
   exportAccountData,
   EXPORT_TABLES,
@@ -28,13 +29,21 @@ function exportClient(rows: Record<string, unknown[]>, failTable?: string) {
   };
 }
 
-function deleteClient(opts: { failTable?: string; failAuth?: boolean } = {}) {
+function deleteClient(
+  opts: { rpcErrorCode?: string; failTable?: string; failAuth?: boolean } = {}
+) {
   const calls: { table: string; column: string; value: string }[] = [];
+  const rpcCalls: { name: string; args: Record<string, unknown> }[] = [];
   let authDeleted: string | null = null;
   return {
     calls,
+    rpcCalls,
     authDeleted: () => authDeleted,
     client: {
+      rpc: async (name: string, args: Record<string, unknown>) => {
+        rpcCalls.push({ name, args });
+        return opts.rpcErrorCode ? { error: { code: opts.rpcErrorCode } } : { error: null };
+      },
       from: (table: string) => ({
         delete: () => ({
           eq: async (column: string, value: string) => {
@@ -122,11 +131,51 @@ describe("deletion cleanup coverage (the 'nothing survives' proof)", () => {
       /experiment_id uuid[^,]*references public\.experiments \(id\) on delete cascade/i
     );
   });
+
+  it("the production repair migration installs the workspace boundary and locked RPC", () => {
+    const migration = readFileSync(
+      join(__dirname, "../supabase/migrations/20260713_workspace_and_delete_rpc.sql"),
+      "utf-8"
+    );
+    expect(migration).toMatch(/^--[\s\S]*\nbegin;/i);
+    expect(migration.trimEnd()).toMatch(/commit;$/i);
+    for (const table of ["campaigns", "experiments", "outcomes", "tasks"]) {
+      expect(migration).toMatch(
+        new RegExp(`create table if not exists public\\.${table}`, "i")
+      );
+      expect(migration).toMatch(
+        new RegExp(`alter table public\\.${table} enable row level security`, "i")
+      );
+    }
+    expect(migration).toContain(`function public.${DELETE_USER_DATA_RPC}`);
+    expect(migration).toMatch(
+      /revoke all on function[\s\S]*from public, anon, authenticated/i
+    );
+    expect(migration).toMatch(/grant execute on function[\s\S]*to service_role/i);
+  });
+
+  it("the production audit reports explicit PASS/FAIL rows for missing objects", () => {
+    const audit = readFileSync(join(__dirname, "../supabase/audit.sql"), "utf-8");
+    expect(audit).toContain("all tables installed");
+    expect(audit).toContain("workspace parent cascades");
+    expect(audit).toContain("transactional delete RPC locked");
+    expect(audit).toMatch(/case when passed then 'PASS' else 'FAIL' end as status/i);
+  });
 });
 
 describe("deleteAccountData", () => {
-  it("wipes every table child→parent, keyed on the user, then removes the auth user", async () => {
+  it("uses the transactional RPC for one user, then removes the auth user", async () => {
     const mock = deleteClient();
+    await deleteAccountData(mock.client, "user-1");
+    expect(mock.rpcCalls).toEqual([
+      { name: DELETE_USER_DATA_RPC, args: { target_user_id: "user-1" } },
+    ]);
+    expect(mock.calls).toEqual([]);
+    expect(mock.authDeleted()).toBe("user-1");
+  });
+
+  it("falls back to child→parent deletes when an older install lacks the RPC", async () => {
+    const mock = deleteClient({ rpcErrorCode: "PGRST202" });
     await deleteAccountData(mock.client, "user-1");
     expect(mock.calls.map((c) => c.table)).toEqual([...USER_TABLES_DELETE_ORDER]);
     expect(mock.calls.every((c) => c.column === "user_id" && c.value === "user-1")).toBe(
@@ -136,14 +185,21 @@ describe("deleteAccountData", () => {
   });
 
   it("tolerates missing tables (42P01 — older installs never wrote them)", async () => {
-    const mock = deleteClient(); // its "tasks" table always 42P01s
+    const mock = deleteClient({ rpcErrorCode: "42883" }); // "tasks" always 42P01s
     await expect(deleteAccountData(mock.client, "u")).resolves.toBeUndefined();
   });
 
-  it("a real row-delete failure aborts BEFORE the auth user is removed", async () => {
-    const mock = deleteClient({ failTable: "projects" });
+  it("an RPC failure aborts before fallback deletes or auth removal", async () => {
+    const mock = deleteClient({ rpcErrorCode: "42501" });
     await expect(deleteAccountData(mock.client, "u")).rejects.toBeInstanceOf(PublicError);
-    expect(mock.authDeleted()).toBeNull(); // account still exists → user can retry
+    expect(mock.calls).toEqual([]);
+    expect(mock.authDeleted()).toBeNull();
+  });
+
+  it("a legacy row-delete failure aborts BEFORE the auth user is removed", async () => {
+    const mock = deleteClient({ rpcErrorCode: "PGRST202", failTable: "projects" });
+    await expect(deleteAccountData(mock.client, "u")).rejects.toBeInstanceOf(PublicError);
+    expect(mock.authDeleted()).toBeNull();
   });
 
   it("auth-user removal failure surfaces as a PublicError telling the user to contact us", async () => {

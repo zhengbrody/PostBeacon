@@ -42,6 +42,38 @@ export function TodayTab({
         )}
       </div>
 
+      <Card className="p-4">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+              Launch momentum
+            </h3>
+            <p className="mt-1 text-xs text-neutral-400">{view.activation.nextStep}</p>
+          </div>
+          <span className="shrink-0 text-sm font-semibold text-accent-300">
+            {view.activation.completed}/{view.activation.total}
+          </span>
+        </div>
+        <div className="mt-3 grid grid-cols-3 gap-1.5">
+          {view.activation.milestones.map((milestone) => (
+            <div key={milestone.id}>
+              <div
+                className={`h-1.5 rounded-full ${
+                  milestone.done ? "bg-accent-400" : "bg-surface-2"
+                }`}
+              />
+              <div
+                className={`mt-1 text-[10px] ${
+                  milestone.done ? "text-neutral-300" : "text-neutral-600"
+                }`}
+              >
+                {milestone.label}
+              </div>
+            </div>
+          ))}
+        </div>
+      </Card>
+
       {view.actions.map((a) => (
         <Card key={a.id} className={`p-5 ${a.due ? "" : "border-dashed opacity-80"}`}>
           <div className="flex flex-wrap items-start justify-between gap-3">

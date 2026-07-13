@@ -69,8 +69,8 @@ lib/
                         flag (orders the default), retentionDays — /privacy, /terms,
                         /subprocessors, the model picker and llm.ts all render it
   account.ts            Data rights: exportAccountData (RLS-scoped, no service role
-                        needed) + deleteAccountData (child→parent table wipe, then
-                        auth user removal; aborts before auth removal on failure)
+                        needed) + deleteAccountData (transactional DB RPC, then auth
+                        user removal; explicit fallback for pre-migration installs)
   retention.ts          Operator retention sweep: stale projects (cascades workspace)
                         + old webhook ids past RETENTION_DAYS cutoff
   log.ts                logError/redact — the ONLY sanctioned console sink (eslint
@@ -81,7 +81,8 @@ lib/
   usage.ts              Entitlement read/increment + FREE_LAUNCHES (server metering)
   plan.ts               Shared plan shaping: rank ordering, canonical calendar entries (M14)
   today.ts              Workspace engine (M15): Today derivation (≤3 actions), 24h/72h
-                        check-in due logic, rule-based verdicts, timeline, weekly review
+                        check-in due logic, rule-based verdicts, first-value activation
+                        path, timeline, weekly review
   workspace.ts          Write-through sync to the campaigns/experiments/outcomes/tasks
                         tables (feature-detected, best-effort; meta.workspace hydrates)
   coerce.ts             unknown-typed coercers for loose JSON (replaces per-file any helpers, M14)
@@ -135,8 +136,9 @@ tests/                  vitest suites: urlPolicy, safeFetch, billing, webhook ro
                         provider ordering); eval.live (gated)
 tests/golden/           fixtures.ts — 12 product-type golden fixtures with ground truth
 supabase/schema.sql     projects (+ meta jsonb) + entitlements + webhook_events +
-                        M15 campaigns/experiments/outcomes/tasks (owner-only RLS)
-supabase/audit.sql      read-only production verification for RLS, policies and FK cascades
+                        M15 campaigns/experiments/outcomes/tasks (owner-only RLS) + delete RPC
+supabase/migrations/    production-safe, transactional repair migrations
+supabase/audit.sql      single-result PASS/FAIL report for tables/RLS/policies/cascades/RPC
 .github/workflows/ci.yml  typecheck · lint · format:check · offline tests · build on every push/PR
 eslint.config.mjs / .prettierrc.json   non-interactive lint + format (next lint is deprecated)
 ```
@@ -186,11 +188,25 @@ Porkbun DNS: apex `A 76.76.21.21`, www `CNAME cname.vercel-dns.com` (nameservers
 Set in Vercel: ANTHROPIC/OPENAI/DEEPSEEK keys. Supabase public configuration is enabled and the
 production login gate is active. `SUPABASE_SERVICE_ROLE_KEY` is configured as a Sensitive,
 Production-only secret; Preview has only the public Supabase URL/anon key. Schema/RLS/cascade
-application still requires the read-only `supabase/audit.sql` production check. Billing remains
-unverified/off unless all Polar variables are set. `Pricing` is hidden during beta.
+audit on 2026-07-13 found only the projects/entitlements auth cascades: the M15 workspace mirror
+is not installed in production yet. Run `supabase/migrations/20260713_workspace_and_delete_rpc.sql`,
+then require all PASS rows from `supabase/audit.sql`. Billing remains unverified/off unless all
+Polar variables are set. `DEFAULT_PROVIDER=claude`; DeepSeek remains an explicit choice. `Pricing`
+is hidden during beta.
 Redeploy: `npx vercel --prod --yes`. Push env from `.env.local`: `~/push-env.sh`.
 
 ## Status / changelog
+- **2026-07-13**: **M17.2 production-schema + first-value follow-up.** The first production
+  audit exposed a real deployment drift: only 2/10 expected FK cascades existed, so the app was
+  correctly degrading to authoritative `projects.meta.workspace` while the four normalized M15
+  tables were absent. Added an atomic production repair migration (workspace tables, owner RLS,
+  cascades, service-role-only transactional deletion RPC) and replaced the three easy-to-misread
+  audit result sets with one seven-row PASS/FAIL report where missing objects fail explicitly.
+  Account deletion now uses the transaction RPC before removing the auth user, with a tested
+  pre-migration fallback. Today adds a locally derived Plan ready → First post → First learning
+  activation path, making first value visible without collecting cross-user analytics. Production
+  `DEFAULT_PROVIDER` changed from DeepSeek to Claude; DeepSeek stays opt-in. Production migration +
+  re-audit remain an operator step; privacy email setup remains intentionally deferred.
 - **2026-07-13**: **M17.1 privacy follow-up.** An unclear-policy provider can no longer
   outrank a configured clear-policy provider through `DEFAULT_PROVIDER`; DeepSeek remains an
   explicit per-run choice (or usable when it is the only configured provider). Legal pages now
