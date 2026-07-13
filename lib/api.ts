@@ -9,7 +9,7 @@ import type {
   PlatformPost,
   PlatformPlaybook,
   ClarifyingQuestion,
-  CopilotReply,
+  CopilotReplyV2,
   CopilotRequest,
   Fact,
 } from "./types";
@@ -88,7 +88,7 @@ export const api = {
       "/api/regenerate",
       { profile, platformId, provider, facts }
     ),
-  copilot: (body: CopilotRequest) => post<CopilotReply>("/api/copilot", body),
+  copilot: (body: CopilotRequest) => post<CopilotReplyV2>("/api/copilot", body),
   usage: async (): Promise<UsageInfo> => {
     const res = await fetch("/api/usage", { headers: { ...(await authHeader()) } });
     return res.json();

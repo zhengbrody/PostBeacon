@@ -22,17 +22,24 @@ export function PublishDialog({
   content,
   rec,
   defaultPostIdx,
+  initialCommunity,
+  initialAngle,
   onConfirm,
   onClose,
 }: {
   content: PlatformContent;
   rec?: PlatformRecommendation;
   defaultPostIdx: number;
+  /** Optional prefills (e.g. from a confirmed create_experiment proposal). */
+  initialCommunity?: string;
+  initialAngle?: string;
   onConfirm: (details: PublishDetails) => void;
   onClose: () => void;
 }) {
-  const [community, setCommunity] = useState(rec?.venue ?? rec?.bestMove ?? "");
-  const [angle, setAngle] = useState(rec?.angle ?? "");
+  const [community, setCommunity] = useState(
+    initialCommunity ?? rec?.venue ?? rec?.bestMove ?? ""
+  );
+  const [angle, setAngle] = useState(initialAngle ?? rec?.angle ?? "");
   const [postIdx, setPostIdx] = useState(
     Math.min(defaultPostIdx, Math.max(0, content.posts.length - 1))
   );

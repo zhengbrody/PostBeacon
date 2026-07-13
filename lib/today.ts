@@ -431,3 +431,68 @@ export function weeklyReview(
     suggestions: suggestions.slice(0, 3),
   };
 }
+
+// ---------------------------------------------------------------------------
+// Proactive briefing (M16) — deterministic, zero model calls, can't hallucinate.
+
+export interface Briefing {
+  lines: string[];
+  chips: { label: string; prompt: string }[]; // hand a specific ask to the model
+}
+
+/** What the copilot opens with: today, overdue check-ins, weekly state, and
+ *  the next experiment worth designing — all computed from the plan. */
+export function buildBriefing(plan: PlanSlice, now: Date): Briefing {
+  const lines: string[] = [];
+  const chips: Briefing["chips"] = [];
+
+  const today = deriveToday(plan, now);
+  const due = today.actions.filter((a) => a.due);
+  if (due.length) {
+    lines.push(
+      `Today: ${due.length} action${due.length > 1 ? "s" : ""} (~${today.plannedMinutes} min${
+        today.weeklyMinutes ? ` of your ${today.weeklyMinutes} min/week` : ""
+      }): ${due.map((a) => a.title).join(" · ")}`
+    );
+  } else {
+    lines.push("Today: all caught up — nothing due.");
+  }
+
+  if (today.dueRecordCount > 0) {
+    lines.push(
+      `${today.dueRecordCount} check-in${today.dueRecordCount > 1 ? "s" : ""} waiting — loops only count once results are recorded.`
+    );
+    chips.push({
+      label: "What should I watch for in the results?",
+      prompt: "What should I watch for when I record the due check-in results?",
+    });
+  }
+
+  const review = weeklyReview(plan, now);
+  if (plan.workspace.experiments.length) {
+    lines.push(
+      `Loops closed this week: ${review.loopsThisWeek}${
+        review.bestAngle
+          ? ` · best angle so far: “${clipString(review.bestAngle, 60)}”`
+          : ""
+      }`
+    );
+    chips.push({
+      label: "Run my weekly review",
+      prompt:
+        "Walk me through my weekly review: what did the loops teach, which channel/angle deserves next week, what should I stop?",
+    });
+  }
+
+  const unproven = review.suggestions.find((s) => s.includes("no experiment yet"));
+  if (unproven) {
+    lines.push(unproven);
+    chips.push({
+      label: "Design the next experiment",
+      prompt:
+        "Design my next experiment (use create_experiment): pick the channel and angle from the plan, justify with evidence, and write the hypothesis.",
+    });
+  }
+
+  return { lines, chips };
+}

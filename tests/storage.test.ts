@@ -55,6 +55,34 @@ describe("draft schema migrations", () => {
     expect(d.workspace).toEqual(workspace);
   });
 
+  it("v4 (M15) drafts gain an empty product memory (v5 migration)", () => {
+    const d = migrateDraft({
+      schemaVersion: 4,
+      url: "x.com",
+      workspace: { experiments: [{ id: "e1" }], taskLog: [] },
+    })!;
+    expect(d.schemaVersion).toBe(DRAFT_SCHEMA_VERSION);
+    expect(d.memory).toEqual({
+      bannedClaims: [],
+      angles: [],
+      rewriteFeedback: [],
+      userEditedFields: [],
+    });
+    expect(d.workspace?.experiments).toHaveLength(1); // untouched
+  });
+
+  it("current (v5) drafts keep their memory untouched", () => {
+    const memory = {
+      tone: "dry",
+      bannedClaims: ["AI-powered"],
+      angles: [],
+      rewriteFeedback: [],
+      userEditedFields: ["positioning"],
+    };
+    const d = migrateDraft({ schemaVersion: 5, url: "x.com", memory })!;
+    expect(d.memory).toEqual(memory);
+  });
+
   it("rejects non-object garbage instead of throwing", () => {
     expect(migrateDraft(null)).toBeNull();
     expect(migrateDraft("corrupt")).toBeNull();

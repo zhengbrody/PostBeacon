@@ -8,6 +8,7 @@ import type {
   Fact,
   GenerateResult,
   MarketingStrategy,
+  ProductMemory,
   ProductProfile,
   WorkspaceState,
 } from "@/lib/types";
@@ -22,6 +23,7 @@ interface AutosaveFlow {
     selected: string[];
     facts: Fact[];
     workspace: WorkspaceState;
+    memory: ProductMemory;
   };
   launchDate: string;
   projectId: string;
@@ -92,6 +94,7 @@ export function useAutosave(f: AutosaveFlow) {
               launchDate,
               facts: snap.facts,
               workspace: snap.workspace,
+              memory: snap.memory,
             },
             updated_at: new Date().toISOString(),
           },
@@ -121,6 +124,7 @@ export function useAutosave(f: AutosaveFlow) {
           launchDate,
           facts: snap.facts,
           workspace: snap.workspace,
+          memory: snap.memory,
         });
         setLastSaved(timeNow());
       }

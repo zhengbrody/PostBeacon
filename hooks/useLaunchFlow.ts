@@ -8,6 +8,14 @@ import { PLATFORMS } from "@/lib/platforms";
 import type { ContextField } from "@/lib/facts";
 import { variantDirection } from "@/lib/today";
 import {
+  applyActionPlan,
+  applyKindOf,
+  isDestructive,
+  summaryOf,
+  type ActionContext,
+  type ApplyKind,
+} from "@/lib/copilotActions";
+import {
   flowReducer,
   initialFlowState,
   type LoadedProject,
@@ -21,6 +29,7 @@ import type {
   PlatformPost,
   PlatformRecommendation,
   ProductProfile,
+  ProposedAction,
   ScheduleItem,
   TaskRecord,
 } from "@/lib/types";
@@ -174,19 +183,30 @@ export function useLaunchFlow() {
         strategy: state.strategy,
         result: state.result,
         facts,
+        workspace: state.workspace,
+        memory: state.memory,
         launchDate: state.launchDate,
         action: "rewrite",
         targetPlatformId: experiment.platformId,
         question: variantDirection(experiment, verdict),
       });
-      const rw = res.rewrites?.[0];
-      if (!rw?.body) throw new Error("No variant came back — try again.");
+      const variant = res.actions.find(
+        (a) => a.tool === "generate_variant" && a.hook && a.body
+      );
+      if (
+        !variant ||
+        variant.tool !== "generate_variant" ||
+        !variant.hook ||
+        !variant.body
+      ) {
+        throw new Error("No variant came back — try again.");
+      }
       dispatch({
         type: "VARIANT_ADDED",
         platformId: experiment.platformId,
         post: {
-          hook: rw.hook || rw.label,
-          body: rw.body,
+          hook: variant.hook,
+          body: variant.body,
           imageSuggestion: "",
           bestTime: platform?.bestTime ?? "",
           caveats: "",
@@ -194,6 +214,100 @@ export function useLaunchFlow() {
         note: `Generated a follow-up variant for ${experiment.platformName}`,
       });
     }, `Writing a follow-up variant for ${experiment.platformName}…`);
+  };
+
+  // ---- Copilot action engine (M16). The ONLY bridge from a proposal to
+  // ---- state, and it only runs from an explicit user confirmation.
+
+  const actionCtx = (): ActionContext => ({
+    strategy: state.strategy,
+    result: state.result,
+    facts: state.facts,
+    workspace: state.workspace,
+    memory: state.memory,
+    launchDate: state.launchDate,
+  });
+
+  const audit = (
+    a: ProposedAction,
+    decision: "applied" | "rejected",
+    destructive: boolean
+  ) =>
+    dispatch({
+      type: "AUDIT_LOGGED",
+      entry: {
+        id: a.id,
+        at: new Date().toISOString(),
+        tool: a.tool,
+        summary: summaryOf(a),
+        decision,
+        destructive,
+        evidenceVerified: a.evidence.length,
+        evidenceCited: a.evidence.length + a.droppedEvidence,
+      },
+    });
+
+  /** Confirmed by the user → dispatch its plan + audit it. Returns the apply
+   *  kind so the panel can open dialogs / trigger the rewrite call. */
+  const applyAction = (a: ProposedAction): ApplyKind => {
+    const ctx = actionCtx();
+    const kind = applyKindOf(a);
+    for (const action of applyActionPlan(a, ctx)) {
+      dispatch(
+        action.type === "STRATEGY_PATCHED" ||
+          action.type === "RECOMMENDATION_PATCHED" ||
+          action.type === "POST_PATCHED"
+          ? { ...action, origin: "copilot" }
+          : action
+      );
+    }
+    if (a.tool === "generate_variant" && a.hook && a.body) {
+      dispatch({
+        type: "MEMORY_REWRITE_FEEDBACK",
+        feedback: {
+          platformId: a.platformId,
+          direction: "accepted",
+          summary: a.hook.slice(0, 80),
+          at: new Date().toISOString(),
+        },
+      });
+    }
+    audit(a, "applied", isDestructive(a, ctx));
+    return kind;
+  };
+
+  const rejectAction = (a: ProposedAction) => {
+    if (a.tool === "generate_variant" && (a.hook || a.direction)) {
+      dispatch({
+        type: "MEMORY_REWRITE_FEEDBACK",
+        feedback: {
+          platformId: a.platformId,
+          direction: "rejected",
+          summary: (a.hook || a.direction || "variant").slice(0, 80),
+          at: new Date().toISOString(),
+        },
+      });
+    }
+    audit(a, "rejected", isDestructive(a, actionCtx()));
+  };
+
+  /** Server-side blocked proposals (invalid schema / unknown ids) get one
+   *  aggregate audit entry so the log shows what never reached the UI. */
+  const auditBlocked = (count: number) => {
+    if (count <= 0) return;
+    dispatch({
+      type: "AUDIT_LOGGED",
+      entry: {
+        id: crypto.randomUUID(),
+        at: new Date().toISOString(),
+        tool: "unknown",
+        summary: count + " invalid proposal(s) blocked by the schema validator",
+        decision: "blocked",
+        destructive: false,
+        evidenceVerified: 0,
+        evidenceCited: 0,
+      },
+    });
   };
 
   const loadProject = (p: LoadedProject) =>
@@ -241,6 +355,7 @@ export function useLaunchFlow() {
       selected: state.selected,
       facts: state.facts,
       workspace: state.workspace,
+      memory: state.memory,
     }),
     [
       state.url,
@@ -251,6 +366,7 @@ export function useLaunchFlow() {
       state.selected,
       state.facts,
       state.workspace,
+      state.memory,
     ]
   );
 
@@ -318,6 +434,14 @@ export function useLaunchFlow() {
     snapshot,
     // ---- workspace (M15) ----
     workspace: state.workspace,
+    // ---- copilot action engine + memory (M16) ----
+    memory: state.memory,
+    applyAction,
+    rejectAction,
+    auditBlocked,
+    setTone: (tone?: string) => dispatch({ type: "MEMORY_TONE_SET", tone }),
+    addBannedClaim: (claim: string) => dispatch({ type: "MEMORY_BANNED_ADDED", claim }),
+    removeBannedClaim: (idx: number) => dispatch({ type: "MEMORY_BANNED_REMOVED", idx }),
     setWeeklyMinutes: (minutes?: number) =>
       dispatch({ type: "WEEKLY_MINUTES_SET", minutes }),
     actTask: (record: TaskRecord) => dispatch({ type: "TASK_ACTED", record }),

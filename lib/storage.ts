@@ -5,6 +5,7 @@ import type {
   Fact,
   GenerateResult,
   MarketingStrategy,
+  ProductMemory,
   ProductProfile,
   WorkspaceState,
 } from "./types";
@@ -18,9 +19,10 @@ const KEY = "postbeacon:draft";
  *   v2 — M11: + selected, launchDate
  *   v3 — M13: + facts
  *   v4 — M15: + workspace (experiments, task log, weekly budget)
+ *   v5 — M16: + memory (product memory: tone, banned claims, angle verdicts)
  * Bump this and extend migrateDraft() when the persisted shape changes.
  */
-export const DRAFT_SCHEMA_VERSION = 4;
+export const DRAFT_SCHEMA_VERSION = 5;
 
 export interface Draft {
   schemaVersion?: number; // absent on pre-versioning saves; stamped on write
@@ -34,6 +36,7 @@ export interface Draft {
   launchDate?: string;
   facts?: Fact[]; // M13 fact ledger (provenance for the profile)
   workspace?: WorkspaceState; // M15 launch workspace (experiments, task log)
+  memory?: ProductMemory; // M16 product memory (lean, never chat transcripts)
 }
 
 /**
@@ -54,6 +57,14 @@ export function migrateDraft(raw: unknown): Draft | null {
   const out: Draft = { ...d, schemaVersion: version };
   if (version < 3) out.facts = out.facts ?? [];
   if (version < 4) out.workspace = out.workspace ?? { experiments: [], taskLog: [] };
+  if (version < 5) {
+    out.memory = out.memory ?? {
+      bannedClaims: [],
+      angles: [],
+      rewriteFeedback: [],
+      userEditedFields: [],
+    };
+  }
   out.schemaVersion = DRAFT_SCHEMA_VERSION;
   return out;
 }

@@ -322,12 +322,96 @@ export const regenerateBodySchema = z.object({
   facts: factsFieldSchema,
 });
 
+/** Workspace slice the copilot needs for evidence refs (bounded). */
+const copilotWorkspaceSchema = z.object({
+  experiments: z
+    .array(
+      z.object({
+        id: s(80),
+        platformId: s(64),
+        platformName: s(200).default(""),
+        community: s(200).default(""),
+        angle: s(300).default(""),
+        variant: s(2000).default(""),
+        hypothesis: s(400).default(""),
+        trackedUrl: s(2048).optional(),
+        publishedAt: s(40).default(""),
+        status: z.enum(["live", "analyzed", "stopped"]).catch("live"),
+        postIdx: z.number().int().min(0).max(50).catch(0),
+        outcomes: z
+          .array(
+            z.object({
+              id: s(80),
+              checkpoint: z.enum(["24h", "72h", "manual"]),
+              recordedAt: s(40).default(""),
+              impressions: z.number().optional(),
+              replies: z.number().optional(),
+              clicks: z.number().optional(),
+              signups: z.number().optional(),
+              revenue: z.number().optional(),
+              qualitativeFeedback: s(4000).optional(),
+            })
+          )
+          .max(6)
+          .default([]),
+        verdict: z
+          .object({
+            call: z.enum(["supported", "promising", "weak", "no-signal"]),
+            reason: s(500).default(""),
+            advice: s(500).default(""),
+            decidedAt: s(40).default(""),
+          })
+          .optional(),
+      })
+    )
+    .max(30)
+    .default([]),
+  // The model never needs the task log; accept-and-drop whatever arrives.
+  taskLog: z
+    .array(z.unknown())
+    .max(200)
+    .transform(() => [] as never[])
+    .default([]),
+});
+
+/** Product memory as the copilot context accepts it (bounded). */
+const memorySchema = z.object({
+  tone: s(200).optional(),
+  bannedClaims: z.array(s(200)).max(20).default([]),
+  angles: z
+    .array(
+      z.object({
+        angle: s(300),
+        platformId: s(64),
+        verdict: z.enum(["winning", "losing"]),
+        experimentId: s(80),
+        at: s(40).default(""),
+      })
+    )
+    .max(20)
+    .default([]),
+  rewriteFeedback: z
+    .array(
+      z.object({
+        platformId: s(64),
+        direction: z.enum(["accepted", "rejected"]),
+        summary: s(120),
+        at: s(40).default(""),
+      })
+    )
+    .max(30)
+    .default([]),
+  userEditedFields: z.array(s(80)).max(40).default([]),
+});
+
 export const copilotBodySchema = z.object({
   provider: providerSchema.optional(),
   profile: profileSchema,
   strategy: strategySchema,
   result: resultSchema.nullable().optional(),
   facts: factsFieldSchema,
+  workspace: copilotWorkspaceSchema.optional(),
+  memory: memorySchema.optional(),
   launchDate: s(40).optional(),
   action: z.enum([
     "explain-plan",

@@ -49,7 +49,11 @@ lib/
   scoring.ts            Explainable scoring: model rates dimensions, CODE computes the 0-100 total,
                         19-platform completeness pipeline (retry→fallback), venue grounding
   generate.ts           Per-platform content+playbook prompt (generatePlatformPosts) — shared by generate+regenerate
-  copilot.ts            Launch Copilot: compact plan-context builder + per-action prompts (runCopilot)
+  copilot.ts            Launch Copilot: plan+workspace+memory context builder, tool-based
+                        {reply, actions} contract (runCopilot)
+  copilotActions.ts     The action engine (M16): strict per-tool schemas, id/evidence
+                        verification, destructive detection, impact lines, applyActionPlan
+                        — the ONLY proposal→state bridge, used on explicit confirm
   voice.ts              ANTI_AI_RULES — house rules injected into content prompts to kill AI tells
   demo.ts               DEMO_PROJECT — a hand-authored full example plan (the no-API-key showcase)
   site.ts               Public config (REPO_URL, FEEDBACK_URL) — NEXT_PUBLIC_* overridable
@@ -101,9 +105,12 @@ components/
   landing/              Nav, Hero, HowItWorks, PlatformShowcase, Pricing, FAQ, Footer
 docs/M13-trust-layer.md Design + migration doc for the trust layer (facts/scoring/partial success)
 docs/M15-workspace.md   PRD + state diagram + acceptance criteria for the launch workspace
+docs/M16-copilot-actions.md  Design contract for the copilot action engine
 tests/                  vitest suites: urlPolicy, safeFetch, billing, webhook route, validate,
                         golden (12-fixture offline evals), generateRoute, flowReducer
-                        (state-machine invariants), storage (draft migrations); eval.live (gated)
+                        (state-machine invariants), storage (draft migrations), workspace
+                        (Today/verdicts/review), copilotActions (action boundary, injection,
+                        destructive gates, memory); eval.live (gated)
 tests/golden/           fixtures.ts — 12 product-type golden fixtures with ground truth
 supabase/schema.sql     projects (+ meta jsonb) + entitlements + webhook_events +
                         M15 campaigns/experiments/outcomes/tasks (owner-only RLS)
@@ -157,6 +164,36 @@ left unset → accounts off (anon + localStorage), generation open/unmetered, `P
 Redeploy: `npx vercel --prod --yes`. Push env from `.env.local`: `~/push-env.sh`.
 
 ## Status / changelog
+- **2026-07-12**: **M16 — Copilot as an auditable CMO action engine** (design contract first:
+  docs/M16-copilot-actions.md; still ZERO auto-posting — no posting tool exists in the
+  schema). (1) Nine structured tools (ask_clarifying_question, propose_next_actions,
+  update_positioning, update_channel_priority, create_experiment, generate_variant,
+  record_outcome, diagnose_outcome, stop_or_continue_channel); the model returns
+  {reply, actions} and NEVER mutates state — lib/copilotActions.ts is the hard boundary
+  (strict per-tool zod, unknown tools dropped, platform/experiment ids checked against real
+  objects, ≤5 actions/reply; record_outcome has no metric fields so numbers can't be
+  fabricated into state). (2) UI: every proposal is an ActionCard with diff (old→new),
+  rationale, verified-evidence chips, plain-language impact line, Apply/Dismiss; stop /
+  priority-downgrade / overwriting hand-edited fields arm a second confirmation
+  (userEditedFields tracked via origin-tagged reducer patches). (3) Evidence is
+  recomputed server-side: refs that don't resolve are dropped+counted; confidence
+  grounded/unknown is code-derived; unknown → the model must say so and attach a
+  validationExperiment. (4) Product Memory (draft v5 + meta.memory, lean by construction):
+  tone, banned claims, auto-appended winning/losing angles (citing experiments),
+  accepted/rejected rewrite summaries, userEditedFields — chat transcripts are never
+  stored; facts/outcomes referenced from their existing sources, not duplicated.
+  (5) Proactive briefing on panel open — deterministic (lib/today.buildBriefing): today's
+  actions+budget, due 24h/72h collections, weekly loops + best angle, next-experiment chip;
+  zero model calls, zero latency. (6) Audit log (workspace.auditLog, cap 100):
+  applied/rejected/blocked per proposal with destructive flag + evidence verified/cited;
+  Audit view in the panel. (7) Injection defenses: pasted text delimited «» and declared
+  data, validator refuses minted verbs/fabricated ids, human confirm is the only
+  state bridge. 24 new tests (schema boundary, metric smuggling, evidence re-verification,
+  destructive detection, apply mapping purity, memory transitions, v5 migration, prompt
+  contract). Verified live in the browser (deepseek): briefing, grounded action cards with
+  evidence chips (experiment/memory/post/fact refs), destructive two-step (state provably
+  unchanged until confirm), prefilled publish dialog with cancel ⇒ no experiment, audit
+  entries persisted. 229 offline tests, all gates green.
 - **2026-07-12**: **M15 — Launch Workspace: from one-shot report to a continuing loop**
   (PRD + state diagram + acceptance criteria written first: docs/M15-workspace.md; still
   ZERO auto-posting). (1) Intake: Diagnose step now asks goal/stage/assets (M13 questions)

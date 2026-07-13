@@ -44,6 +44,8 @@ export async function POST(req: NextRequest) {
       strategy: body.strategy,
       result: body.result,
       facts: body.facts,
+      workspace: body.workspace,
+      memory: body.memory,
       launchDate: body.launchDate,
       action,
       question,

@@ -9,6 +9,7 @@ import {
 import { orderByRecommendation, scheduleEntryFor, sortSchedule } from "@/lib/plan";
 import { verdictFor } from "@/lib/today";
 import type {
+  AuditEntry,
   ClarifyingQuestion,
   Experiment,
   Fact,
@@ -19,7 +20,9 @@ import type {
   PlatformPlaybook,
   PlatformPost,
   PlatformRecommendation,
+  ProductMemory,
   ProductProfile,
+  RewriteFeedback,
   ScheduleItem,
   TaskRecord,
   WorkspaceState,
@@ -50,9 +53,24 @@ export interface FlowState {
   projectId: string; // stable id for autosave upsert
   demo: boolean; // viewing the baked-in example (autosave paused)
   workspace: WorkspaceState; // M15 — experiments, task log, weekly budget
+  memory: ProductMemory; // M16 — lean product memory (never the chat transcript)
 }
 
-export const emptyWorkspace: WorkspaceState = { experiments: [], taskLog: [] };
+export const emptyWorkspace: WorkspaceState = {
+  experiments: [],
+  taskLog: [],
+  auditLog: [],
+};
+
+export const emptyMemory: ProductMemory = {
+  bannedClaims: [],
+  angles: [],
+  rewriteFeedback: [],
+  userEditedFields: [],
+};
+
+const MEMORY_CAPS = { bannedClaims: 20, angles: 20, rewriteFeedback: 30, edits: 40 };
+const AUDIT_CAP = 100;
 
 export const initialFlowState: FlowState = {
   step: "input",
@@ -68,6 +86,7 @@ export const initialFlowState: FlowState = {
   projectId: "",
   demo: false,
   workspace: emptyWorkspace,
+  memory: emptyMemory,
 };
 
 /** Payload for one channel's freshly generated content (regenerate/add/retry). */
@@ -90,11 +109,13 @@ export interface LoadedProject {
   launchDate?: string;
   facts?: Fact[];
   workspace?: WorkspaceState;
+  memory?: ProductMemory;
   meta?: {
     selected?: string[];
     launchDate?: string;
     facts?: Fact[];
     workspace?: WorkspaceState;
+    memory?: ProductMemory;
   } | null;
 }
 
@@ -115,18 +136,29 @@ export type FlowAction =
   | { type: "FACT_DELETED"; id: string }
   | { type: "QUESTION_ANSWERED"; id: ContextField; answer: string }
   | { type: "STRATEGY_BUILT"; strategy: MarketingStrategy }
-  | { type: "STRATEGY_PATCHED"; patch: Partial<MarketingStrategy> }
+  | {
+      type: "STRATEGY_PATCHED";
+      patch: Partial<MarketingStrategy>;
+      origin?: "user" | "copilot";
+    }
   | {
       type: "RECOMMENDATION_PATCHED";
       platformId: string;
       patch: Partial<PlatformRecommendation>;
+      origin?: "user" | "copilot";
     }
   | { type: "SELECTION_TOGGLED"; platformId: string }
   | { type: "GENERATED"; result: GenerateResult }
   | { type: "CHANNEL_CONTENT_REPLACED"; channel: ChannelPayload }
   | { type: "CHANNEL_UPSERTED"; channel: ChannelPayload } // add-channel + retry-failed
   | { type: "CHANNEL_REMOVED"; platformId: string }
-  | { type: "POST_PATCHED"; platformId: string; idx: number; patch: Partial<PlatformPost> }
+  | {
+      type: "POST_PATCHED";
+      platformId: string;
+      idx: number;
+      patch: Partial<PlatformPost>;
+      origin?: "user" | "copilot";
+    }
   | { type: "SCHEDULE_ITEM_PATCHED"; idx: number; patch: Partial<ScheduleItem> }
   | { type: "SCHEDULE_ITEM_REMOVED"; idx: number }
   | { type: "SCHEDULE_ITEM_ADDED"; item: ScheduleItem }
@@ -139,7 +171,13 @@ export type FlowAction =
   | { type: "EXPERIMENT_CREATED"; experiment: Experiment; taskId?: string }
   | { type: "OUTCOME_RECORDED"; experimentId: string; outcome: Outcome }
   | { type: "EXPERIMENT_STOPPED"; experimentId: string }
-  | { type: "VARIANT_ADDED"; platformId: string; post: PlatformPost; note: string };
+  | { type: "VARIANT_ADDED"; platformId: string; post: PlatformPost; note: string }
+  // ---- memory + audit (M16) ----
+  | { type: "MEMORY_TONE_SET"; tone?: string }
+  | { type: "MEMORY_BANNED_ADDED"; claim: string }
+  | { type: "MEMORY_BANNED_REMOVED"; idx: number }
+  | { type: "MEMORY_REWRITE_FEEDBACK"; feedback: RewriteFeedback }
+  | { type: "AUDIT_LOGGED"; entry: AuditEntry };
 
 // Default channel set: the 4 best-scoring recommendations. A tight default —
 // content is only written for checked channels, and a focused plan beats a
@@ -211,6 +249,14 @@ export function normalize(s: FlowState): FlowState {
   return next;
 }
 
+/** Remember hand-edited plan fields (drives the copilot overwrite confirm). */
+function withUserEdits(s: FlowState, fields: string[]): FlowState {
+  const merged = Array.from(new Set([...s.memory.userEditedFields, ...fields])).slice(
+    -MEMORY_CAPS.edits
+  );
+  return { ...s, memory: { ...s.memory, userEditedFields: merged } };
+}
+
 function transition(s: FlowState, a: FlowAction): FlowState {
   switch (a.type) {
     case "RESET":
@@ -245,6 +291,8 @@ function transition(s: FlowState, a: FlowAction): FlowState {
         // Workspace: flat field (local draft v4) or meta (Supabase row);
         // pre-M15 saves have neither → empty loop history.
         workspace: p.workspace ?? p.meta?.workspace ?? emptyWorkspace,
+        // Memory: v5 flat field or meta; pre-M16 saves → empty memory.
+        memory: p.memory ?? p.meta?.memory ?? emptyMemory,
         demo: a.demo,
         // Open at the deepest step the loaded data supports.
         ...(p.result
@@ -272,6 +320,13 @@ function transition(s: FlowState, a: FlowAction): FlowState {
         result: null,
         posted: {},
         workspace: { ...emptyWorkspace, weeklyMinutes: s.workspace.weeklyMinutes },
+        // Tone + banned claims are durable preferences; angle verdicts,
+        // rewrite feedback and edit tracking belong to the old plan.
+        memory: {
+          ...emptyMemory,
+          tone: s.memory.tone,
+          bannedClaims: s.memory.bannedClaims,
+        },
         step: "profile",
       };
 
@@ -324,21 +379,34 @@ function transition(s: FlowState, a: FlowAction): FlowState {
         step: "strategy",
       };
 
-    case "STRATEGY_PATCHED":
-      return s.strategy ? { ...s, strategy: { ...s.strategy, ...a.patch } } : s;
+    case "STRATEGY_PATCHED": {
+      if (!s.strategy) return s;
+      const next = { ...s, strategy: { ...s.strategy, ...a.patch } };
+      if (a.origin === "copilot") return next;
+      // Hand edits are remembered so a copilot overwrite needs double confirm.
+      const edited: string[] = [];
+      if ("positioning" in a.patch) edited.push("positioning");
+      if ("antiPositioning" in a.patch) edited.push("antiPositioning");
+      return edited.length ? withUserEdits(next, edited) : next;
+    }
 
-    case "RECOMMENDATION_PATCHED":
-      return s.strategy
-        ? {
-            ...s,
-            strategy: {
-              ...s.strategy,
-              recommendations: s.strategy.recommendations.map((r) =>
-                r.platformId === a.platformId ? { ...r, ...a.patch } : r
-              ),
-            },
-          }
-        : s;
+    case "RECOMMENDATION_PATCHED": {
+      if (!s.strategy) return s;
+      const next = {
+        ...s,
+        strategy: {
+          ...s.strategy,
+          recommendations: s.strategy.recommendations.map((r) =>
+            r.platformId === a.platformId ? { ...r, ...a.patch } : r
+          ),
+        },
+      };
+      if (a.origin === "copilot") return next;
+      const edited: string[] = [];
+      if ("angle" in a.patch) edited.push("angle:" + a.platformId);
+      if ("bestMove" in a.patch) edited.push("bestMove:" + a.platformId);
+      return edited.length ? withUserEdits(next, edited) : next;
+    }
 
     case "SELECTION_TOGGLED": {
       if (!s.strategy?.recommendations.some((r) => r.platformId === a.platformId)) {
@@ -425,6 +493,9 @@ function transition(s: FlowState, a: FlowAction): FlowState {
       };
 
     case "POST_PATCHED":
+      if (s.result && a.origin !== "copilot") {
+        s = withUserEdits(s, ["post:" + a.platformId + "#" + a.idx]);
+      }
       return s.result
         ? {
             ...s,
@@ -487,6 +558,52 @@ function transition(s: FlowState, a: FlowAction): FlowState {
     case "PROJECT_ID_SET":
       return { ...s, projectId: a.id };
 
+    // ---- memory + audit (M16) ----
+
+    case "MEMORY_TONE_SET":
+      return { ...s, memory: { ...s.memory, tone: a.tone?.trim() || undefined } };
+
+    case "MEMORY_BANNED_ADDED": {
+      const claim = a.claim.trim().slice(0, 200);
+      if (!claim || s.memory.bannedClaims.includes(claim)) return s;
+      return {
+        ...s,
+        memory: {
+          ...s.memory,
+          bannedClaims: [...s.memory.bannedClaims, claim].slice(-MEMORY_CAPS.bannedClaims),
+        },
+      };
+    }
+
+    case "MEMORY_BANNED_REMOVED":
+      return {
+        ...s,
+        memory: {
+          ...s.memory,
+          bannedClaims: s.memory.bannedClaims.filter((_, i) => i !== a.idx),
+        },
+      };
+
+    case "MEMORY_REWRITE_FEEDBACK":
+      return {
+        ...s,
+        memory: {
+          ...s.memory,
+          rewriteFeedback: [...s.memory.rewriteFeedback, a.feedback].slice(
+            -MEMORY_CAPS.rewriteFeedback
+          ),
+        },
+      };
+
+    case "AUDIT_LOGGED":
+      return {
+        ...s,
+        workspace: {
+          ...s.workspace,
+          auditLog: [...(s.workspace.auditLog ?? []), a.entry].slice(-AUDIT_CAP),
+        },
+      };
+
     // ---- workspace (M15) ----
 
     case "WEEKLY_MINUTES_SET":
@@ -536,24 +653,48 @@ function transition(s: FlowState, a: FlowAction): FlowState {
     case "OUTCOME_RECORDED": {
       // Verdict is computed HERE, deterministically — recording results and
       // getting the read are one atomic step (a completed learning loop).
+      const target = s.workspace.experiments.find((e) => e.id === a.experimentId);
+      if (!target) return s;
+      const verdict = verdictFor(a.outcome, {
+        platformName: target.platformName,
+        angle: target.angle,
+        goal: s.profile?.conversionGoal,
+      });
+      // Product memory learns which angles win or lose, citing the experiment.
+      // no-signal at 24h means "too early", not a loss.
+      const angleVerdict =
+        verdict.call === "supported" || verdict.call === "promising"
+          ? ("winning" as const)
+          : verdict.call === "weak" || a.outcome.checkpoint === "72h"
+            ? ("losing" as const)
+            : null;
+      const angles = angleVerdict
+        ? [
+            ...s.memory.angles,
+            {
+              angle: target.angle,
+              platformId: target.platformId,
+              verdict: angleVerdict,
+              experimentId: target.id,
+              at: a.outcome.recordedAt,
+            },
+          ].slice(-MEMORY_CAPS.angles)
+        : s.memory.angles;
       return {
         ...s,
+        memory: { ...s.memory, angles },
         workspace: {
           ...s.workspace,
-          experiments: s.workspace.experiments.map((e) => {
-            if (e.id !== a.experimentId) return e;
-            const verdict = verdictFor(a.outcome, {
-              platformName: e.platformName,
-              angle: e.angle,
-              goal: s.profile?.conversionGoal,
-            });
-            return {
-              ...e,
-              outcomes: [...e.outcomes, a.outcome],
-              verdict,
-              status: e.status === "stopped" ? e.status : ("analyzed" as const),
-            };
-          }),
+          experiments: s.workspace.experiments.map((e) =>
+            e.id !== a.experimentId
+              ? e
+              : {
+                  ...e,
+                  outcomes: [...e.outcomes, a.outcome],
+                  verdict,
+                  status: e.status === "stopped" ? e.status : ("analyzed" as const),
+                }
+          ),
         },
       };
     }

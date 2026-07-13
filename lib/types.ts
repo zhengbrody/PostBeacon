@@ -224,27 +224,14 @@ export interface CopilotMessage {
   content: string;
 }
 
-/** A copy-ready replacement for a drafted post. Applies via updatePost when it
- *  resolves to an existing [platformId, postIndex]; otherwise it's copy-only. */
-export interface CopilotRewrite {
-  platformId?: string;
-  postIndex?: number;
-  label: string; // e.g. "Reddit post 2 — cut the ad voice"
-  hook?: string;
-  body: string;
-}
-
-export interface CopilotReply {
-  reply: string; // plain text answer
-  rewrites?: CopilotRewrite[];
-}
-
 export interface CopilotRequest {
   provider?: Provider;
   profile: ProductProfile;
   strategy: MarketingStrategy;
   result?: GenerateResult | null;
   facts?: Fact[]; // M13 — the copilot answers with the same provenance discipline
+  workspace?: WorkspaceState; // M16 — experiments + outcomes for evidence refs
+  memory?: ProductMemory; // M16 — lean product memory in the context
   launchDate?: string;
   action: CopilotAction;
   question?: string; // free question / rewrite direction / pasted feedback
@@ -314,4 +301,123 @@ export interface WorkspaceState {
   weeklyMinutes?: number; // intake: weekly time budget
   experiments: Experiment[];
   taskLog: TaskRecord[];
+  auditLog?: AuditEntry[]; // M16 — copilot proposals and their fates (≤100)
+}
+
+// ---- Copilot action engine (M16): the model proposes, the user disposes ----
+
+export type CopilotTool =
+  | "ask_clarifying_question"
+  | "propose_next_actions"
+  | "update_positioning"
+  | "update_channel_priority"
+  | "create_experiment"
+  | "generate_variant"
+  | "record_outcome"
+  | "diagnose_outcome"
+  | "stop_or_continue_channel";
+
+/** A pointer at a real plan object. Server-verified — refs that don't
+ *  resolve are dropped and counted, never displayed as evidence. */
+export interface EvidenceRef {
+  type: "fact" | "experiment" | "recommendation" | "post" | "memory";
+  id: string; // fact id · experiment id · platformId · `${platformId}#${idx}` · mem key
+}
+
+interface ProposedBase {
+  id: string; // assigned at validation time — audit entries correlate on it
+  rationale: string;
+  evidence: EvidenceRef[]; // verified refs only
+  droppedEvidence: number; // refs the model cited that didn't resolve
+  confidence: "grounded" | "unknown"; // computed from verified evidence, never model-claimed
+  /** When confidence is unknown, the model is told to propose how to find out. */
+  validationExperiment?: {
+    platformId: string;
+    community: string;
+    angle: string;
+    hypothesis: string;
+  };
+}
+
+export type ProposedAction = ProposedBase &
+  (
+    | { tool: "ask_clarifying_question"; question: string; why: string; options?: string[] }
+    | {
+        tool: "propose_next_actions";
+        items: { title: string; whyNow: string; estMinutes: number; platformId?: string }[];
+      }
+    | { tool: "update_positioning"; positioning?: string; antiPositioning?: string }
+    | { tool: "update_channel_priority"; platformId: string; priority: Priority }
+    | {
+        tool: "create_experiment";
+        platformId: string;
+        community: string;
+        angle: string;
+        hypothesis: string;
+        postIdx?: number;
+      }
+    | {
+        tool: "generate_variant";
+        platformId: string;
+        postIdx?: number;
+        direction?: string;
+        hook?: string;
+        body?: string;
+      }
+    | { tool: "record_outcome"; experimentId: string; checkpoint: "24h" | "72h" | "manual" }
+    | {
+        tool: "diagnose_outcome";
+        experimentId: string;
+        diagnosis: string;
+        suggestion: string;
+      }
+    | {
+        tool: "stop_or_continue_channel";
+        platformId: string;
+        decision: "stop" | "continue";
+      }
+  );
+
+/** What the copilot endpoint returns now: prose + proposals, never mutations. */
+export interface CopilotReplyV2 {
+  reply: string;
+  actions: ProposedAction[];
+  blocked: number; // schema-invalid / unknown-id proposals dropped server-side
+}
+
+// ---- Product Memory (M16): persistent, lean — never the chat transcript ----
+
+export interface AngleRecord {
+  angle: string;
+  platformId: string;
+  verdict: "winning" | "losing";
+  experimentId: string; // the evidence
+  at: string;
+}
+
+export interface RewriteFeedback {
+  platformId: string;
+  direction: "accepted" | "rejected";
+  summary: string; // short label, never the full text
+  at: string;
+}
+
+export interface ProductMemory {
+  tone?: string; // preferred writing tone (user-editable)
+  bannedClaims: string[]; // things never to claim (≤20)
+  angles: AngleRecord[]; // auto-appended when verdicts land (≤20)
+  rewriteFeedback: RewriteFeedback[]; // accepted/rejected variants (≤30)
+  userEditedFields: string[]; // hand-edited plan fields → overwrite needs double confirm
+}
+
+/** One audited copilot decision. Applied entries also surface on the Timeline. */
+export interface AuditEntry {
+  id: string; // the proposal's id
+  at: string;
+  tool: CopilotTool | "unknown";
+  summary: string;
+  decision: "applied" | "rejected" | "blocked";
+  destructive: boolean;
+  evidenceVerified: number;
+  evidenceCited: number;
 }

@@ -224,10 +224,22 @@ function AppFlow({ f }: { f: ReturnType<typeof useLaunchFlow> }) {
           strategy={f.strategy}
           result={f.result}
           facts={f.facts}
+          workspace={f.workspace}
+          memory={f.memory}
           launchDate={f.launchDate}
           provider={f.provider}
-          onApplyRewrite={f.updatePost}
+          loading={f.loading}
           onAuthRequired={() => f.setPaywall("auth")}
+          applyAction={f.applyAction}
+          rejectAction={f.rejectAction}
+          auditBlocked={f.auditBlocked}
+          setTone={f.setTone}
+          addBannedClaim={f.addBannedClaim}
+          removeBannedClaim={f.removeBannedClaim}
+          publishExperiment={f.publishExperiment}
+          recordOutcome={f.recordOutcome}
+          stopExperiment={f.stopExperiment}
+          generateVariant={f.generateVariant}
         />
       )}
 
