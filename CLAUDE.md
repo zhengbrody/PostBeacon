@@ -184,9 +184,11 @@ post-checkout redirect; defaults to https://postbeacon.app),
 **Live (verified 2026-07-13):** Vercel project `zhengbrodys-projects/postbeacon` → **https://postbeacon.app** + www.
 Porkbun DNS: apex `A 76.76.21.21`, www `CNAME cname.vercel-dns.com` (nameservers stay on Porkbun).
 Set in Vercel: ANTHROPIC/OPENAI/DEEPSEEK keys. Supabase public configuration is enabled and the
-production login gate is active; schema/RLS/cascade application and the server-only service-role
-key still require operator verification in the Supabase/Vercel dashboards. Billing remains
-unverified/off unless all Polar variables are set. `Pricing` is hidden during beta.
+production login gate is active. `SUPABASE_SERVICE_ROLE_KEY` is configured, but was found scoped
+to both Preview and Production on 2026-07-13; remove Preview access so unreviewed preview code can
+never receive the production admin key. Schema/RLS/cascade application still requires the
+read-only `supabase/audit.sql` production check. Billing remains unverified/off unless all Polar
+variables are set. `Pricing` is hidden during beta.
 Redeploy: `npx vercel --prod --yes`. Push env from `.env.local`: `~/push-env.sh`.
 
 ## Status / changelog
@@ -195,7 +197,8 @@ Redeploy: `npx vercel --prod --yes`. Push env from `.env.local`: `~/push-env.sh`
   explicit per-run choice (or usable when it is the only configured provider). Legal pages now
   support a monitored `NEXT_PUBLIC_PRIVACY_EMAIL` with a GitHub fallback until inbound mail is
   tested. Footer copy distinguishes PostBeacon's no-training commitment from the selected AI
-  provider's separate policy. Production notes corrected: Supabase login is enabled.
+  provider's separate policy. Production notes corrected: Supabase login + service role are
+  enabled; Preview must be removed from the service-role environment scope.
 - **2026-07-12**: **M17 — Privacy & trust foundation** (engineering + draft copy for
   LEGAL REVIEW, not legal advice; full data-flow map, per-category inventory
   (purpose/legal-basis suggestion/retention/region/deletion/subprocessors), threat
