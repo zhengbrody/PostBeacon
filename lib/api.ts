@@ -94,4 +94,18 @@ export const api = {
     return res.json();
   },
   checkout: () => post<{ url: string }>("/api/billing/checkout", {}),
+  // ---- data rights (M17) ----
+  /** Everything the signed-in user owns, as a pretty-printed JSON string. */
+  exportAccount: async (): Promise<string> => {
+    const res = await fetch("/api/account/export", {
+      headers: { ...(await authHeader()) },
+    });
+    if (!res.ok) {
+      const body = (await res.json().catch(() => ({}))) as { error?: string };
+      throw new Error(body.error || "Export failed.");
+    }
+    return res.text();
+  },
+  deleteAccount: () =>
+    post<{ ok: boolean }>("/api/account/delete", { confirm: "delete my account" }),
 };

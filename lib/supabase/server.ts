@@ -47,3 +47,16 @@ export function getTokenVerifier(): SupabaseClient | null {
   }
   return verifier;
 }
+
+/**
+ * A client acting AS the user (anon key + their bearer token), so RLS scopes
+ * every query to rows they own. This is how data export works without a
+ * service-role key. Per-request — never cached.
+ */
+export function getUserClient(token: string): SupabaseClient | null {
+  if (!authConfigured()) return null;
+  return createClient(URL!, ANON!, {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: { headers: { Authorization: `Bearer ${token}` } },
+  });
+}

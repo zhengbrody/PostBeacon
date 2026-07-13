@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { getSupabase } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/Button";
 import { GoogleButton } from "./SignIn";
@@ -59,6 +60,18 @@ export function AuthScreen({ onDemo }: { onDemo?: () => void }) {
           </Button>
           {msg && <p className="text-xs text-neutral-400">{msg}</p>}
         </div>
+
+        <p className="mt-5 text-[11px] leading-relaxed text-neutral-500">
+          By continuing you agree to the{" "}
+          <Link href="/terms" className="text-neutral-400 hover:text-accent-300">
+            Terms
+          </Link>{" "}
+          and{" "}
+          <Link href="/privacy" className="text-neutral-400 hover:text-accent-300">
+            Privacy Policy
+          </Link>
+          . Your projects are saved to your account; PostBeacon never posts for you.
+        </p>
       </div>
 
       {onDemo && (

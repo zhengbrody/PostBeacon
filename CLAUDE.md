@@ -34,9 +34,14 @@ app/
   sitemap.ts            SEO sitemap (/) — makes robots.ts's reference real
   opengraph-image.tsx   Generated OG share card (next/og); twitter-image.tsx re-exports it
   icon.svg              Favicon (beacon mark, brand gradient)
+  privacy|terms|subprocessors/page.tsx    Legal pages (draft pending review),
+                        rendered from lib/privacy.ts via components/legal/LegalShell
   app/page.tsx          The tool — thin; wires useLaunchFlow to components/app/*
   api/
     analyze|strategy|generate|regenerate|providers|usage/route.ts   server endpoints
+    account/{export,delete}/route.ts   data rights (bearer; delete = typed confirm +
+                                       service role, fails closed 503 without it)
+    retention/route.ts                 CRON_SECRET-gated retention sweep (vercel.json cron)
     copilot/route.ts                                                 Launch Copilot (plan-scoped CMO chat)
     billing/{checkout,webhook}/route.ts                              Polar checkout + webhook
 lib/
@@ -57,6 +62,17 @@ lib/
   voice.ts              ANTI_AI_RULES — house rules injected into content prompts to kill AI tells
   demo.ts               DEMO_PROJECT — a hand-authored full example plan (the no-API-key showcase)
   site.ts               Public config (REPO_URL, FEEDBACK_URL) — NEXT_PUBLIC_* overridable
+  privacy.ts            M17 single source for public privacy claims: data inventory,
+                        subprocessor list, per-provider API-data notes + clear-policy
+                        flag (orders the default), retentionDays — /privacy, /terms,
+                        /subprocessors, the model picker and llm.ts all render it
+  account.ts            Data rights: exportAccountData (RLS-scoped, no service role
+                        needed) + deleteAccountData (child→parent table wipe, then
+                        auth user removal; aborts before auth removal on failure)
+  retention.ts          Operator retention sweep: stale projects (cascades workspace)
+                        + old webhook ids past RETENTION_DAYS cutoff
+  log.ts                logError/redact — the ONLY sanctioned console sink (eslint
+                        no-console repo-wide); strips emails/query strings/tokens
   export.ts             Launch plan → Markdown / JSON; downloadFile helper
   dates.ts              scheduleDate(launchDate, day) for the calendar
   auth.ts               bearer(req) — read the Supabase token from a request
@@ -103,14 +119,18 @@ components/
                         the M14 per-tab modules: OverviewTab, ContentTab + ChannelBlock +
                         PostCard, CalendarTab, ExecuteTab, FailuresCard, PrintHeading)
   landing/              Nav, Hero, HowItWorks, PlatformShowcase, Pricing, FAQ, Footer
+  legal/                LegalShell — shared frame for the three legal pages
 docs/M13-trust-layer.md Design + migration doc for the trust layer (facts/scoring/partial success)
 docs/M15-workspace.md   PRD + state diagram + acceptance criteria for the launch workspace
 docs/M16-copilot-actions.md  Design contract for the copilot action engine
+docs/M17-privacy-trust.md    Data-flow map, inventory, threat model, counsel questions
 tests/                  vitest suites: urlPolicy, safeFetch, billing, webhook route, validate,
                         golden (12-fixture offline evals), generateRoute, flowReducer
                         (state-machine invariants), storage (draft migrations), workspace
                         (Today/verdicts/review), copilotActions (action boundary, injection,
-                        destructive gates, memory); eval.live (gated)
+                        destructive gates, memory), account (deletion coverage vs schema,
+                        export), retention, log (redaction), privacy (source consistency,
+                        provider ordering); eval.live (gated)
 tests/golden/           fixtures.ts — 12 product-type golden fixtures with ground truth
 supabase/schema.sql     projects (+ meta jsonb) + entitlements + webhook_events +
                         M15 campaigns/experiments/outcomes/tasks (owner-only RLS)
@@ -164,6 +184,49 @@ left unset → accounts off (anon + localStorage), generation open/unmetered, `P
 Redeploy: `npx vercel --prod --yes`. Push env from `.env.local`: `~/push-env.sh`.
 
 ## Status / changelog
+- **2026-07-12**: **M17 — Privacy & trust foundation** (engineering + draft copy for
+  LEGAL REVIEW, not legal advice; full data-flow map, per-category inventory
+  (purpose/legal-basis suggestion/retention/region/deletion/subprocessors), threat
+  model, and 10 open counsel questions in docs/M17-privacy-trust.md). (1) Single
+  source lib/privacy.ts (inventory, subprocessor list, per-provider API-data notes,
+  retentionDays) renders /privacy, /terms, /subprocessors (components/legal/
+  LegalShell, marked "beta draft — under legal review", footer/sitemap-linked), the
+  model-picker notes, AND the provider ordering — public claims can't drift from
+  code. (2) Contextual notices: URL step ("page fetched server-side + sent to
+  {model}; draft stays in this browser"), sign-in consent lines (AuthScreen +
+  compact SignIn), copilot feedback-paste warning (amber for unclear-policy
+  providers), footer "No auto-posting, no training on your content". (3) FAQ fixed:
+  "Bring your own API key" removed (untrue — keys are server env), localStorage
+  persistence stated honestly, DeepSeek listed, "profile+feedback go to the selected
+  provider" stated. (4) Provider policy posture: PROVIDER_PRIVACY marks DeepSeek
+  clearPolicy:false (China processing, training not clearly excluded) → never the
+  code default (availableProviders orders clear-policy first; DEFAULT_PROVIDER env
+  stays an explicit operator override and the UI still shows the caution).
+  (5) Data rights: "Discard draft" now truly clears localStorage; GET
+  /api/account/export (bearer, RLS-scoped user client — works without service role)
+  downloads projects/campaigns/experiments/outcomes/tasks/entitlement as JSON; POST
+  /api/account/delete (typed-phrase zod confirm) wipes all six user tables
+  child→parent then auth.admin.deleteUser — FAILS CLOSED 503 without service role;
+  delete-project × is confirm-gated (FKs cascade the workspace); ProjectBar "Data &
+  privacy" menu (export / type-DELETE account deletion / privacy link).
+  (6) Retention: /api/retention (503 without CRON_SECRET, 401 wrong bearer,
+  {enabled:false} until RETENTION_DAYS set) sweeps stale projects + webhook ids;
+  vercel.json daily cron; /privacy renders the same env so policy self-updates.
+  (7) No cross-user training/aggregation by default — stated in Privacy+Terms with
+  the future opt-in contract (separate, explicit, revocable, de-identified, minimum
+  cohort). (8) Log hygiene: repo had zero console.* calls; now locked by eslint
+  no-console (app/components/hooks/lib) with lib/log.ts logError/redact (emails,
+  query strings, Bearer/JWT/sk- tokens, newline collapse, 300-char cap) as the only
+  sink, used by the new routes. 28 new tests (257 total): schema-coverage proof that
+  every table is wiped-or-documented, FK-safe delete order + abort-before-auth-user,
+  export completeness incl. meta-carried memory, retention gates/cutoff/sweep,
+  redaction, provider ordering + privacy-source consistency. Verified in browser:
+  all 3 pages render (incl. dynamic retention copy), FAQ/footer fixed, auth-screen
+  consent line, DeepSeek amber warning on feedback paste; curl: export/delete 401
+  unauthenticated, retention 503 unconfigured. Known limits for counsel: contact is
+  the GitHub feedback link (needs a real privacy email), governing law + liability
+  placeholders, provider-policy summaries need re-verification, production
+  DEFAULT_PROVIDER=deepseek flagged for decision.
 - **2026-07-12**: **M16 — Copilot as an auditable CMO action engine** (design contract first:
   docs/M16-copilot-actions.md; still ZERO auto-posting — no posting tool exists in the
   schema). (1) Nine structured tools (ask_clarifying_question, propose_next_actions,

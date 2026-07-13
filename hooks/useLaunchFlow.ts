@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useReducer, useState } from "react";
 import { api } from "@/lib/api";
-import { loadDraft } from "@/lib/storage";
+import { clearDraft, loadDraft } from "@/lib/storage";
 import { DEMO_PROJECT } from "@/lib/demo";
 import { PLATFORMS } from "@/lib/platforms";
 import type { ContextField } from "@/lib/facts";
@@ -325,7 +325,13 @@ export function useLaunchFlow() {
     if (pendingDraft) loadProject(pendingDraft);
     setPendingDraft(null);
   };
-  const dismissDraft = () => setPendingDraft(null);
+  // Discarding also removes the draft from this device (M17: "clear local
+  // draft"). Merely hiding the banner left a zombie copy that re-offered
+  // itself next visit or got silently overwritten by the next run.
+  const clearLocalDraft = () => {
+    clearDraft();
+    setPendingDraft(null);
+  };
 
   // On mount: a `?demo=1` deep link opens the example; otherwise we *offer* to
   // resume any in-progress draft (a banner on the input step) rather than
@@ -425,7 +431,7 @@ export function useLaunchFlow() {
     loadDemo,
     pendingDraft,
     resumeDraft,
-    dismissDraft,
+    clearLocalDraft,
     analyze,
     buildStrategy,
     generate,

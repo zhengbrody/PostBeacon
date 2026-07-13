@@ -223,6 +223,17 @@ export function SignIn({ redirectTo = "/app" }: { redirectTo?: string }) {
         Sign in
       </Button>
       {msg && <span className="text-xs text-neutral-400">{msg}</span>}
+      <span className="w-full text-right text-[10px] text-neutral-600">
+        By signing in you agree to the{" "}
+        <a href="/terms" className="hover:text-neutral-400">
+          Terms
+        </a>{" "}
+        &amp;{" "}
+        <a href="/privacy" className="hover:text-neutral-400">
+          Privacy Policy
+        </a>
+        .
+      </span>
     </div>
   );
 }

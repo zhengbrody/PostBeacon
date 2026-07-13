@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { ButtonLink } from "@/components/ui/Button";
 
 export function Footer() {
@@ -13,8 +14,20 @@ export function Footer() {
         <ButtonLink href="/app" className="mt-6">
           Launch app →
         </ButtonLink>
-        <p className="mt-10 text-xs text-neutral-600">
-          © {new Date().getFullYear()} PostBeacon · postbeacon.app
+        <div className="mt-10 flex justify-center gap-4 text-xs text-neutral-500">
+          <Link href="/privacy" className="hover:text-neutral-300">
+            Privacy
+          </Link>
+          <Link href="/terms" className="hover:text-neutral-300">
+            Terms
+          </Link>
+          <Link href="/subprocessors" className="hover:text-neutral-300">
+            Subprocessors
+          </Link>
+        </div>
+        <p className="mt-4 text-xs text-neutral-600">
+          © {new Date().getFullYear()} PostBeacon · postbeacon.app · No auto-posting, no
+          training on your content.
         </p>
       </div>
     </footer>

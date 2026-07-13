@@ -9,11 +9,11 @@ const FAQS = [
   },
   {
     q: "Which AI model does it use?",
-    a: "Claude or OpenAI — switchable. Bring your own API key.",
+    a: "Claude, OpenAI, or DeepSeek — you pick per run from whatever the deployment has configured. Your product page text, profile and any feedback you paste are sent to the selected provider to generate the plan; each model's data-handling note is shown right at the picker and on the Privacy page.",
   },
   {
-    q: "Is my data saved?",
-    a: "Only if you sign in. Projects are stored to your account (Supabase) with row-level security so only you can see them. Without signing in, nothing is persisted.",
+    q: "Where does my data live?",
+    a: "Not signed in: your current draft is saved in your browser's localStorage only (clear it any time with “Clear local draft”). Signed in: projects are stored to your account (Supabase) with row-level security so only you can read them. You can export everything as JSON or delete a project or your whole account from the app.",
   },
   {
     q: "Who is it for?",

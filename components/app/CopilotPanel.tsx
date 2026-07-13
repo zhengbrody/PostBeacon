@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Spinner } from "@/components/ui/Spinner";
 import { api, type ApiError } from "@/lib/api";
+import { PROVIDER_PRIVACY } from "@/lib/privacy";
 import { buildBriefing, type Briefing } from "@/lib/today";
 import {
   applyKindOf,
@@ -490,6 +491,20 @@ export function CopilotPanel({
                   Send
                 </Button>
               </div>
+              {feedbackMode && (
+                <p
+                  className={`text-[11px] leading-relaxed ${
+                    PROVIDER_PRIVACY[provider].clearPolicy
+                      ? "text-neutral-500"
+                      : "text-amber-400/90"
+                  }`}
+                >
+                  Pasted text is sent to {PROVIDER_PRIVACY[provider].label} to be analyzed —
+                  leave out names, emails, or anything confidential.
+                  {!PROVIDER_PRIVACY[provider].clearPolicy &&
+                    ` ${PROVIDER_PRIVACY[provider].note}`}
+                </p>
+              )}
             </div>
           </>
         )}

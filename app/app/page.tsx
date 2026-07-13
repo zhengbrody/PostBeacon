@@ -86,8 +86,8 @@ function AppFlow({ f }: { f: ReturnType<typeof useLaunchFlow> }) {
             <Button size="sm" onClick={f.resumeDraft}>
               Continue
             </Button>
-            <Button size="sm" variant="outline" onClick={f.dismissDraft}>
-              Start fresh
+            <Button size="sm" variant="outline" onClick={f.clearLocalDraft}>
+              Discard draft
             </Button>
           </span>
         </div>

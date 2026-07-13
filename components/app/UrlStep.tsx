@@ -1,5 +1,7 @@
+import Link from "next/link";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { PROVIDER_PRIVACY } from "@/lib/privacy";
 import type { Provider } from "@/lib/types";
 
 const PROVIDER_LABELS: Record<Provider, string> = {
@@ -72,6 +74,27 @@ export function UrlStep({
           or see a full example plan
         </button>
       </div>
+
+      {availProviders.length > 0 && (
+        <p className="mt-4 border-t border-line/60 pt-3 text-xs leading-relaxed text-neutral-500">
+          We fetch this page server-side and send its text to{" "}
+          {PROVIDER_PRIVACY[provider].label} to build your plan.{" "}
+          <span
+            className={
+              PROVIDER_PRIVACY[provider].clearPolicy ? undefined : "text-amber-400/90"
+            }
+          >
+            {PROVIDER_PRIVACY[provider].note}
+          </span>{" "}
+          Your draft stays in this browser until you sign in.{" "}
+          <Link
+            href="/privacy"
+            className="text-neutral-400 underline underline-offset-2 hover:text-accent-300"
+          >
+            Privacy
+          </Link>
+        </p>
+      )}
     </Card>
   );
 }

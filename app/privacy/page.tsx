@@ -1,0 +1,176 @@
+import type { Metadata } from "next";
+import Link from "next/link";
+import { LegalShell, LegalSection, LegalTable } from "@/components/legal/LegalShell";
+import { DATA_CATEGORIES, PROVIDER_PRIVACY, retentionDays } from "@/lib/privacy";
+
+export const metadata: Metadata = {
+  title: "Privacy — PostBeacon",
+  description:
+    "What PostBeacon stores, what goes to the AI model you pick, and how to export or delete everything.",
+};
+
+export default function PrivacyPage() {
+  const retention = retentionDays();
+  return (
+    <LegalShell
+      title="Privacy"
+      intro="PostBeacon turns your product URL into a launch plan. That means it handles your product’s page text, the profile built from it, and — if you use the workspace — the results you type in. This page says plainly where each piece lives, which vendors see it, and how to get it out or delete it."
+    >
+      <LegalSection title="The short version">
+        <ul className="list-disc space-y-1.5 pl-5">
+          <li>
+            Not signed in? Your draft lives in <strong>your browser’s localStorage</strong>,
+            not on our servers. Clear it any time with “Clear local draft”.
+          </li>
+          <li>
+            Signed in? Projects are saved to our database (Supabase) in rows{" "}
+            <strong>only your account can read</strong>.
+          </li>
+          <li>
+            Your page text, profile, plan context and anything you paste to the copilot are{" "}
+            <strong>sent to the AI model you select</strong> to generate output — see the
+            per-model notes below.
+          </li>
+          <li>
+            We <strong>never post to any platform for you</strong>, never see card numbers,
+            set no advertising cookies, and{" "}
+            <strong>
+              don’t use your content to train models or build cross-user datasets
+            </strong>
+            .
+          </li>
+          <li>
+            You can export everything as JSON and delete a project or your whole account
+            from inside the app.
+          </li>
+        </ul>
+      </LegalSection>
+
+      <LegalSection title="What we handle, where it lives">
+        <LegalTable
+          headers={["Data", "Where", "Why", "Kept", "How to delete"]}
+          rows={DATA_CATEGORIES.map((c) => [
+            c.what,
+            c.where,
+            c.why,
+            c.retention,
+            c.deletion,
+          ])}
+        />
+      </LegalSection>
+
+      <LegalSection title="AI models and your data">
+        <p>
+          Generation runs on the model you pick for each run. Prompts include your page’s
+          extracted text, the profile, relevant plan context, and text you paste to the
+          copilot. We don’t store chat transcripts; each provider retains API data per its
+          own policy:
+        </p>
+        <LegalTable
+          headers={["Model", "Region", "Published API policy (as we read it)"]}
+          rows={Object.values(PROVIDER_PRIVACY).map((p) => [
+            <a
+              key={p.label}
+              href={p.policyUrl}
+              className="text-accent-300 hover:underline"
+              rel="noopener noreferrer"
+              target="_blank"
+            >
+              {p.label}
+            </a>,
+            p.region,
+            p.note,
+          ])}
+        />
+        <p>
+          Where a provider’s policy doesn’t clearly exclude training use, we never make it
+          the default and we label it in the model picker. If your product is still
+          confidential, prefer a clear-policy model and don’t paste anything you wouldn’t
+          want retained.
+        </p>
+      </LegalSection>
+
+      <LegalSection title="What we deliberately don’t do">
+        <ul className="list-disc space-y-1.5 pl-5">
+          <li>
+            <strong>No auto-posting.</strong> PostBeacon never holds your social accounts’
+            credentials and never publishes on your behalf — you copy and post.
+          </li>
+          <li>
+            <strong>No training on your content, no cross-user aggregation.</strong> Your
+            plans and outcomes are used only to serve you. If we ever want to learn from
+            anonymized outcome data in aggregate, that will be a separate, explicit,
+            revocable opt-in — de-identified and only computed over large cohorts — and off
+            by default.
+          </li>
+          <li>
+            <strong>No ad tech.</strong> Analytics are cookieless and aggregated (Vercel Web
+            Analytics). We don’t sell or share personal information for advertising.
+          </li>
+        </ul>
+      </LegalSection>
+
+      <LegalSection title="Your controls">
+        <ul className="list-disc space-y-1.5 pl-5">
+          <li>
+            <strong>Clear local draft</strong> — on the start step, removes the anonymous
+            draft from your browser.
+          </li>
+          <li>
+            <strong>Export my data</strong> — in the app’s “Data &amp; privacy” menu:
+            downloads your account’s projects, experiments, outcomes, tasks and plan status
+            as one JSON file.
+          </li>
+          <li>
+            <strong>Delete a project</strong> — the × beside a saved project; its
+            experiments, outcomes and tasks are deleted with it.
+          </li>
+          <li>
+            <strong>Delete my account</strong> — in “Data &amp; privacy”: removes your
+            projects, workspace data, usage records and the account itself. If a deployment
+            can’t perform a full deletion, the app says so instead of pretending.
+          </li>
+        </ul>
+        <p>
+          Residual copies can persist briefly in encrypted database backups until those
+          backups age out on the vendor’s schedule.
+        </p>
+      </LegalSection>
+
+      <LegalSection title="Retention">
+        {retention ? (
+          <p>
+            This deployment automatically deletes signed-in projects untouched for{" "}
+            <strong>{retention} days</strong> (and internal webhook receipts of the same
+            age). Anonymous drafts are on your device and are never touched by us.
+          </p>
+        ) : (
+          <p>
+            This deployment runs no automatic deletion: your saved projects are kept until
+            you delete them. Anonymous drafts are on your device and are never touched by
+            us.
+          </p>
+        )}
+      </LegalSection>
+
+      <LegalSection title="Vendors and transfers">
+        <p>
+          The full list of vendors that touch data, what each sees, and when, is on the{" "}
+          <Link href="/subprocessors" className="text-accent-300 hover:underline">
+            subprocessors page
+          </Link>
+          . Hosting is on Vercel (US); if you’re outside the US your data is processed there
+          and by the model provider’s region shown above.
+        </p>
+      </LegalSection>
+
+      <LegalSection title="Changes">
+        <p>
+          We’ll update this page as the product evolves and bump the date at the top;
+          material changes will be visible in the app. This is a beta draft under legal
+          review — if anything here looks wrong or unclear, please tell us.
+        </p>
+      </LegalSection>
+    </LegalShell>
+  );
+}

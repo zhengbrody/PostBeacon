@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 import { PublicError } from "./errors";
+import { clearPolicyProviders } from "./privacy";
 import type { Provider } from "./types";
 
 const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-6";
@@ -14,12 +15,17 @@ export function availableProviders(): Provider[] {
   if (process.env.OPENAI_API_KEY) out.push("openai");
   if (process.env.DEEPSEEK_API_KEY) out.push("deepseek");
 
-  // Optional DEFAULT_PROVIDER pins which one the UI selects first.
+  // Optional DEFAULT_PROVIDER pins which one the UI selects first — an explicit
+  // operator decision that overrides the privacy ordering below.
   const preferred = process.env.DEFAULT_PROVIDER as Provider | undefined;
   if (preferred && out.includes(preferred)) {
     return [preferred, ...out.filter((p) => p !== preferred)];
   }
-  return out;
+  // Privacy posture (M17): a provider whose API data policy doesn't clearly
+  // exclude training use must never become the silent default, so order
+  // clear-policy providers first. Stable within each group.
+  const clear = new Set(clearPolicyProviders());
+  return [...out.filter((p) => clear.has(p)), ...out.filter((p) => !clear.has(p))];
 }
 
 /** Resolve the requested provider, falling back to whatever key exists. */

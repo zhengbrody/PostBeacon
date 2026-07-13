@@ -404,6 +404,11 @@ const memorySchema = z.object({
   userEditedFields: z.array(s(80)).max(40).default([]),
 });
 
+/** Account deletion requires the exact phrase — a fat-fingered POST can't erase a user. */
+export const deleteAccountBodySchema = z.object({
+  confirm: z.literal("delete my account"),
+});
+
 export const copilotBodySchema = z.object({
   provider: providerSchema.optional(),
   profile: profileSchema,
