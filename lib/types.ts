@@ -1,5 +1,14 @@
 export type Provider = "claude" | "openai" | "deepseek";
 
+/** Actual provider/model used for one call. `fallbackFrom` is present only
+ * when the user's primary provider failed and a clear-policy alternative
+ * completed the request. */
+export interface ProviderRunMeta {
+  provider: Provider;
+  model: string;
+  fallbackFrom?: Provider;
+}
+
 /** How grounded a model's conclusion is vs. inferred from a thin page. */
 export type Confidence = "high" | "medium" | "low";
 
@@ -39,6 +48,7 @@ export interface ClarifyingQuestion {
 export interface GenerationMeta {
   provider: Provider;
   model: string;
+  fallbackFrom?: Provider;
   promptVersion: string;
   generatedAt: string; // ISO
 }
@@ -383,6 +393,7 @@ export interface CopilotReplyV2 {
   reply: string;
   actions: ProposedAction[];
   blocked: number; // schema-invalid / unknown-id proposals dropped server-side
+  meta?: ProviderRunMeta;
 }
 
 // ---- Product Memory (M16): persistent, lean — never the chat transcript ----

@@ -1,4 +1,4 @@
-import { generateJson } from "./llm";
+import { generateJsonMeta } from "./llm";
 import { ANTI_AI_RULES } from "./voice";
 import { factsForPrompt } from "./facts";
 import { getPlatforms, type PlatformDef } from "./platforms";
@@ -322,7 +322,7 @@ ${actionInstruction(req, platform)}
 
 ${SHAPE}`;
 
-  const data = await generateJson({
+  const { data, meta } = await generateJsonMeta({
     provider: req.provider,
     maxTokens:
       req.action === "rewrite" && platform?.maxTokens
@@ -354,5 +354,5 @@ ${SHAPE}`;
   if (!reply && actions.length === 0) {
     throw new Error("Copilot returned an empty answer — try again.");
   }
-  return { reply, actions, blocked };
+  return { reply, actions, blocked, meta };
 }

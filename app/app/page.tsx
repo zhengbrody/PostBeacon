@@ -240,6 +240,7 @@ function AppFlow({ f }: { f: ReturnType<typeof useLaunchFlow> }) {
           recordOutcome={f.recordOutcome}
           stopExperiment={f.stopExperiment}
           generateVariant={f.generateVariant}
+          onProviderFallback={f.setProvider}
         />
       )}
 

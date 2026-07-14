@@ -133,6 +133,7 @@ const factsFieldSchema = z.array(factSchema).max(20).optional();
 const generationMetaSchema = z.object({
   provider: providerSchema,
   model: s(80),
+  fallbackFrom: providerSchema.optional(),
   promptVersion: s(20),
   generatedAt: s(40),
 });

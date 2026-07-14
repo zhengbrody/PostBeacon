@@ -152,6 +152,7 @@ Rules:
       meta: {
         provider: callMeta.provider,
         model: modelFor(callMeta.provider),
+        ...(callMeta.fallbackFrom ? { fallbackFrom: callMeta.fallbackFrom } : {}),
         promptVersion: SCORING_PROMPT_VERSION,
         generatedAt: new Date().toISOString(),
       },

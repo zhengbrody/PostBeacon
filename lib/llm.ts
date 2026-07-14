@@ -1,8 +1,9 @@
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 import { PublicError } from "./errors";
+import { logError } from "./log";
 import { clearPolicyProviders } from "./privacy";
-import type { Provider } from "./types";
+import type { Provider, ProviderRunMeta } from "./types";
 
 const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-6";
 const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4o";
@@ -29,8 +30,12 @@ export function availableProviders(): Provider[] {
   return [...out.filter((p) => clear.has(p)), ...out.filter((p) => !clear.has(p))];
 }
 
-/** Resolve the requested provider, falling back to whatever key exists. */
-function resolveProvider(requested?: Provider): Provider {
+/**
+ * Primary first, then configured clear-policy alternatives. DeepSeek can be
+ * primary only when explicitly selected (or the only configured provider),
+ * but is never an automatic fallback destination.
+ */
+function providerRunOrder(requested?: Provider): Provider[] {
   const avail = availableProviders();
   if (avail.length === 0) {
     // PublicError: this exact message is safe (and useful) to show the user.
@@ -39,8 +44,9 @@ function resolveProvider(requested?: Provider): Provider {
       503
     );
   }
-  if (requested && avail.includes(requested)) return requested;
-  return avail[0];
+  const primary = requested && avail.includes(requested) ? requested : avail[0];
+  const clear = new Set(clearPolicyProviders());
+  return [primary, ...avail.filter((p) => p !== primary && clear.has(p))];
 }
 
 /**
@@ -141,8 +147,81 @@ export function modelFor(provider: Provider): string {
 }
 
 export interface LlmCallMeta {
-  provider: Provider;
-  model: string;
+  provider: ProviderRunMeta["provider"];
+  model: ProviderRunMeta["model"];
+  fallbackFrom?: ProviderRunMeta["fallbackFrom"];
+}
+
+class InvalidModelOutputError extends Error {
+  constructor() {
+    super("The model returned invalid structured output.");
+    this.name = "InvalidModelOutputError";
+  }
+}
+
+function upstreamStatus(err: unknown): number | null {
+  if (!err || typeof err !== "object" || !("status" in err)) return null;
+  const status = (err as { status?: unknown }).status;
+  return typeof status === "number" ? status : null;
+}
+
+/** Errors that indicate availability/configuration, not a content-policy refusal. */
+function canAutoFallback(err: unknown): boolean {
+  if (err instanceof InvalidModelOutputError) return true;
+  const status = upstreamStatus(err);
+  if (status !== null) {
+    return [401, 402, 403, 404, 408, 409, 429].includes(status) || status >= 500;
+  }
+  const name = err instanceof Error ? err.name : "";
+  return /APIConnection|Timeout|RateLimit|InternalServer/i.test(name);
+}
+
+function logProviderFailure(provider: Provider, err: unknown): void {
+  const status = upstreamStatus(err);
+  const category =
+    err instanceof InvalidModelOutputError
+      ? "invalid-output"
+      : status === 401 || status === 403
+        ? "auth"
+        : status === 402
+          ? "credit"
+          : status === 429
+            ? "rate-limit"
+            : status !== null && status >= 500
+              ? "upstream"
+              : status !== null
+                ? "http"
+                : "network";
+  // Static operational breadcrumb only: never log the SDK message/response,
+  // which can contain prompt fragments or provider request details.
+  logError(
+    `llm.${provider}`,
+    new Error(`provider-failure category=${category} status=${status ?? "none"}`)
+  );
+}
+
+async function generateWithProvider(
+  provider: Provider,
+  opts: { system: string; user: string },
+  maxTokens: number
+): Promise<any> {
+  const raw = await callRaw(provider, opts.system, opts.user, maxTokens);
+  try {
+    return extractJson(raw);
+  } catch {
+    // Repair pass: hand the broken text back and ask only for valid JSON.
+    const fixed = await callRaw(
+      provider,
+      "You fix malformed JSON. Output ONLY the corrected, strictly valid JSON — same data, properly escaped quotes, no trailing commas, no truncation.",
+      `This was meant to be a single JSON value but does not parse. Return the corrected JSON only:\n\n${raw}`,
+      maxTokens
+    );
+    try {
+      return extractJson(fixed);
+    } catch {
+      throw new InvalidModelOutputError();
+    }
+  }
 }
 
 /**
@@ -158,23 +237,39 @@ export async function generateJsonMeta(opts: {
   user: string;
   maxTokens?: number;
 }): Promise<{ data: any; meta: LlmCallMeta }> {
-  const provider = resolveProvider(opts.provider);
+  const providers = providerRunOrder(opts.provider);
+  const primary = providers[0];
   const maxTokens = opts.maxTokens ?? 4000;
-  const meta: LlmCallMeta = { provider, model: modelFor(provider) };
 
-  const raw = await callRaw(provider, opts.system, opts.user, maxTokens);
-  try {
-    return { data: extractJson(raw), meta };
-  } catch {
-    // Repair pass: hand the broken text back and ask only for valid JSON.
-    const fixed = await callRaw(
-      provider,
-      "You fix malformed JSON. Output ONLY the corrected, strictly valid JSON — same data, properly escaped quotes, no trailing commas, no truncation.",
-      `This was meant to be a single JSON value but does not parse. Return the corrected JSON only:\n\n${raw}`,
-      maxTokens
-    );
-    return { data: extractJson(fixed), meta };
+  for (let i = 0; i < providers.length; i++) {
+    const provider = providers[i];
+    try {
+      const data = await generateWithProvider(provider, opts, maxTokens);
+      return {
+        data,
+        meta: {
+          provider,
+          model: modelFor(provider),
+          ...(provider !== primary ? { fallbackFrom: primary } : {}),
+        },
+      };
+    } catch (err) {
+      logProviderFailure(provider, err);
+      const retryable = canAutoFallback(err);
+      if (!retryable) throw err;
+      if (i === providers.length - 1) {
+        throw new PublicError(
+          providers.length > 1
+            ? "The configured AI providers are unavailable, out of credit, or rate-limited. Try again shortly."
+            : "The selected AI provider is unavailable, out of credit, or rate-limited. Try another model or try again shortly.",
+          503
+        );
+      }
+    }
   }
+
+  // Unreachable, but keeps the return contract explicit for TypeScript.
+  throw new PublicError("No AI provider completed the request.", 503);
 }
 
 /** generateJsonMeta without the meta — for callers that don't record provenance. */

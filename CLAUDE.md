@@ -48,7 +48,9 @@ app/
 lib/
   types.ts              All shared types (Provider, ProductProfile, MarketingStrategy, ...)
   platforms.ts          THE platform universe (catalog + per-platform voice rules). Most-tuned file.
-  llm.ts                Claude/OpenAI/DeepSeek abstraction → generateJson() / generateJsonMeta()
+  llm.ts                Claude/OpenAI/DeepSeek abstraction → generateJson() / generateJsonMeta();
+                        retryable failures fail over to clear-policy providers only,
+                        with actual-provider provenance (DeepSeek never automatic)
   facts.ts              Fact Ledger engine: quote-verified statuses (observed/user-confirmed/
                         inferred/unknown), ≤3 clarifying-question picker, prompt partitioning
   analysis.ts           Analyze engine (profile + enforced facts + questions) — route & evals share it
@@ -197,6 +199,15 @@ an explicit choice. `Pricing` is hidden during beta.
 Redeploy: `npx vercel --prod --yes`. Push env from `.env.local`: `~/push-env.sh`.
 
 ## Status / changelog
+- **2026-07-13**: **M17.3 — privacy-safe provider resilience.** Production Copilot 500s were
+  traced to Claude returning 401 (invalid/revoked key); no-user-data probes confirmed OpenAI and
+  DeepSeek remained healthy. `generateJsonMeta` now retries auth/credit/rate-limit/network/5xx and
+  invalid-structured-output failures through another configured **clear-policy** provider, records
+  `fallbackFrom`, logs only provider/status categories, and returns a useful 503 if every safe option
+  fails. HTTP 400/content-policy rejection never fails over; DeepSeek is never an automatic target.
+  Successful fallback becomes the browser flow's new primary, and Copilot visibly names the switch.
+  Picker, feedback warning, FAQ, Privacy, Terms and Subprocessors all disclose that a failed primary
+  may already have received the prompt before a retry. Added dedicated failover/privacy tests.
 - **2026-07-13**: **M17.2 production-schema + first-value follow-up.** The first production
   audit exposed a real deployment drift: only 2/10 expected FK cascades existed, so the app was
   correctly degrading to authoritative `projects.meta.workspace` while the four normalized M15

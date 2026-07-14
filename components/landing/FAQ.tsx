@@ -9,7 +9,7 @@ const FAQS = [
   },
   {
     q: "Which AI model does it use?",
-    a: "Claude, OpenAI, or DeepSeek — you pick per run from whatever the deployment has configured. Your product page text, profile and any feedback you paste are sent to the selected provider to generate the plan; each model's data-handling note is shown right at the picker and on the Privacy page.",
+    a: "Claude, OpenAI, or DeepSeek — you choose the primary from whatever the deployment has configured. If it is unavailable, out of credit, or rate-limited, PostBeacon may retry with another configured provider whose published API policy clearly excludes training use. DeepSeek is never an automatic fallback. The picker and Privacy page explain what data is sent.",
   },
   {
     q: "Where does my data live?",

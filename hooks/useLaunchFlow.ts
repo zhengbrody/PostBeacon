@@ -32,6 +32,7 @@ import type {
   ProposedAction,
   ScheduleItem,
   TaskRecord,
+  ProviderRunMeta,
 } from "@/lib/types";
 
 export type { Step };
@@ -81,9 +82,16 @@ export function useLaunchFlow() {
 
   const { url, profile, facts, selected } = state;
 
+  // Once a fallback succeeds, make that healthy provider the primary for the
+  // rest of this browser flow instead of repeatedly hitting a dead key first.
+  const adoptFallback = (meta?: ProviderRunMeta) => {
+    if (meta?.fallbackFrom) setProvider(meta.provider);
+  };
+
   const analyze = () =>
     run(async () => {
-      const { profile, facts, questions } = await api.analyze(url, provider);
+      const { profile, facts, questions, meta } = await api.analyze(url, provider);
+      adoptFallback(meta);
       dispatch({
         type: "ANALYZED",
         profile,
@@ -96,6 +104,7 @@ export function useLaunchFlow() {
     run(async () => {
       if (!profile) return;
       const strategy = await api.strategy(profile, provider, facts);
+      adoptFallback(strategy.meta);
       dispatch({ type: "STRATEGY_BUILT", strategy });
     }, "Scanning every platform & ranking your channels…");
 
@@ -105,6 +114,7 @@ export function useLaunchFlow() {
       setPaywall(null);
       try {
         const result = await api.generate(profile, selected, provider, facts);
+        adoptFallback(result.content.find((c) => c.meta?.fallbackFrom)?.meta);
         dispatch({ type: "GENERATED", result });
         setGenerations((n) => n + 1);
       } catch (e) {
@@ -124,6 +134,7 @@ export function useLaunchFlow() {
         provider,
         facts
       );
+      adoptFallback(meta);
       dispatch({
         type: "CHANNEL_CONTENT_REPLACED",
         channel: { platformId, posts, playbook, meta },
@@ -146,6 +157,7 @@ export function useLaunchFlow() {
           provider,
           facts
         );
+        adoptFallback(meta);
         dispatch({
           type: "CHANNEL_UPSERTED",
           channel: { platformId, posts, playbook, meta },
@@ -190,6 +202,7 @@ export function useLaunchFlow() {
         targetPlatformId: experiment.platformId,
         question: variantDirection(experiment, verdict),
       });
+      adoptFallback(res.meta);
       const variant = res.actions.find(
         (a) => a.tool === "generate_variant" && a.hook && a.body
       );

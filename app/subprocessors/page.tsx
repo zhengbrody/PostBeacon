@@ -33,8 +33,11 @@ export default function SubprocessorsPage() {
           ])}
         />
         <p>
-          AI providers are alternatives, not a chain: a single run sends prompts only to the
-          one model you selected for it.
+          You choose a primary AI provider. If it fails for availability, credit,
+          rate-limit, key, or structured-output reasons, the same prompt may be retried with
+          a configured clear-policy provider. DeepSeek is never an automatic fallback; it
+          receives data only when explicitly selected as primary (or when it is the sole
+          configured provider).
         </p>
       </LegalSection>
     </LegalShell>

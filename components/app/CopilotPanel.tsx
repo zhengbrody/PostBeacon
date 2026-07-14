@@ -42,6 +42,7 @@ interface PanelMessage {
   content: string;
   actions?: ProposedAction[];
   briefing?: Briefing; // deterministic opener — no model call behind it
+  providerNote?: string;
 }
 
 const QUICK_ACTIONS: { label: string; action: CopilotAction }[] = [
@@ -83,6 +84,7 @@ export function CopilotPanel({
   recordOutcome,
   stopExperiment,
   generateVariant,
+  onProviderFallback,
 }: {
   profile: ProductProfile;
   strategy: MarketingStrategy;
@@ -104,6 +106,7 @@ export function CopilotPanel({
   recordOutcome: (experimentId: string, outcome: Outcome) => void;
   stopExperiment: (experimentId: string) => void;
   generateVariant: (experiment: Experiment) => void;
+  onProviderFallback: (provider: Provider) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -190,10 +193,19 @@ export function CopilotPanel({
           action === "rewrite" || action === "first-replies" ? validTarget : undefined,
         history,
       });
+      const providerNote = res.meta?.fallbackFrom
+        ? `${PROVIDER_PRIVACY[res.meta.fallbackFrom].label} was unavailable. Completed with ${PROVIDER_PRIVACY[res.meta.provider].label}; future requests will use it as primary.`
+        : undefined;
+      if (res.meta?.fallbackFrom) onProviderFallback(res.meta.provider);
       auditBlocked(res.blocked);
       setMsgs((m) => [
         ...m,
-        { role: "assistant", content: res.reply, actions: res.actions },
+        {
+          role: "assistant",
+          content: res.reply,
+          actions: res.actions,
+          providerNote,
+        },
       ]);
     } catch (e) {
       const err = e as ApiError;
@@ -361,6 +373,11 @@ export function CopilotPanel({
                         {m.content}
                       </pre>
                     )}
+                    {m.providerNote && (
+                      <div className="rounded-md border border-amber-800/50 bg-amber-950/30 px-2.5 py-2 text-[11px] leading-relaxed text-amber-300">
+                        {m.providerNote}
+                      </div>
+                    )}
                     {m.briefing && m.briefing.chips.length > 0 && (
                       <div className="flex flex-wrap gap-1.5">
                         {m.briefing.chips.map((c, j) => (
@@ -505,6 +522,10 @@ export function CopilotPanel({
                     ` ${PROVIDER_PRIVACY[provider].note}`}
                 </p>
               )}
+              <p className="text-[10px] leading-relaxed text-neutral-600">
+                If this model is unavailable, PostBeacon retries with another configured
+                clear-policy provider. DeepSeek is never an automatic fallback.
+              </p>
             </div>
           </>
         )}

@@ -113,6 +113,7 @@ Fact entries to produce, in this order:
     meta: {
       provider: meta.provider,
       model: meta.model,
+      ...(meta.fallbackFrom ? { fallbackFrom: meta.fallbackFrom } : {}),
       promptVersion: ANALYZE_PROMPT_VERSION,
       generatedAt: new Date().toISOString(),
     },

@@ -89,7 +89,7 @@ export const SUBPROCESSORS: Subprocessor[] = [
     role: "AI model (Claude)",
     data: "Your product page text, profile, plan context, and anything you paste to the copilot",
     region: PROVIDER_PRIVACY.claude.region,
-    when: "Only for runs where you select Claude",
+    when: "When selected as primary, or as a clear-policy fallback after another provider fails",
     policyUrl: PROVIDER_PRIVACY.claude.policyUrl,
   },
   {
@@ -97,7 +97,7 @@ export const SUBPROCESSORS: Subprocessor[] = [
     role: "AI model (GPT)",
     data: "Same prompt content as Anthropic",
     region: PROVIDER_PRIVACY.openai.region,
-    when: "Only for runs where you select OpenAI",
+    when: "When selected as primary, or as a clear-policy fallback after another provider fails",
     policyUrl: PROVIDER_PRIVACY.openai.policyUrl,
   },
   {
@@ -182,7 +182,8 @@ export const DATA_CATEGORIES: DataCategory[] = [
   },
   {
     what: "Prompts to the AI model (page text, profile, plan context, pasted feedback)",
-    where: "Sent to the model you selected for that run",
+    where:
+      "Sent to your primary model; on availability/credit/rate-limit failure, a clear-policy fallback may receive the retry",
     why: "Generating your profile, strategy, content and copilot answers",
     retention:
       "Not stored by us; the provider retains per its API policy (see table below)",

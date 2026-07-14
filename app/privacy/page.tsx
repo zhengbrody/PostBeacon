@@ -28,8 +28,10 @@ export default function PrivacyPage() {
           </li>
           <li>
             Your page text, profile, plan context and anything you paste to the copilot are{" "}
-            <strong>sent to the AI model you select</strong> to generate output — see the
-            per-model notes below.
+            <strong>sent to your primary AI model</strong> to generate output. If it fails
+            for availability, credit, rate-limit, key or output-format reasons, a configured
+            clear-policy provider may receive one retry. DeepSeek is never selected as an
+            automatic fallback.
           </li>
           <li>
             We <strong>never post to any platform for you</strong>, never see card numbers,
@@ -61,9 +63,13 @@ export default function PrivacyPage() {
 
       <LegalSection title="AI models and your data">
         <p>
-          Generation runs on the model you pick for each run. Prompts include your page’s
+          Generation starts on the primary model you pick. Prompts include your page’s
           extracted text, the profile, relevant plan context, and text you paste to the
-          copilot. We don’t store chat transcripts; each provider retains API data per its
+          copilot. If that provider is unavailable, out of credit, rate-limited,
+          misconfigured, or cannot return usable structured output, PostBeacon may retry the
+          same prompt with another configured provider whose published API policy clearly
+          excludes training use. A failed provider may already have received the first
+          attempt. We don’t store chat transcripts; each provider retains API data per its
           own policy:
         </p>
         <LegalTable

@@ -106,6 +106,7 @@ Field notes:
   const meta: GenerationMeta = {
     provider: callMeta.provider,
     model: callMeta.model,
+    ...(callMeta.fallbackFrom ? { fallbackFrom: callMeta.fallbackFrom } : {}),
     promptVersion: GENERATE_PROMPT_VERSION,
     generatedAt: new Date().toISOString(),
   };

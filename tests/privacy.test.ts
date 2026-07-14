@@ -45,7 +45,8 @@ describe("privacy single source stays complete", () => {
   it("the inventory names the load-bearing truths (localStorage, provider flow, no transcripts)", () => {
     const all = JSON.stringify(DATA_CATEGORIES);
     expect(all).toContain("localStorage");
-    expect(all).toContain("model you selected");
+    expect(all).toContain("primary model");
+    expect(all).toContain("clear-policy fallback");
     expect(all).toMatch(/never long-term memory/);
   });
 });

@@ -62,10 +62,12 @@ export default function TermsPage() {
         <p>
           You keep all rights to what you provide (your URL’s content, profile edits, pasted
           feedback, outcome data). You grant us the limited license needed to process it to
-          provide the service — including sending it to the AI provider you select — and
-          nothing more. To the extent we hold any rights in generated output, we assign or
-          waive them in your favor; note that AI output may be similar to output generated
-          for others and may embed facts from your own page.
+          provide the service — including sending it to your selected primary AI provider
+          and, if that provider fails, retrying with a configured clear-policy provider —
+          and nothing more. DeepSeek is never an automatic fallback. To the extent we hold
+          any rights in generated output, we assign or waive them in your favor; note that
+          AI output may be similar to output generated for others and may embed facts from
+          your own page.
         </p>
         <p>
           We do not use your content to train models or to build cross-user datasets. Any

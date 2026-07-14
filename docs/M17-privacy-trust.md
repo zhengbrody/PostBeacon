@@ -27,12 +27,13 @@
    │               │                  │                  │                │
    ▼               ▼                  ▼                  ▼                ▼
  SUPABASE       LLM PROVIDER       FIRECRAWL          TAVILY            POLAR
- (accounts,     (selected per      (only if           (only if         (only if
+ (accounts,     (primary per       (only if           (only if         (only if
   projects,      run: Anthropic /   SCRAPE_API_KEY:    SEARCH_API_KEY:  billing on:
   entitlements,  OpenAI /           the product URL    profile-derived  checkout,
-  workspace      DeepSeek —         for headless       search queries)  merchant of
-  tables,        prompt = page      rendering)                          record)
-  webhook ids)   text + profile +
+  workspace      DeepSeek; a        for headless       search queries)  merchant of
+  tables,        clear-policy       rendering)                          record)
+  webhook ids)   fallback may retry after availability/credit/key/rate-limit/
+                 format failure; DeepSeek is never automatic. Prompt = page text + profile +
                  edits + pasted
                  feedback)
 ```
@@ -77,8 +78,8 @@ long-term memory.
 |--------|------|--------------|--------|------------|
 | Vercel | Hosting, serverless functions, cookieless web analytics | All request traffic; aggregated page views | US | Yes |
 | Supabase | Auth + database | Account identity, projects, workspace, entitlements | Project region (operator-chosen) | Only when accounts are configured |
-| Anthropic | LLM (Claude) | Prompt: page text, profile, plan context, pasted feedback | US | Only when selected for a run |
-| OpenAI | LLM (GPT) | same as Anthropic | US | Only when selected for a run |
+| Anthropic | LLM (Claude) | Prompt: page text, profile, plan context, pasted feedback | US | When primary, or clear-policy fallback |
+| OpenAI | LLM (GPT) | same as Anthropic | US | When primary, or clear-policy fallback |
 | DeepSeek | LLM | same as Anthropic | China | Only when selected for a run |
 | Firecrawl | Headless rendering of SPA product pages | The product URL being analyzed | US | Only if SCRAPE_API_KEY set and static fetch came back empty |
 | Tavily | Web search for community discovery | Search queries derived from the product profile (not the raw page) | US | Only if SEARCH_API_KEY set |
@@ -102,7 +103,12 @@ Enforcement in code (`lib/llm.ts` + `lib/privacy.ts`):
 may choose among configured clear-policy providers, but cannot silently put an
 unclear-policy provider ahead of one. DeepSeek remains available for explicit
 per-run selection (and remains usable when it is the only configured provider),
-with a caution beside the picker.
+with a caution beside the picker. On a retryable provider failure (auth/credit,
+rate limit, timeout/network, 5xx, or unusable structured output), `llm.ts` may
+retry with another configured clear-policy provider and records `fallbackFrom`
+in output provenance. HTTP 400/content-policy rejection does not fail over.
+DeepSeek is never an automatic fallback target. The UI discloses this before
+submission and reports which provider actually completed the call.
 
 ## 5. Threat model
 
@@ -116,7 +122,7 @@ numbers the user types, (A4) operator API keys, (A5) billing state.
 | SSRF / internal-network pivot | Attacker-supplied URL | `lib/urlPolicy.ts` + `lib/safeFetch.ts` (M12): scheme/port/IP-range allowlist, connect-time DNS pinning, per-hop redirect revalidation, size/time caps | Low; covered by 60+ tests |
 | Cross-user data access | Forged/absent auth | Supabase RLS owner-only on every user table; server verifies bearer via GoTrue; service role never in client code; one-shot audit reports missing tables/policies as FAIL | Production audit verified all seven checks PASS on 2026-07-13; rerun after future schema migrations |
 | Prompt injection via scraped page or pasted feedback | Malicious page text / comment paste | Page text treated as data; facts require verified quotes (M13); copilot input delimited «…» and declared data; action validator refuses minted verbs/fabricated ids; human confirm is the only state bridge (M16) | Model may still be *influenced* in tone; injection cannot reach state |
-| LLM provider retains/trains on confidential ideas | Normal API use | Provider notes at the picker; an unclear-policy provider cannot silently outrank a configured clear-policy provider; no chat transcript storage on our side | User can still explicitly select an unclear-policy provider; counsel must review the disclosure and regional availability |
+| LLM provider retains/trains on confidential ideas | Normal API use | Provider notes at the picker; only clear-policy providers are automatic fallback targets; actual provider + fallback provenance are surfaced; no chat transcript storage on our side | A failed primary may already have received the prompt before the retry, so two clear-policy providers can process one request; users can still explicitly select an unclear-policy primary |
 | Secrets/PII in logs | App logging, error paths | **Zero `console.*` in app code today**, now locked in by ESLint `no-console`; the two allowed sinks route through `lib/log.ts` which strips query strings, emails, bearer/JWT/`sk-` tokens and truncates | Vercel platform request logs still record IP/path — disclosed |
 | Token theft via URL params | Careless link building | No user data in query strings (policy + review); magic-link/OAuth tokens are handled by Supabase in fragments, `detectSessionInUrl` consumes them | — |
 | Shared/stolen device reads the anonymous draft | localStorage | Disclosed honestly (FAQ + privacy page); **Clear local draft** control on the input step | localStorage is by-design unencrypted; users warned |

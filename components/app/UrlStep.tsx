@@ -45,7 +45,7 @@ export function UrlStep({
 
       {availProviders.length > 1 && (
         <div className="mt-4 flex items-center gap-2 text-xs">
-          <span className="text-neutral-400">Model:</span>
+          <span className="text-neutral-400">Primary model:</span>
           {availProviders.map((p) => (
             <button
               key={p}
@@ -93,6 +93,10 @@ export function UrlStep({
           >
             Privacy
           </Link>
+          <span className="mt-1 block text-neutral-600">
+            If the primary model is unavailable, we may retry with another configured
+            clear-policy provider. DeepSeek is never an automatic fallback.
+          </span>
         </p>
       )}
     </Card>
