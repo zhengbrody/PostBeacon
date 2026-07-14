@@ -57,6 +57,28 @@ export function clearPolicyProviders(): Provider[] {
   );
 }
 
+/**
+ * Explicit beta operator opt-in. It is public on purpose: the server behavior
+ * and the disclosure rendered before a model call must read the same value.
+ */
+export function deepseekAutomaticFallbackEnabled(): boolean {
+  return process.env.NEXT_PUBLIC_DEEPSEEK_FALLBACK === "true";
+}
+
+/** Providers eligible as automatic fallback destinations. */
+export function automaticFallbackProviders(): Provider[] {
+  return deepseekAutomaticFallbackEnabled()
+    ? [...clearPolicyProviders(), "deepseek"]
+    : clearPolicyProviders();
+}
+
+/** Short disclosure shared by the URL step, Copilot and landing FAQ. */
+export function providerFallbackNotice(): string {
+  return deepseekAutomaticFallbackEnabled()
+    ? "If the primary model is unavailable, PostBeacon may retry with another configured provider. During this beta that can include DeepSeek, which processes data in China and does not clearly exclude training use; avoid confidential material."
+    : "If the primary model is unavailable, PostBeacon may retry with another configured clear-policy provider. DeepSeek is never an automatic fallback.";
+}
+
 export interface Subprocessor {
   name: string;
   role: string;
@@ -89,7 +111,7 @@ export const SUBPROCESSORS: Subprocessor[] = [
     role: "AI model (Claude)",
     data: "Your product page text, profile, plan context, and anything you paste to the copilot",
     region: PROVIDER_PRIVACY.claude.region,
-    when: "When selected as primary, or as a clear-policy fallback after another provider fails",
+    when: "Only if configured, and when selected as primary or used as a clear-policy fallback",
     policyUrl: PROVIDER_PRIVACY.claude.policyUrl,
   },
   {
@@ -97,7 +119,7 @@ export const SUBPROCESSORS: Subprocessor[] = [
     role: "AI model (GPT)",
     data: "Same prompt content as Anthropic",
     region: PROVIDER_PRIVACY.openai.region,
-    when: "When selected as primary, or as a clear-policy fallback after another provider fails",
+    when: "Only if configured, and when selected as primary or used as a clear-policy fallback",
     policyUrl: PROVIDER_PRIVACY.openai.policyUrl,
   },
   {
@@ -105,7 +127,9 @@ export const SUBPROCESSORS: Subprocessor[] = [
     role: "AI model",
     data: "Same prompt content as Anthropic",
     region: PROVIDER_PRIVACY.deepseek.region,
-    when: "Only for runs where you select DeepSeek",
+    when: deepseekAutomaticFallbackEnabled()
+      ? "When selected as primary, or as the explicitly enabled beta fallback after another provider fails"
+      : "Only for runs where you select DeepSeek",
     policyUrl: PROVIDER_PRIVACY.deepseek.policyUrl,
   },
   {
@@ -182,8 +206,9 @@ export const DATA_CATEGORIES: DataCategory[] = [
   },
   {
     what: "Prompts to the AI model (page text, profile, plan context, pasted feedback)",
-    where:
-      "Sent to your primary model; on availability/credit/rate-limit failure, a clear-policy fallback may receive the retry",
+    where: deepseekAutomaticFallbackEnabled()
+      ? "Sent to your primary model; on availability/credit/rate-limit failure, another configured provider (including DeepSeek during this beta) may receive the retry"
+      : "Sent to your primary model; on availability/credit/rate-limit failure, a clear-policy fallback may receive the retry",
     why: "Generating your profile, strategy, content and copilot answers",
     retention:
       "Not stored by us; the provider retains per its API policy (see table below)",

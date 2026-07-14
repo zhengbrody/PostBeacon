@@ -30,10 +30,10 @@
  (accounts,     (primary per       (only if           (only if         (only if
   projects,      run: Anthropic /   SCRAPE_API_KEY:    SEARCH_API_KEY:  billing on:
   entitlements,  OpenAI /           the product URL    profile-derived  checkout,
-  workspace      DeepSeek; a        for headless       search queries)  merchant of
-  tables,        clear-policy       rendering)                          record)
+  workspace      DeepSeek; an       for headless       search queries)  merchant of
+  tables,        automatic         rendering)                          record)
   webhook ids)   fallback may retry after availability/credit/key/rate-limit/
-                 format failure; DeepSeek is never automatic. Prompt = page text + profile +
+                 format failure; DeepSeek requires a public beta opt-in. Prompt = page text + profile +
                  edits + pasted
                  feedback)
 ```
@@ -78,9 +78,9 @@ long-term memory.
 |--------|------|--------------|--------|------------|
 | Vercel | Hosting, serverless functions, cookieless web analytics | All request traffic; aggregated page views | US | Yes |
 | Supabase | Auth + database | Account identity, projects, workspace, entitlements | Project region (operator-chosen) | Only when accounts are configured |
-| Anthropic | LLM (Claude) | Prompt: page text, profile, plan context, pasted feedback | US | When primary, or clear-policy fallback |
-| OpenAI | LLM (GPT) | same as Anthropic | US | When primary, or clear-policy fallback |
-| DeepSeek | LLM | same as Anthropic | China | Only when selected for a run |
+| Anthropic | LLM (Claude) | Prompt: page text, profile, plan context, pasted feedback | US | When configured and primary/fallback |
+| OpenAI | LLM (GPT) | same as Anthropic | US | When configured and primary/fallback |
+| DeepSeek | LLM | same as Anthropic | China | When selected, or when the public beta fallback opt-in is enabled |
 | Firecrawl | Headless rendering of SPA product pages | The product URL being analyzed | US | Only if SCRAPE_API_KEY set and static fetch came back empty |
 | Tavily | Web search for community discovery | Search queries derived from the product profile (not the raw page) | US | Only if SEARCH_API_KEY set |
 | Polar | Merchant of record (checkout, tax, invoices) | Purchase identity + transaction data (their side) | EU/US | Only when billing is configured |
@@ -96,19 +96,21 @@ contractual:
 |----------|----------------------------|----------------------|--------|----------------|
 | Anthropic (Claude) | Not by default for API traffic | Bounded (abuse monitoring window) | US | OK as default |
 | OpenAI | Not by default for API traffic | Up to ~30 days (abuse monitoring) | US | OK as default |
-| DeepSeek | **Not clearly excluded** in public API terms | Unclear; data processed/stored in China | China | **Never the code default.** Selectable, but labeled with a caution; users told not to paste confidential material when it's active |
+| DeepSeek | **Not clearly excluded** in public API terms | Unclear; data processed/stored in China | China | **Never the code default.** Selectable and eligible for fallback only under a public beta operator opt-in; every call surface labels the China/training uncertainty |
 
 Enforcement in code (`lib/llm.ts` + `lib/privacy.ts`):
 `availableProviders()` orders clear-policy providers first. `DEFAULT_PROVIDER`
 may choose among configured clear-policy providers, but cannot silently put an
 unclear-policy provider ahead of one. DeepSeek remains available for explicit
 per-run selection (and remains usable when it is the only configured provider),
-with a caution beside the picker. On a retryable provider failure (auth/credit,
+with a caution beside the picker. `NEXT_PUBLIC_DEEPSEEK_FALLBACK=true` is an
+explicit operator beta opt-in that also changes the pre-call and legal-page
+disclosures; without it, DeepSeek cannot receive an automatic retry. On a retryable provider failure (auth/credit,
 rate limit, timeout/network, 5xx, or unusable structured output), `llm.ts` may
-retry with another configured clear-policy provider and records `fallbackFrom`
-in output provenance. HTTP 400/content-policy rejection does not fail over.
-DeepSeek is never an automatic fallback target. The UI discloses this before
-submission and reports which provider actually completed the call.
+retry with another configured eligible provider and records `fallbackFrom` in
+output provenance. HTTP 400/content-policy rejection does not fail over. The UI
+discloses the active fallback policy before submission and reports which
+provider actually completed the call.
 
 ## 5. Threat model
 
@@ -120,9 +122,9 @@ numbers the user types, (A4) operator API keys, (A5) billing state.
 | Threat | Vector | Mitigation (exists) | Residual risk / follow-up |
 |--------|--------|--------------------|---------------------------|
 | SSRF / internal-network pivot | Attacker-supplied URL | `lib/urlPolicy.ts` + `lib/safeFetch.ts` (M12): scheme/port/IP-range allowlist, connect-time DNS pinning, per-hop redirect revalidation, size/time caps | Low; covered by 60+ tests |
-| Cross-user data access | Forged/absent auth | Supabase RLS owner-only on every user table; server verifies bearer via GoTrue; service role never in client code; one-shot audit reports missing tables/policies as FAIL | Production audit verified all seven checks PASS on 2026-07-13; rerun after future schema migrations |
+| Cross-user data access | Forged/absent auth or account switch on one browser | Supabase RLS owner-only on every user table; server verifies bearer via GoTrue; service role never in client code; one-shot audit reports missing tables/policies as FAIL; user A → sign-out/user B clears the in-memory plan and local draft before B can see it | Production audit verified all seven DB checks PASS on 2026-07-13; rerun after future schema migrations and keep the client-boundary transition test |
 | Prompt injection via scraped page or pasted feedback | Malicious page text / comment paste | Page text treated as data; facts require verified quotes (M13); copilot input delimited «…» and declared data; action validator refuses minted verbs/fabricated ids; human confirm is the only state bridge (M16) | Model may still be *influenced* in tone; injection cannot reach state |
-| LLM provider retains/trains on confidential ideas | Normal API use | Provider notes at the picker; only clear-policy providers are automatic fallback targets; actual provider + fallback provenance are surfaced; no chat transcript storage on our side | A failed primary may already have received the prompt before the retry, so two clear-policy providers can process one request; users can still explicitly select an unclear-policy primary |
+| LLM provider retains/trains on confidential ideas | Normal API use | Provider notes at the picker; DeepSeek fallback requires a public beta opt-in and explicit China/training-uncertainty warning; actual provider + fallback provenance are surfaced; no chat transcript storage on our side | A failed primary may already have received the prompt before the retry, so two providers can process one request; beta fallback can send the retry to DeepSeek |
 | Secrets/PII in logs | App logging, error paths | **Zero `console.*` in app code today**, now locked in by ESLint `no-console`; the two allowed sinks route through `lib/log.ts` which strips query strings, emails, bearer/JWT/`sk-` tokens and truncates | Vercel platform request logs still record IP/path — disclosed |
 | Token theft via URL params | Careless link building | No user data in query strings (policy + review); magic-link/OAuth tokens are handled by Supabase in fragments, `detectSessionInUrl` consumes them | — |
 | Shared/stolen device reads the anonymous draft | localStorage | Disclosed honestly (FAQ + privacy page); **Clear local draft** control on the input step | localStorage is by-design unencrypted; users warned |

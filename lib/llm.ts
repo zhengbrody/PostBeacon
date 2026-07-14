@@ -2,7 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
 import { PublicError } from "./errors";
 import { logError } from "./log";
-import { clearPolicyProviders } from "./privacy";
+import { automaticFallbackProviders, clearPolicyProviders } from "./privacy";
 import type { Provider, ProviderRunMeta } from "./types";
 
 const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-6";
@@ -31,9 +31,8 @@ export function availableProviders(): Provider[] {
 }
 
 /**
- * Primary first, then configured clear-policy alternatives. DeepSeek can be
- * primary only when explicitly selected (or the only configured provider),
- * but is never an automatic fallback destination.
+ * Primary first, then configured automatic-fallback alternatives. DeepSeek is
+ * eligible only under the explicit, publicly disclosed beta operator opt-in.
  */
 function providerRunOrder(requested?: Provider): Provider[] {
   const avail = availableProviders();
@@ -45,8 +44,8 @@ function providerRunOrder(requested?: Provider): Provider[] {
     );
   }
   const primary = requested && avail.includes(requested) ? requested : avail[0];
-  const clear = new Set(clearPolicyProviders());
-  return [primary, ...avail.filter((p) => p !== primary && clear.has(p))];
+  const fallback = new Set(automaticFallbackProviders());
+  return [primary, ...avail.filter((p) => p !== primary && fallback.has(p))];
 }
 
 /**

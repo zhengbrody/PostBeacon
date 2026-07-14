@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Spinner } from "@/components/ui/Spinner";
 import { api, type ApiError } from "@/lib/api";
-import { PROVIDER_PRIVACY } from "@/lib/privacy";
+import { PROVIDER_PRIVACY, providerFallbackNotice } from "@/lib/privacy";
 import { buildBriefing, type Briefing } from "@/lib/today";
 import {
   applyKindOf,
@@ -523,8 +523,7 @@ export function CopilotPanel({
                 </p>
               )}
               <p className="text-[10px] leading-relaxed text-neutral-600">
-                If this model is unavailable, PostBeacon retries with another configured
-                clear-policy provider. DeepSeek is never an automatic fallback.
+                {providerFallbackNotice()}
               </p>
             </div>
           </>

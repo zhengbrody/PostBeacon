@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/Button";
 /** Single source of truth for the current Supabase user across the app. */
 export function useSupabaseUser() {
   const supabase = getSupabase();
+  const [userId, setUserId] = useState<string | null>(null);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [displayName, setDisplayName] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -21,6 +22,7 @@ export function useSupabaseUser() {
     // — using it for the first read avoids a gate flash on OAuth return. It also
     // re-fires on USER_UPDATED, so the display name stays fresh after an edit.
     const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
+      setUserId(session?.user?.id ?? null);
       setUserEmail(session?.user?.email ?? null);
       setDisplayName((session?.user?.user_metadata?.display_name as string) || null);
       setLoading(false);
@@ -38,7 +40,7 @@ export function useSupabaseUser() {
     return {};
   }
 
-  return { userEmail, displayName, supabase, loading, updateDisplayName };
+  return { userId, userEmail, displayName, supabase, loading, updateDisplayName };
 }
 
 /**

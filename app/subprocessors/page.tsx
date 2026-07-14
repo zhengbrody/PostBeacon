@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { LegalShell, LegalSection, LegalTable } from "@/components/legal/LegalShell";
-import { SUBPROCESSORS } from "@/lib/privacy";
+import { SUBPROCESSORS, providerFallbackNotice } from "@/lib/privacy";
 
 export const metadata: Metadata = {
   title: "Subprocessors — PostBeacon",
@@ -33,11 +33,8 @@ export default function SubprocessorsPage() {
           ])}
         />
         <p>
-          You choose a primary AI provider. If it fails for availability, credit,
-          rate-limit, key, or structured-output reasons, the same prompt may be retried with
-          a configured clear-policy provider. DeepSeek is never an automatic fallback; it
-          receives data only when explicitly selected as primary (or when it is the sole
-          configured provider).
+          You choose a primary AI provider. {providerFallbackNotice()} A failed provider may
+          already have received the first attempt.
         </p>
       </LegalSection>
     </LegalShell>

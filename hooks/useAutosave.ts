@@ -37,19 +37,19 @@ function timeNow() {
 
 /**
  * Debounced autosave for the launch flow. Anonymous → a single localStorage
- * draft; signed-in → upsert one row in Supabase `projects` (stable id). On
- * sign-in the hydrated local draft gets pushed up and the local copy cleared,
- * so pre-sign-in work follows the user into their account.
+ * draft; signed-in → upsert one row in Supabase `projects` (stable id). The app
+ * treats sign-in/account changes as a hard client-data boundary, so it never
+ * assumes an existing browser draft belongs to the arriving account.
  */
 export function useAutosave(f: AutosaveFlow) {
-  const { userEmail, supabase } = useSupabaseUser();
+  const { userId, supabase } = useSupabaseUser();
   const [lastSaved, setLastSaved] = useState("");
   const [saving, setSaving] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Latest values in a ref so the debounced persist() never reads stale state.
-  const ref = useRef({ ...f, userEmail, supabase });
-  ref.current = { ...f, userEmail, supabase };
+  const ref = useRef({ ...f, userId, supabase });
+  ref.current = { ...f, userId, supabase };
 
   const persist = useCallback(async () => {
     const {
@@ -57,7 +57,7 @@ export function useAutosave(f: AutosaveFlow) {
       launchDate,
       projectId,
       setProjectId,
-      userEmail,
+      userId,
       supabase,
       demo,
     } = ref.current;
@@ -72,9 +72,9 @@ export function useAutosave(f: AutosaveFlow) {
 
     setSaving(true);
     try {
-      if (userEmail && supabase) {
+      if (userId && supabase) {
         const { data: u } = await supabase.auth.getUser();
-        if (!u.user) return;
+        if (!u.user || u.user.id !== userId) return;
         const { error } = await supabase.from("projects").upsert(
           {
             id,
@@ -145,7 +145,7 @@ export function useAutosave(f: AutosaveFlow) {
       if (timer.current) clearTimeout(timer.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [f.snapshot, f.launchDate, userEmail]);
+  }, [f.snapshot, f.launchDate, userId]);
 
   return { lastSaved, saving, saveNow: persist };
 }

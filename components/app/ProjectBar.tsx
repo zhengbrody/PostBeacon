@@ -46,7 +46,7 @@ export function ProjectBar({
   saving: boolean;
   onSaveNow: () => void;
 }) {
-  const { userEmail, displayName, supabase, updateDisplayName } = useSupabaseUser();
+  const { userId, userEmail, displayName, supabase, updateDisplayName } = useSupabaseUser();
   const [projects, setProjects] = useState<SavedProject[]>([]);
   const [confirmProject, setConfirmProject] = useState<string | null>(null); // armed × id
   const [dataOpen, setDataOpen] = useState(false);
@@ -60,7 +60,7 @@ export function ProjectBar({
     if (userEmail) refresh();
     else setProjects([]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userEmail, lastSaved]);
+  }, [userId, lastSaved]);
 
   if (!supabaseConfigured()) {
     return (

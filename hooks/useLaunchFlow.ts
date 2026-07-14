@@ -346,6 +346,16 @@ export function useLaunchFlow() {
     setPendingDraft(null);
   };
 
+  // Auth user A -> signed-out/user B must not leave A's in-memory plan or
+  // browser draft visible to the next account on the same device.
+  const resetAccountBoundary = useCallback(() => {
+    clearDraft();
+    setPendingDraft(null);
+    setError("");
+    setPaywall(null);
+    dispatch({ type: "RESET" });
+  }, []);
+
   // On mount: a `?demo=1` deep link opens the example; otherwise we *offer* to
   // resume any in-progress draft (a banner on the input step) rather than
   // silently dropping the user into their last project — opening /app should
@@ -445,6 +455,7 @@ export function useLaunchFlow() {
     pendingDraft,
     resumeDraft,
     clearLocalDraft,
+    resetAccountBoundary,
     analyze,
     buildStrategy,
     generate,

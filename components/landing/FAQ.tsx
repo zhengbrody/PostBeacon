@@ -1,3 +1,5 @@
+import { providerFallbackNotice } from "@/lib/privacy";
+
 const FAQS = [
   {
     q: "Does PostBeacon post for me automatically?",
@@ -9,7 +11,7 @@ const FAQS = [
   },
   {
     q: "Which AI model does it use?",
-    a: "Claude, OpenAI, or DeepSeek — you choose the primary from whatever the deployment has configured. If it is unavailable, out of credit, or rate-limited, PostBeacon may retry with another configured provider whose published API policy clearly excludes training use. DeepSeek is never an automatic fallback. The picker and Privacy page explain what data is sent.",
+    a: `OpenAI or DeepSeek in the current beta — you choose the primary from whatever the deployment has configured. ${providerFallbackNotice()} The picker and Privacy page explain what data is sent.`,
   },
   {
     q: "Where does my data live?",

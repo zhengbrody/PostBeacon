@@ -49,8 +49,8 @@ lib/
   types.ts              All shared types (Provider, ProductProfile, MarketingStrategy, ...)
   platforms.ts          THE platform universe (catalog + per-platform voice rules). Most-tuned file.
   llm.ts                Claude/OpenAI/DeepSeek abstraction → generateJson() / generateJsonMeta();
-                        retryable failures fail over to clear-policy providers only,
-                        with actual-provider provenance (DeepSeek never automatic)
+                        retryable failures fail over to eligible providers with actual-provider
+                        provenance; DeepSeek requires the disclosed public beta opt-in
   facts.ts              Fact Ledger engine: quote-verified statuses (observed/user-confirmed/
                         inferred/unknown), ≤3 clarifying-question picker, prompt partitioning
   analysis.ts           Analyze engine (profile + enforced facts + questions) — route & evals share it
@@ -73,6 +73,8 @@ lib/
   account.ts            Data rights: exportAccountData (RLS-scoped, no service role
                         needed) + deleteAccountData (transactional DB RPC, then auth
                         user removal; explicit fallback for pre-migration installs)
+  accountBoundary.ts    Pure account-switch rule: user A → sign-out/user B clears
+                        in-memory/local draft state before the next identity sees it
   retention.ts          Operator retention sweep: stale projects (cascades workspace)
                         + old webhook ids past RETENTION_DAYS cutoff
   log.ts                logError/redact — the ONLY sanctioned console sink (eslint
@@ -187,24 +189,32 @@ post-checkout redirect; defaults to https://postbeacon.app),
 
 **Live (verified 2026-07-13):** Vercel project `zhengbrodys-projects/postbeacon` → **https://postbeacon.app** + www.
 Porkbun DNS: apex `A 76.76.21.21`, www `CNAME cname.vercel-dns.com` (nameservers stay on Porkbun).
-Set in Vercel: ANTHROPIC/OPENAI/DEEPSEEK keys. Supabase public configuration is enabled and the
+Set in Vercel: OPENAI/DEEPSEEK keys; Claude is intentionally disabled. Supabase public configuration is enabled and the
 production login gate is active. `SUPABASE_SERVICE_ROLE_KEY` is configured as a Sensitive,
 Production-only secret; Preview has only the public Supabase URL/anon key. Schema/RLS/cascade
 audit is fully green in production: seven tables/RLS, six owner policies, six auth-user cascades,
 four workspace-parent cascades, closed webhook ledger and service-role-only transactional deletion
 RPC all PASS. Billing remains unverified/off unless all Polar variables are set.
 `NEXT_PUBLIC_PRIVACY_EMAIL=privacy@postbeacon.app` is live; Porkbun forwarding delivered an
-external inbound test to the monitored founder mailbox. `DEFAULT_PROVIDER=claude`; DeepSeek remains
-an explicit choice. `Pricing` is hidden during beta.
+external inbound test to the monitored founder mailbox. `DEFAULT_PROVIDER=openai`;
+`NEXT_PUBLIC_DEEPSEEK_FALLBACK=true` allows a visibly disclosed DeepSeek retry during beta.
+Inactive projects and webhook ids are retained for 30 days. `Pricing` is hidden during beta.
 Redeploy: `npx vercel --prod --yes`. Push env from `.env.local`: `~/push-env.sh`.
 
 ## Status / changelog
+- **2026-07-13**: **M17.4 — beta account boundary + production policy.** A same-browser account
+  switch could leave the previous account's in-memory plan visible even though Supabase RLS correctly
+  isolated saved rows. Auth identity changes now hard-reset the flow and local draft; autosave keys
+  its decision to the verified user id, with pure transition tests. Production uses OpenAI primary +
+  DeepSeek only (Claude disabled), with an explicit public beta opt-in and China/training-uncertainty
+  disclosure for automatic DeepSeek fallback. Retention is configured for 30 days; commercial UI
+  and Polar billing remain off during beta.
 - **2026-07-13**: **M17.3 — privacy-safe provider resilience.** Production Copilot 500s were
   traced to Claude returning 401 (invalid/revoked key); no-user-data probes confirmed OpenAI and
   DeepSeek remained healthy. `generateJsonMeta` now retries auth/credit/rate-limit/network/5xx and
   invalid-structured-output failures through another configured **clear-policy** provider, records
   `fallbackFrom`, logs only provider/status categories, and returns a useful 503 if every safe option
-  fails. HTTP 400/content-policy rejection never fails over; DeepSeek is never an automatic target.
+  fails. HTTP 400/content-policy rejection never fails over; at that milestone DeepSeek was not an automatic target.
   Successful fallback becomes the browser flow's new primary, and Copilot visibly names the switch.
   Picker, feedback warning, FAQ, Privacy, Terms and Subprocessors all disclose that a failed primary
   may already have received the prompt before a retry. Added dedicated failover/privacy tests.

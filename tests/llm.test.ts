@@ -34,6 +34,7 @@ const KEY_ENVS = [
   "OPENAI_API_KEY",
   "DEEPSEEK_API_KEY",
   "DEFAULT_PROVIDER",
+  "NEXT_PUBLIC_DEEPSEEK_FALLBACK",
 ] as const;
 const saved = KEY_ENVS.map((key) => [key, process.env[key]] as const);
 
@@ -50,6 +51,7 @@ beforeEach(() => {
   process.env.OPENAI_API_KEY = "test-openai";
   process.env.DEEPSEEK_API_KEY = "test-deepseek";
   process.env.DEFAULT_PROVIDER = "claude";
+  delete process.env.NEXT_PUBLIC_DEEPSEEK_FALLBACK;
   sdk.anthropicCreate.mockReset();
   sdk.openaiCreate.mockReset();
   sdk.deepseekCreate.mockReset();
@@ -90,6 +92,23 @@ describe("automatic provider failover", () => {
       generateJsonMeta({ provider: "claude", system: "system", user: "user" })
     ).rejects.toBeInstanceOf(PublicError);
     expect(sdk.deepseekCreate).not.toHaveBeenCalled();
+  });
+
+  it("uses DeepSeek only after the explicit public beta opt-in", async () => {
+    process.env.NEXT_PUBLIC_DEEPSEEK_FALLBACK = "true";
+    sdk.anthropicCreate.mockRejectedValue(upstreamError(401));
+    sdk.openaiCreate.mockRejectedValue(upstreamError(429));
+    sdk.deepseekCreate.mockResolvedValue(openAiJson({ ok: "deepseek" }));
+
+    const result = await generateJsonMeta({
+      provider: "claude",
+      system: "system",
+      user: "user",
+    });
+
+    expect(result.data).toEqual({ ok: "deepseek" });
+    expect(result.meta).toMatchObject({ provider: "deepseek", fallbackFrom: "claude" });
+    expect(sdk.deepseekCreate).toHaveBeenCalledOnce();
   });
 
   it("does not route around a non-retryable content/request rejection", async () => {

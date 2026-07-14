@@ -1,7 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { LegalShell, LegalSection, LegalTable } from "@/components/legal/LegalShell";
-import { DATA_CATEGORIES, PROVIDER_PRIVACY, retentionDays } from "@/lib/privacy";
+import {
+  DATA_CATEGORIES,
+  PROVIDER_PRIVACY,
+  deepseekAutomaticFallbackEnabled,
+  providerFallbackNotice,
+  retentionDays,
+} from "@/lib/privacy";
 
 export const metadata: Metadata = {
   title: "Privacy — PostBeacon",
@@ -11,6 +17,7 @@ export const metadata: Metadata = {
 
 export default function PrivacyPage() {
   const retention = retentionDays();
+  const deepseekFallback = deepseekAutomaticFallbackEnabled();
   return (
     <LegalShell
       title="Privacy"
@@ -28,10 +35,8 @@ export default function PrivacyPage() {
           </li>
           <li>
             Your page text, profile, plan context and anything you paste to the copilot are{" "}
-            <strong>sent to your primary AI model</strong> to generate output. If it fails
-            for availability, credit, rate-limit, key or output-format reasons, a configured
-            clear-policy provider may receive one retry. DeepSeek is never selected as an
-            automatic fallback.
+            <strong>sent to your primary AI model</strong> to generate output.{" "}
+            {providerFallbackNotice()}
           </li>
           <li>
             We <strong>never post to any platform for you</strong>, never see card numbers,
@@ -67,10 +72,16 @@ export default function PrivacyPage() {
           extracted text, the profile, relevant plan context, and text you paste to the
           copilot. If that provider is unavailable, out of credit, rate-limited,
           misconfigured, or cannot return usable structured output, PostBeacon may retry the
-          same prompt with another configured provider whose published API policy clearly
-          excludes training use. A failed provider may already have received the first
-          attempt. We don’t store chat transcripts; each provider retains API data per its
-          own policy:
+          same prompt with another configured provider. A failed provider may already have
+          received the first attempt.{" "}
+          {deepseekFallback && (
+            <>
+              During this beta, automatic fallback can include DeepSeek and China
+              processing.
+            </>
+          )}{" "}
+          We don’t store chat transcripts; each provider retains API data per its own
+          policy:
         </p>
         <LegalTable
           headers={["Model", "Region", "Published API policy (as we read it)"]}
@@ -91,8 +102,9 @@ export default function PrivacyPage() {
         <p>
           Where a provider’s policy doesn’t clearly exclude training use, we never make it
           the default and we label it in the model picker. If your product is still
-          confidential, prefer a clear-policy model and don’t paste anything you wouldn’t
-          want retained.
+          confidential, don’t paste anything you wouldn’t want retained.
+          {deepseekFallback &&
+            " During this beta, DeepSeek may also be used as the disclosed automatic fallback; avoid confidential material."}
         </p>
       </LegalSection>
 

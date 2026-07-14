@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { useLaunchFlow, type Step } from "@/hooks/useLaunchFlow";
 import { useAutosave } from "@/hooks/useAutosave";
@@ -20,11 +21,22 @@ import { useSupabaseUser } from "@/components/app/SignIn";
 import { supabaseConfigured } from "@/lib/supabase/client";
 import { Spinner } from "@/components/ui/Spinner";
 import { Button } from "@/components/ui/Button";
+import { shouldResetForAccountBoundary } from "@/lib/accountBoundary";
 
 export default function AppPage() {
   const f = useLaunchFlow();
-  const { userEmail, loading: authLoading } = useSupabaseUser();
+  const { resetAccountBoundary } = f;
+  const { userId, userEmail, loading: authLoading } = useSupabaseUser();
   const { lastSaved, saving, saveNow } = useAutosave(f);
+  const previousUserId = useRef<string | null | undefined>(undefined);
+
+  useEffect(() => {
+    if (authLoading) return;
+    if (shouldResetForAccountBoundary(previousUserId.current, userId)) {
+      resetAccountBoundary();
+    }
+    previousUserId.current = userId;
+  }, [authLoading, userId, resetAccountBoundary]);
 
   // Login gate: required only when Supabase is configured. The demo bypasses it
   // so anyone can explore the example; with no Supabase keys the app stays open.

@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { availableProviders } from "@/lib/llm";
 import {
+  automaticFallbackProviders,
   clearPolicyProviders,
   DATA_CATEGORIES,
+  providerFallbackNotice,
   PROVIDER_PRIVACY,
   SUBPROCESSORS,
 } from "@/lib/privacy";
@@ -14,6 +16,7 @@ const KEY_ENVS = [
   "OPENAI_API_KEY",
   "DEEPSEEK_API_KEY",
   "DEFAULT_PROVIDER",
+  "NEXT_PUBLIC_DEEPSEEK_FALLBACK",
 ] as const;
 const saved = KEY_ENVS.map((k) => [k, process.env[k]] as const);
 afterEach(() => {
@@ -40,6 +43,16 @@ describe("privacy single source stays complete", () => {
     expect(clearPolicyProviders()).toEqual(["claude", "openai"]);
     expect(PROVIDER_PRIVACY.deepseek.clearPolicy).toBe(false);
     expect(PROVIDER_PRIVACY.deepseek.note).toMatch(/confidential/i);
+  });
+
+  it("DeepSeek automatic fallback requires the public beta opt-in", () => {
+    delete process.env.NEXT_PUBLIC_DEEPSEEK_FALLBACK;
+    expect(automaticFallbackProviders()).toEqual(["claude", "openai"]);
+    expect(providerFallbackNotice()).toContain("never an automatic fallback");
+
+    process.env.NEXT_PUBLIC_DEEPSEEK_FALLBACK = "true";
+    expect(automaticFallbackProviders()).toEqual(["claude", "openai", "deepseek"]);
+    expect(providerFallbackNotice()).toContain("processes data in China");
   });
 
   it("the inventory names the load-bearing truths (localStorage, provider flow, no transcripts)", () => {

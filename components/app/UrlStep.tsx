@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { PROVIDER_PRIVACY } from "@/lib/privacy";
+import { PROVIDER_PRIVACY, providerFallbackNotice } from "@/lib/privacy";
 import type { Provider } from "@/lib/types";
 
 const PROVIDER_LABELS: Record<Provider, string> = {
@@ -93,10 +93,7 @@ export function UrlStep({
           >
             Privacy
           </Link>
-          <span className="mt-1 block text-neutral-600">
-            If the primary model is unavailable, we may retry with another configured
-            clear-policy provider. DeepSeek is never an automatic fallback.
-          </span>
+          <span className="mt-1 block text-neutral-600">{providerFallbackNotice()}</span>
         </p>
       )}
     </Card>
