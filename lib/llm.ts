@@ -59,7 +59,9 @@ function sliceJson(text: string): string {
     .replace(/^```(?:json)?/i, "")
     .replace(/```$/i, "");
   const start = trimmed.search(/[[{]/);
-  if (start === -1) throw new Error("Model returned no JSON: " + text.slice(0, 200));
+  // Static message only: this error can travel through logging paths, and log
+  // hygiene (M17 §7) forbids prompt/output fragments anywhere near a sink.
+  if (start === -1) throw new Error("Model returned no JSON value.");
   const open = trimmed[start];
   const close = open === "{" ? "}" : "]";
   let depth = 0;

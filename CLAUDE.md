@@ -136,7 +136,8 @@ docs/M17-privacy-trust.md    Private-beta data-flow map, inventory, threat model
 tests/                  vitest suites: urlPolicy, safeFetch, billing, webhook route, validate,
                         golden (12-fixture offline evals), generateRoute, flowReducer
                         (state-machine invariants), storage (draft migrations), workspace
-                        (Today/verdicts/review), copilotActions (action boundary, injection,
+                        (Today/verdicts/review), coerce (metric parsing), export (learning-loop
+                        completeness), copilotActions (action boundary, injection,
                         destructive gates, memory), account (deletion coverage vs schema,
                         export), retention, log (redaction), privacy (source consistency,
                         provider ordering); eval.live (gated)
@@ -206,6 +207,27 @@ Inactive projects and webhook ids are retained for 30 days. `Pricing` is hidden 
 Redeploy: `npx vercel --prod --yes`. Push env from `.env.local`: `~/push-env.sh`.
 
 ## Status / changelog
+- **2026-07-13**: **Project-wide bug audit + public README.** Architect pass over
+  the whole codebase (baseline: 283 tests green, madge no cycles, zero
+  TODO/console). Fixed four real issues: (1) **pasted outcome metrics poisoned
+  state** — "12,000" in the results panel became NaN (`Math.max(0, NaN)`),
+  silently mis-verdicting the experiment, serializing to null, and then
+  **400-ing every later copilot call** for that project; new `parseMetric`
+  (lib/coerce.ts) strips separators and rejects non-finite values at the
+  source, and the copilot workspace schema's new `metricSchema`
+  (null→undefined) stops historical bad data from locking copilot out.
+  (2) **Plan export dropped the learning loop** — Markdown/JSON export (the
+  ONLY egress for anonymous users) omitted experiments/outcomes/memory;
+  ExportSnapshot now carries workspace+memory, Markdown gains an "Experiment
+  log" section, wired app page → ResultsView → PlanReport. (3) buildBriefing
+  keyed on review suggestion COPY ("no experiment yet"); WeeklyReview now
+  exposes structured `unprovenChannel`. (4) sliceJson's error message embedded
+  model output — now static (log-hygiene defense in depth). README rewritten to
+  the current product (trust layer, workspace, action engine, privacy posture,
+  badges, accurate env table); stale claims removed ("bring your own key" era
+  copy was already gone; roadmap no longer lists effect tracking, shipped in
+  M15). +8 tests (290 offline). Browser-verified: demo publish → timeline →
+  export buttons, zero console errors.
 - **2026-07-13**: **M17.6 — production project-save contract repair.** A real signed-in
   save exposed `PGRST204`: the production `projects` table predated M11 and its PostgREST
   schema did not contain every field used by the browser upsert (most likely `meta`). Added

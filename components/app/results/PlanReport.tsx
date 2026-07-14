@@ -15,8 +15,10 @@ import type {
   MarketingStrategy,
   PlatformPost,
   PlatformRecommendation,
+  ProductMemory,
   ProductProfile,
   ScheduleItem,
+  WorkspaceState,
 } from "@/lib/types";
 
 type TabId = "overview" | "content" | "calendar" | "execute";
@@ -29,6 +31,8 @@ export function PlanReport({
   strategy,
   profile,
   facts,
+  workspace,
+  memory,
   posted,
   onTogglePosted,
   onRegenerate,
@@ -52,6 +56,8 @@ export function PlanReport({
   strategy: MarketingStrategy | null;
   profile: ProductProfile | null;
   facts: Fact[];
+  workspace: WorkspaceState;
+  memory: ProductMemory;
   posted: Record<string, boolean>;
   onTogglePosted: (id: string) => void;
   onRegenerate: (platformId: string) => void;
@@ -75,7 +81,16 @@ export function PlanReport({
   onReset: () => void;
 }) {
   function exportSnapshot(): ExportSnapshot {
-    return { url: undefined, profile, strategy, result, launchDate, facts };
+    return {
+      url: undefined,
+      profile,
+      strategy,
+      result,
+      launchDate,
+      facts,
+      workspace,
+      memory,
+    };
   }
   const slug = useMemo(
     () =>

@@ -388,6 +388,9 @@ export interface WeeklyReview {
     bestCall?: VerdictCall;
   }[];
   bestAngle?: string;
+  /** Highest-ranked channel with no experiment yet (structured — the briefing
+   *  keys off this, never off suggestion copy). */
+  unprovenChannel?: { platformId: string; platformName: string };
   suggestions: string[]; // ≤3
 }
 
@@ -446,6 +449,9 @@ export function weeklyReview(
   const unproven = strategy?.recommendations.find(
     (r) => !byChannel.has(r.platformId) && r.priority === "high"
   );
+  const unprovenChannel = unproven
+    ? { platformId: unproven.platformId, platformName: unproven.platformName }
+    : undefined;
   if (unproven) {
     suggestions.push(
       `${unproven.platformName} is your highest-ranked channel with no experiment yet — schedule it.`
@@ -468,6 +474,7 @@ export function weeklyReview(
     loops,
     channels: [...byChannel.values()],
     bestAngle: best ? best.angle : undefined,
+    unprovenChannel,
     suggestions: suggestions.slice(0, 3),
   };
 }
@@ -524,9 +531,10 @@ export function buildBriefing(plan: PlanSlice, now: Date): Briefing {
     });
   }
 
-  const unproven = review.suggestions.find((s) => s.includes("no experiment yet"));
-  if (unproven) {
-    lines.push(unproven);
+  if (review.unprovenChannel) {
+    lines.push(
+      `${review.unprovenChannel.platformName} is your highest-ranked channel with no experiment yet — schedule it.`
+    );
     chips.push({
       label: "Design the next experiment",
       prompt:

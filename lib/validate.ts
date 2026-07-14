@@ -324,6 +324,12 @@ export const regenerateBodySchema = z.object({
 });
 
 /** Workspace slice the copilot needs for evidence refs (bounded). */
+/** Outcome metric off the wire: absent/null/non-finite all mean "not measured". */
+const metricSchema = z
+  .number()
+  .nullish()
+  .transform((v) => (typeof v === "number" && Number.isFinite(v) ? v : undefined));
+
 const copilotWorkspaceSchema = z.object({
   experiments: z
     .array(
@@ -345,11 +351,14 @@ const copilotWorkspaceSchema = z.object({
               id: s(80),
               checkpoint: z.enum(["24h", "72h", "manual"]),
               recordedAt: s(40).default(""),
-              impressions: z.number().optional(),
-              replies: z.number().optional(),
-              clicks: z.number().optional(),
-              signups: z.number().optional(),
-              revenue: z.number().optional(),
+              // Metrics tolerate null: a NaN that ever reached a saved plan
+              // serialized to null, and one bad historical outcome must not
+              // 400 every copilot call for that project. Non-finite → absent.
+              impressions: metricSchema,
+              replies: metricSchema,
+              clicks: metricSchema,
+              signups: metricSchema,
+              revenue: metricSchema,
               qualitativeFeedback: s(4000).optional(),
             })
           )

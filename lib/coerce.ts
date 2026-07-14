@@ -24,3 +24,16 @@ export const asRecord = (v: unknown): Record<string, unknown> =>
 /** Array of records (non-arrays → [], non-object items → {}). */
 export const asRecordList = (v: unknown): Record<string, unknown>[] =>
   Array.isArray(v) ? v.map(asRecord) : [];
+
+/**
+ * A pasted metric ("12,000", " 45 ", "1 234") as a non-negative finite number,
+ * or undefined for empty/unparseable input — "not measured" must stay absent,
+ * and NaN/Infinity must never enter state: they mis-verdict locally, serialize
+ * to null, and a null metric fails the copilot request schema forever after.
+ */
+export const parseMetric = (v: string): number | undefined => {
+  const cleaned = v.trim().replace(/[,\s]/g, "");
+  if (cleaned === "") return undefined;
+  const n = Number(cleaned);
+  return Number.isFinite(n) ? Math.max(0, n) : undefined;
+};

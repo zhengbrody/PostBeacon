@@ -23,6 +23,7 @@ import type {
   ProductProfile,
   ScheduleItem,
   TaskRecord,
+  ProductMemory,
   WorkspaceState,
 } from "@/lib/types";
 
@@ -40,6 +41,7 @@ export function ResultsView({
   profile,
   facts,
   workspace,
+  memory,
   posted,
   onTogglePosted,
   onRegenerate,
@@ -68,6 +70,7 @@ export function ResultsView({
   profile: ProductProfile | null;
   facts: Fact[];
   workspace: WorkspaceState;
+  memory: ProductMemory;
   posted: Record<string, boolean>;
   onTogglePosted: (id: string) => void;
   onRegenerate: (platformId: string) => void;
@@ -232,6 +235,8 @@ export function ResultsView({
           strategy={strategy}
           profile={profile}
           facts={facts}
+          workspace={workspace}
+          memory={memory}
           posted={posted}
           onTogglePosted={onTogglePosted}
           onRegenerate={onRegenerate}

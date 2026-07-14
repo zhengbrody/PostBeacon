@@ -203,6 +203,7 @@ function AppFlow({ f }: { f: ReturnType<typeof useLaunchFlow> }) {
           profile={f.profile}
           facts={f.facts}
           workspace={f.workspace}
+          memory={f.memory}
           posted={f.posted}
           onTogglePosted={f.togglePosted}
           onRegenerate={f.regeneratePost}

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { parseMetric } from "@/lib/coerce";
 import { nextActionsAfter } from "@/lib/today";
 import type {
   Experiment,
@@ -80,19 +81,18 @@ export function OutcomePanel({
     (v) => v.trim() !== ""
   );
 
-  // Absent means "not measured" — never coerced to 0.
-  const asNum = (v: string) => (v.trim() === "" ? undefined : Math.max(0, Number(v)));
-
   function save() {
     onSave({
       id: crypto.randomUUID(),
       checkpoint,
       recordedAt: new Date().toISOString(),
-      impressions: asNum(impressions),
-      replies: asNum(replies),
-      clicks: asNum(clicks),
-      signups: asNum(signups),
-      revenue: asNum(revenue),
+      // Absent means "not measured" — never coerced to 0 (parseMetric also
+      // rejects NaN/Infinity from pasted values like "12,000" or "1e999").
+      impressions: parseMetric(impressions),
+      replies: parseMetric(replies),
+      clicks: parseMetric(clicks),
+      signups: parseMetric(signups),
+      revenue: parseMetric(revenue),
       qualitativeFeedback: qualitative.trim() || undefined,
     });
     setPhase("feedback");

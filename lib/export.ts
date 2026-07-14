@@ -4,6 +4,8 @@ import type {
   GenerateResult,
   MarketingStrategy,
   PlatformContent,
+  ProductMemory,
+  WorkspaceState,
 } from "./types";
 import { scheduleDate } from "./dates";
 
@@ -14,6 +16,10 @@ export interface ExportSnapshot {
   result: GenerateResult | null;
   launchDate?: string;
   facts?: Fact[];
+  // The learning loop travels with the plan: for anonymous users this export
+  // is the ONLY way to take experiments/outcomes/memory off the device.
+  workspace?: WorkspaceState;
+  memory?: ProductMemory;
 }
 
 export function toJson(snap: ExportSnapshot): string {
@@ -22,7 +28,7 @@ export function toJson(snap: ExportSnapshot): string {
 
 /** Render the whole CMO launch plan as portable Markdown. */
 export function toMarkdown(snap: ExportSnapshot): string {
-  const { profile, strategy, result, launchDate = "", facts } = snap;
+  const { profile, strategy, result, launchDate = "", facts, workspace } = snap;
   const out: string[] = [];
   out.push(`# ${profile?.name || "Launch"} — launch plan`, "");
   if (profile?.tagline) out.push(`> ${profile.tagline}`, "");
@@ -53,6 +59,8 @@ export function toMarkdown(snap: ExportSnapshot): string {
     }
     out.push("");
   }
+
+  if (workspace?.experiments.length) appendExperiments(out, workspace);
 
   for (const c of result?.content || []) {
     out.push(`## ${c.platformName}`, "");
@@ -141,6 +149,40 @@ function appendStrategy(out: string[], s: MarketingStrategy) {
     for (const m of s.iterationLoop) {
       out.push(`- **${m.signal}** — ${m.read} _If weak: ${m.ifWeak}_`);
     }
+    out.push("");
+  }
+}
+
+/** The M15 learning loop: what was published, what came back, what it taught. */
+function appendExperiments(out: string[], workspace: WorkspaceState) {
+  out.push("## Experiment log", "");
+  for (const e of workspace.experiments) {
+    const when = e.publishedAt.slice(0, 10);
+    out.push(
+      `### ${e.platformName}${e.community ? ` · ${e.community}` : ""} — ${when} (${e.status})`
+    );
+    if (e.hypothesis) out.push(`*Hypothesis:* ${e.hypothesis}`);
+    if (e.angle) out.push(`*Angle:* ${e.angle}`);
+    for (const o of e.outcomes) {
+      const metrics = (
+        [
+          [o.impressions, "impressions"],
+          [o.replies, "replies"],
+          [o.clicks, "clicks"],
+          [o.signups, "signups"],
+          [o.revenue, "$ revenue"],
+        ] as const
+      )
+        .filter(([v]) => typeof v === "number")
+        .map(([v, label]) => `${v} ${label}`)
+        .join(" · ");
+      out.push(
+        `- **${o.checkpoint}**: ${metrics || "no metrics recorded"}${
+          o.qualitativeFeedback ? ` — “${o.qualitativeFeedback}”` : ""
+        }`
+      );
+    }
+    if (e.verdict) out.push(`- **Verdict:** ${e.verdict.call} — ${e.verdict.reason}`);
     out.push("");
   }
 }

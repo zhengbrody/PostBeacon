@@ -111,6 +111,26 @@ describe("copilotBodySchema", () => {
     expect(() => parseBody(copilotBodySchema, { ...base, result: null })).not.toThrow();
   });
 
+  it("a historical null metric (serialized NaN) can't 400 every copilot call", () => {
+    const body = {
+      ...base,
+      workspace: {
+        experiments: [
+          {
+            id: "e1",
+            platformId: "hn",
+            outcomes: [{ id: "o1", checkpoint: "24h", impressions: null, clicks: 7 }],
+          },
+        ],
+        taskLog: [],
+      },
+    };
+    const parsed = parseBody(copilotBodySchema, body);
+    const outcome = parsed.workspace!.experiments[0].outcomes[0];
+    expect(outcome.impressions).toBeUndefined(); // absent, not null/NaN
+    expect(outcome.clicks).toBe(7); // real numbers pass through
+  });
+
   it("rejects unknown actions", () => {
     expect(() => parseBody(copilotBodySchema, { ...base, action: "exfiltrate" })).toThrow(
       PublicError
