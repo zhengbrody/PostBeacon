@@ -2,7 +2,8 @@
 // The /privacy, /terms and /subprocessors pages, the model picker's data notes,
 // and the provider default ordering all render from THIS file, so the published
 // statements can't drift from what the code does. Full inventory + threat model:
-// docs/M17-privacy-trust.md. Draft copy — pending legal review, not legal advice.
+// docs/M17-privacy-trust.md. During private beta this is a factual product/data
+// notice, not a claim about a future company, paid service, or jurisdiction.
 
 import type { Provider } from "./types";
 
@@ -11,7 +12,8 @@ export const PRIVACY_LAST_UPDATED = "2026-07-13";
 
 /**
  * How each LLM provider handles API data, per its PUBLIC policy as of
- * PRIVACY_LAST_UPDATED (counsel must re-verify before treating as contractual).
+ * PRIVACY_LAST_UPDATED (re-verify before changing provider configuration or
+ * publishing these statements outside the private beta).
  * `clearPolicy: false` means training use isn't clearly excluded — such a
  * provider is never picked as the code default (see availableProviders) and
  * gets a caution note beside the model picker.
@@ -49,6 +51,22 @@ export const PROVIDER_PRIVACY: Record<Provider, ProviderPrivacy> = {
     note: "Data is processed in China and training use isn't clearly excluded — avoid confidential material with this model.",
   },
 };
+
+function providerConfigured(provider: Provider): boolean {
+  const keyByProvider: Record<Provider, string | undefined> = {
+    claude: process.env.ANTHROPIC_API_KEY,
+    openai: process.env.OPENAI_API_KEY,
+    deepseek: process.env.DEEPSEEK_API_KEY,
+  };
+  return Boolean(keyByProvider[provider]);
+}
+
+/** Provider disclosures for models that this deployment can actually call. */
+export function configuredProviderPrivacy(): ProviderPrivacy[] {
+  return (Object.keys(PROVIDER_PRIVACY) as Provider[])
+    .filter(providerConfigured)
+    .map((provider) => PROVIDER_PRIVACY[provider]);
+}
 
 /** Providers whose published API policy clearly excludes training use. */
 export function clearPolicyProviders(): Provider[] {
@@ -117,7 +135,7 @@ export const SUBPROCESSORS: Subprocessor[] = [
   {
     name: "OpenAI",
     role: "AI model (GPT)",
-    data: "Same prompt content as Anthropic",
+    data: "Your product page text, profile, plan context, and anything you paste to the copilot",
     region: PROVIDER_PRIVACY.openai.region,
     when: "Only if configured, and when selected as primary or used as a clear-policy fallback",
     policyUrl: PROVIDER_PRIVACY.openai.policyUrl,
@@ -125,7 +143,7 @@ export const SUBPROCESSORS: Subprocessor[] = [
   {
     name: "DeepSeek",
     role: "AI model",
-    data: "Same prompt content as Anthropic",
+    data: "Your product page text, profile, plan context, and anything you paste to the copilot",
     region: PROVIDER_PRIVACY.deepseek.region,
     when: deepseekAutomaticFallbackEnabled()
       ? "When selected as primary, or as the explicitly enabled beta fallback after another provider fails"
@@ -166,6 +184,45 @@ export const SUBPROCESSORS: Subprocessor[] = [
   },
 ];
 
+/** Whether paid billing is actually live in this deployment. */
+export function billingConfigured(): boolean {
+  return Boolean(
+    process.env.POLAR_ACCESS_TOKEN &&
+    process.env.POLAR_PRODUCT_ID &&
+    process.env.POLAR_WEBHOOK_SECRET
+  );
+}
+
+/**
+ * Public page = currently configured vendors, not every dormant integration in
+ * the repository. This keeps the private-beta disclosure factual and concise.
+ */
+export function activeSubprocessors(): Subprocessor[] {
+  return SUBPROCESSORS.filter((vendor) => {
+    switch (vendor.name) {
+      case "Supabase":
+      case "Google":
+        return Boolean(
+          process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+        );
+      case "Anthropic":
+        return providerConfigured("claude");
+      case "OpenAI":
+        return providerConfigured("openai");
+      case "DeepSeek":
+        return providerConfigured("deepseek");
+      case "Firecrawl":
+        return Boolean(process.env.SCRAPE_API_KEY);
+      case "Tavily":
+        return Boolean(process.env.SEARCH_API_KEY);
+      case "Polar":
+        return billingConfigured();
+      default:
+        return true;
+    }
+  });
+}
+
 /** One row of the plain-language inventory table on /privacy. */
 export interface DataCategory {
   what: string;
@@ -173,6 +230,8 @@ export interface DataCategory {
   why: string;
   retention: string;
   deletion: string;
+  /** Hide dormant product surfaces from the current public beta notice. */
+  requires?: "billing";
 }
 
 export const DATA_CATEGORIES: DataCategory[] = [
@@ -224,7 +283,7 @@ export const DATA_CATEGORIES: DataCategory[] = [
   {
     what: "Usage metering (plan, launches used, daily calls)",
     where: "Supabase",
-    why: "Free-tier limits and abuse prevention",
+    why: "Private-beta usage limits and abuse prevention",
     retention: "Life of your account",
     deletion: "Delete account",
   },
@@ -235,6 +294,7 @@ export const DATA_CATEGORIES: DataCategory[] = [
     retention:
       "Event IDs swept by our retention job; Polar keeps transaction records as required by law",
     deletion: "Contact for our side; Polar per its policy",
+    requires: "billing",
   },
   {
     what: "Server logs & analytics",
@@ -244,6 +304,13 @@ export const DATA_CATEGORIES: DataCategory[] = [
     deletion: "Ages out automatically",
   },
 ];
+
+/** Data inventory rows that describe features active in this deployment. */
+export function visibleDataCategories(): DataCategory[] {
+  return DATA_CATEGORIES.filter(
+    (category) => category.requires !== "billing" || billingConfigured()
+  );
+}
 
 /**
  * Operator-configured retention window for inactive signed-in projects and

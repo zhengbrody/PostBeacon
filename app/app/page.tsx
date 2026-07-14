@@ -26,8 +26,11 @@ import { shouldResetForAccountBoundary } from "@/lib/accountBoundary";
 export default function AppPage() {
   const f = useLaunchFlow();
   const { resetAccountBoundary } = f;
-  const { userId, userEmail, loading: authLoading } = useSupabaseUser();
-  const { lastSaved, saving, saveNow } = useAutosave(f);
+  const { userId, userEmail, supabase, loading: authLoading } = useSupabaseUser();
+  const { lastSaved, saveError, saving, saveNow } = useAutosave(f, {
+    userId,
+    supabase,
+  });
   const previousUserId = useRef<string | null | undefined>(undefined);
 
   useEffect(() => {
@@ -59,6 +62,7 @@ export default function AppPage() {
             snapshot={f.snapshot}
             onLoad={f.loadProject}
             lastSaved={lastSaved}
+            saveError={saveError}
             saving={saving}
             onSaveNow={saveNow}
           />

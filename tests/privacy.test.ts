@@ -1,12 +1,16 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { availableProviders } from "@/lib/llm";
 import {
+  activeSubprocessors,
   automaticFallbackProviders,
+  billingConfigured,
   clearPolicyProviders,
+  configuredProviderPrivacy,
   DATA_CATEGORIES,
   providerFallbackNotice,
   PROVIDER_PRIVACY,
   SUBPROCESSORS,
+  visibleDataCategories,
 } from "@/lib/privacy";
 import type { Provider } from "@/lib/types";
 
@@ -17,6 +21,9 @@ const KEY_ENVS = [
   "DEEPSEEK_API_KEY",
   "DEFAULT_PROVIDER",
   "NEXT_PUBLIC_DEEPSEEK_FALLBACK",
+  "POLAR_ACCESS_TOKEN",
+  "POLAR_PRODUCT_ID",
+  "POLAR_WEBHOOK_SECRET",
 ] as const;
 const saved = KEY_ENVS.map((k) => [k, process.env[k]] as const);
 afterEach(() => {
@@ -61,6 +68,36 @@ describe("privacy single source stays complete", () => {
     expect(all).toContain("primary model");
     expect(all).toContain("clear-policy fallback");
     expect(all).toMatch(/never long-term memory/);
+  });
+
+  it("hides dormant billing from the current private-beta pages", () => {
+    delete process.env.POLAR_ACCESS_TOKEN;
+    delete process.env.POLAR_PRODUCT_ID;
+    delete process.env.POLAR_WEBHOOK_SECRET;
+    expect(billingConfigured()).toBe(false);
+    expect(activeSubprocessors().some((vendor) => vendor.name === "Polar")).toBe(false);
+    expect(visibleDataCategories().some((category) => category.what === "Billing")).toBe(
+      false
+    );
+
+    process.env.POLAR_ACCESS_TOKEN = "test";
+    process.env.POLAR_PRODUCT_ID = "test";
+    process.env.POLAR_WEBHOOK_SECRET = "test";
+    expect(billingConfigured()).toBe(true);
+    expect(activeSubprocessors().some((vendor) => vendor.name === "Polar")).toBe(true);
+    expect(visibleDataCategories().some((category) => category.what === "Billing")).toBe(
+      true
+    );
+  });
+
+  it("publishes provider notes only for configured models", () => {
+    delete process.env.ANTHROPIC_API_KEY;
+    process.env.OPENAI_API_KEY = "test";
+    process.env.DEEPSEEK_API_KEY = "test";
+    expect(configuredProviderPrivacy().map((provider) => provider.label)).toEqual([
+      "OpenAI",
+      "DeepSeek",
+    ]);
   });
 });
 

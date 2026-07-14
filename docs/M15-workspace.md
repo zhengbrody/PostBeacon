@@ -256,40 +256,40 @@ RLS policy and parent/auth cascade.
 ## 13. Acceptance criteria
 
 Intake
-- [ ] A1. After analyze, the Diagnose step asks for goal/stage/assets (existing questions when unknown) AND launch date + weekly time budget (always shown until answered/skipped).
-- [ ] A2. Every intake item is skippable; skipping never blocks progressing.
+- [x] A1. After analyze, the Diagnose step asks for goal/stage/assets (existing questions when unknown) AND launch date + weekly time budget (always shown until answered/skipped).
+- [x] A2. Every intake item is skippable; skipping never blocks progressing.
 
 Today
-- [ ] B1. After generation the user lands on Today, not the report.
-- [ ] B2. Today never shows more than 3 action cards.
-- [ ] B3. Every card shows why-now, estimated minutes, links to the content it uses, and Done/Skip controls.
-- [ ] B4. The full report is reachable under "Full plan" and is unchanged (Overview/Content/Calendar/Execute, printing included).
-- [ ] B5. Skipped cards don't reappear; done post-cards require the Publish dialog.
-- [ ] B6. Launch momentum advances only from real state (plan, experiment,
+- [x] B1. After generation the user lands on Today, not the report.
+- [x] B2. Today never shows more than 3 action cards.
+- [x] B3. Every card shows why-now, estimated minutes, links to the content it uses, and Done/Skip controls.
+- [x] B4. The full report is reachable under "Full plan" and is unchanged (Overview/Content/Calendar/Execute, printing included).
+- [x] B5. Skipped cards don't reappear; done post-cards require the Publish dialog.
+- [x] B6. Launch momentum advances only from real state (plan, experiment,
   verdict) and points to the next first-value action.
 
 Experiments
-- [ ] C1. Confirming the Publish dialog creates an experiment with platform, community, angle, variant, publishedAt, trackedUrl (optional) and a generated hypothesis.
-- [ ] C2. No network posting occurs anywhere (no external POSTs to platforms).
+- [x] C1. Confirming the Publish dialog creates an experiment with platform, community, angle, variant, publishedAt, trackedUrl (optional) and a generated hypothesis.
+- [x] C2. No network posting occurs anywhere (no external POSTs to platforms).
 
 Check-ins & outcomes
-- [ ] D1. At publishedAt+24h a Record card appears on Today (and a nav badge); same at +72h; overdue check-ins outrank post cards.
-- [ ] D2. Outcome form accepts the six fields, all optional except at least one filled; unset numbers are stored as absent, not 0.
+- [x] D1. At publishedAt+24h a Record card appears on Today (and a nav badge); same at +72h; overdue check-ins outrank post cards.
+- [x] D2. Outcome form accepts the six fields, all optional except at least one filled; unset numbers are stored as absent, not 0.
 
 Feedback
-- [ ] E1. Saving an outcome immediately shows a verdict (supported/promising/weak/no-signal) with the rule that fired, in plain language.
-- [ ] E2. The panel names the channel/angle to continue or stop, and lists ≤3 next actions.
-- [ ] E3. One click generates a follow-up variant (appended to the channel's drafts) OR applies the stop suggestion — variant text comes from the model; verdict/advice never does.
+- [x] E1. Saving an outcome immediately shows a verdict (supported/promising/weak/no-signal) with the rule that fired, in plain language.
+- [x] E2. The panel names the channel/angle to continue or stop, and lists ≤3 next actions.
+- [x] E3. One click generates a follow-up variant (appended to the channel's drafts) OR applies the stop suggestion — variant text comes from the model; verdict/advice never does.
 
 Timeline & Review
-- [ ] F1. Timeline lists workspace events newest-first with timestamps.
-- [ ] F2. Review shows weekly completed learning loops as the headline number (a loop = published + outcome recorded + verdict), plus a channel scoreboard and ≤3 next-week suggestions.
+- [x] F1. Timeline lists workspace events newest-first with timestamps.
+- [x] F2. Review shows weekly completed learning loops as the headline number (a loop = published + outcome recorded + verdict), plus a channel scoreboard and ≤3 next-week suggestions.
 
 Persistence
-- [ ] G1. Anonymous: full workspace state survives reload via the versioned draft (v4 migration; v3 drafts load cleanly with an empty workspace).
-- [ ] G2. Signed-in without new tables: workspace survives via projects.meta (no SQL required).
-- [ ] G3. With schema.sql applied: campaigns/experiments/outcomes/tasks rows are written with RLS restricting access to the owner.
-- [ ] G4. Loading any pre-M15 save renders the workspace with an empty loop history and a working Today.
+- [x] G1. Anonymous: full workspace state survives reload via the versioned draft (v4 migration; v3 drafts load cleanly with an empty workspace).
+- [x] G2. Signed-in without new tables: workspace survives via projects.meta (no SQL required).
+- [x] G3. With schema.sql applied: campaigns/experiments/outcomes/tasks rows are written with RLS restricting access to the owner.
+- [x] G4. Loading any pre-M15 save renders the workspace with an empty loop history and a working Today.
 
 Gates
-- [ ] H1. typecheck / offline tests / lint / format / build all green; engine and migration behavior unit-tested; flow verified in the browser.
+- [x] H1. typecheck / offline tests / lint / format / build all green; engine and migration behavior unit-tested; flow verified in the browser.

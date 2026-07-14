@@ -79,15 +79,16 @@ export function loadDraft(): Draft | null {
   }
 }
 
-export function saveDraft(draft: Omit<Draft, "schemaVersion">) {
-  if (typeof window === "undefined") return;
+export function saveDraft(draft: Omit<Draft, "schemaVersion">): boolean {
+  if (typeof window === "undefined") return false;
   try {
     localStorage.setItem(
       KEY,
       JSON.stringify({ ...draft, schemaVersion: DRAFT_SCHEMA_VERSION })
     );
+    return true;
   } catch {
-    // quota / private mode — best-effort
+    return false; // quota / private mode
   }
 }
 

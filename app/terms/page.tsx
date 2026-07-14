@@ -4,119 +4,75 @@ import { LegalShell, LegalSection } from "@/components/legal/LegalShell";
 import { providerFallbackNotice } from "@/lib/privacy";
 
 export const metadata: Metadata = {
-  title: "Terms of Service — PostBeacon",
-  description: "The rules for using PostBeacon during its beta.",
+  title: "Private beta use — PostBeacon",
+  description: "Plain-language expectations for using the PostBeacon private beta.",
 };
 
 export default function TermsPage() {
   return (
     <LegalShell
-      title="Terms of Service"
-      intro="These terms govern your use of PostBeacon (postbeacon.app). They’re written to be readable; the bracketed items are placeholders our lawyers still need to settle. By using PostBeacon you agree to them."
+      title="Private beta use"
+      intro="This page describes what PostBeacon does today and the basic expectations that keep private-beta testing safe."
     >
-      <LegalSection title="1. The service">
+      <LegalSection title="1. What the beta does">
         <p>
-          PostBeacon analyzes a product URL you supply and generates a launch plan: platform
-          scores, positioning, draft posts, a calendar, and a workspace to track what you
-          publish yourself. It is currently a <strong>beta</strong>: features change, and
-          the service is provided as-is.
+          PostBeacon analyzes a product URL you supply and generates platform scores,
+          positioning, draft posts, a calendar, and a workspace for results you record.
+          Features and output may change while the product is being tested.
         </p>
         <p>
           <strong>PostBeacon never posts anywhere on your behalf.</strong> It has no access
-          to your social or community accounts. Publishing anything it drafts is your action
-          and your responsibility.
+          to your social or community accounts. You decide whether to publish anything it
+          drafts.
         </p>
       </LegalSection>
 
-      <LegalSection title="2. AI-generated output">
+      <LegalSection title="2. Review AI output">
         <p>
-          Plans and drafts are produced by AI models and can be wrong, incomplete, or
-          unsuitable. The app separates verified facts from inferences where it can, but you
-          must review everything before relying on it or posting it. PostBeacon guarantees
-          no outcome — no ranking, traffic, signups or revenue — and its output is not
-          professional (legal, financial, or marketing-compliance) advice.
+          AI-generated plans and drafts can be wrong, incomplete, or unsuitable. Review
+          facts, claims, links and platform rules before relying on or publishing an output.
+          PostBeacon does not promise rankings, traffic, signups, revenue, or professional
+          legal, financial or compliance advice.
         </p>
       </LegalSection>
 
-      <LegalSection title="3. Your responsibilities">
+      <LegalSection title="3. Use it responsibly">
         <ul className="list-disc space-y-1.5 pl-5">
+          <li>Only analyze URLs you own or have permission to analyze.</li>
           <li>
-            Only analyze URLs you own or have the right to analyze, and only paste content
-            (feedback, comments) you may lawfully share with us and our AI providers.
+            Only paste feedback or other text that you may share with PostBeacon and the AI
+            providers disclosed before a model call.
           </li>
           <li>
-            When you post generated content, you are the publisher: comply with each
-            platform’s rules and applicable law (including ad/disclosure rules).
+            Don’t use the beta for security attacks, spam, deception, unlawful content, or
+            automated bulk activity beyond the product’s limits.
           </li>
-          <li>
-            Don’t abuse the service: no attempts to breach security, no scraping the service
-            itself, no using it to generate spam, deception, or unlawful content, and no
-            automated bulk use beyond the documented limits.
-          </li>
-          <li>
-            Keep your account credentials secure; you’re responsible for its activity.
-          </li>
+          <li>Keep your sign-in link and account access secure.</li>
         </ul>
       </LegalSection>
 
-      <LegalSection title="4. Your content and IP">
+      <LegalSection title="4. Your content and data">
         <p>
-          You keep all rights to what you provide (your URL’s content, profile edits, pasted
-          feedback, outcome data). You grant us the limited license needed to process it to
-          provide the service — including sending it to your selected primary AI provider
-          and, if that provider fails, retrying under the disclosed fallback policy — and
-          nothing more. {providerFallbackNotice()} To the extent we hold any rights in
-          generated output, we assign or waive them in your favor; note that AI output may
-          be similar to output generated for others and may embed facts from your own page.
+          You keep your rights to the product content, edits, feedback and outcome data you
+          provide. PostBeacon processes that material only to run the features you request.{" "}
+          {providerFallbackNotice()}
         </p>
         <p>
-          We do not use your content to train models or to build cross-user datasets. Any
-          future aggregate learning from anonymized outcome data would require your
-          separate, explicit, revocable opt-in, as described in the{" "}
+          We do not use your content to train models or build a cross-user dataset. The{" "}
           <Link href="/privacy" className="text-accent-300 hover:underline">
             privacy page
-          </Link>
-          .
+          </Link>{" "}
+          explains storage, providers, export and deletion. Generated output may resemble
+          other AI output, so review it before treating it as unique or protectable.
         </p>
       </LegalSection>
 
-      <LegalSection title="5. Accounts, fees, termination">
+      <LegalSection title="5. Accounts and changes">
         <p>
-          Accounts are optional during the beta. If paid plans are enabled, checkout and
-          billing run through Polar as merchant of record; prices and limits are shown
-          before you buy. You can stop using the service and delete your account at any time
-          from the app; we may suspend or terminate accounts that violate these terms. On
-          deletion, your data is removed as described in the privacy page.
-        </p>
-      </LegalSection>
-
-      <LegalSection title="6. Disclaimers and liability">
-        <p>
-          The service is provided “as is” and “as available”, without warranties of any
-          kind, express or implied, including merchantability, fitness for a particular
-          purpose, and non-infringement. To the maximum extent permitted by law, our total
-          liability for any claim arising out of the service is limited to the greater of
-          the amount you paid us in the twelve months before the claim and USD 50, and we
-          are not liable for indirect, incidental, special, consequential or exemplary
-          damages.{" "}
-          <em>[Pending legal review: enforceability and consumer-law carve-outs.]</em>
-        </p>
-      </LegalSection>
-
-      <LegalSection title="7. Governing law and disputes">
-        <p>
-          <em>
-            [Pending legal review: governing law, venue, and dispute-resolution mechanism to
-            be determined by counsel.]
-          </em>
-        </p>
-      </LegalSection>
-
-      <LegalSection title="8. Changes">
-        <p>
-          We may update these terms as the product evolves; the date at the top moves when
-          we do, and material changes will be visible in the app. Continuing to use
-          PostBeacon after a change means you accept the updated terms.
+          You can export your account data, delete a project, or delete the account from
+          “Data &amp; privacy”. We may change, pause or end beta features as testing
+          evolves, and we’ll update these pages when product behavior or data handling
+          changes.
         </p>
       </LegalSection>
     </LegalShell>

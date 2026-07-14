@@ -1,22 +1,23 @@
 import type { Metadata } from "next";
 import { LegalShell, LegalSection, LegalTable } from "@/components/legal/LegalShell";
-import { SUBPROCESSORS, providerFallbackNotice } from "@/lib/privacy";
+import { activeSubprocessors, providerFallbackNotice } from "@/lib/privacy";
 
 export const metadata: Metadata = {
-  title: "Subprocessors — PostBeacon",
-  description: "Every vendor that can touch PostBeacon data, what it sees, and when.",
+  title: "Data vendors — PostBeacon",
+  description: "The currently configured vendors that can process PostBeacon data.",
 };
 
 export default function SubprocessorsPage() {
+  const subprocessors = activeSubprocessors();
   return (
     <LegalShell
-      title="Subprocessors"
-      intro="These are the vendors that can process data when you use PostBeacon. Most are conditional: they only receive anything if the deployment has them configured and your run actually uses them. We’ll update this page before adding a vendor."
+      title="Data vendors"
+      intro="These are the vendors currently configured for this private beta. A vendor only receives the data described below when the related feature is actually used."
     >
       <LegalSection title="Current vendors">
         <LegalTable
           headers={["Vendor", "Role", "Data it can see", "Region", "When"]}
-          rows={SUBPROCESSORS.map((s) => [
+          rows={subprocessors.map((s) => [
             <a
               key={s.name}
               href={s.policyUrl}

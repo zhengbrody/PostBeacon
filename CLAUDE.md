@@ -35,8 +35,9 @@ app/
   sitemap.ts            SEO sitemap (/) — makes robots.ts's reference real
   opengraph-image.tsx   Generated OG share card (next/og); twitter-image.tsx re-exports it
   icon.svg              Favicon (beacon mark, brand gradient)
-  privacy|terms|subprocessors/page.tsx    Legal pages (draft pending review),
-                        rendered from lib/privacy.ts via components/legal/LegalShell
+  privacy|terms|subprocessors/page.tsx    Private-beta behavior/data notices (no paid,
+                        entity, jurisdiction or liability placeholders), rendered from
+                        lib/privacy.ts via components/legal/LegalShell
   app/page.tsx          The tool — thin; wires useLaunchFlow to components/app/*
   api/
     analyze|strategy|generate|regenerate|providers|usage/route.ts   server endpoints
@@ -68,8 +69,8 @@ lib/
                         NEXT_PUBLIC_* overridable with safe fallbacks
   privacy.ts            M17 single source for public privacy claims: data inventory,
                         subprocessor list, per-provider API-data notes + clear-policy
-                        flag (orders the default), retentionDays — /privacy, /terms,
-                        /subprocessors, the model picker and llm.ts all render it
+                        flag (orders the default), configured-vendor/billing visibility,
+                        retentionDays — public pages, the model picker and llm.ts render it
   account.ts            Data rights: exportAccountData (RLS-scoped, no service role
                         needed) + deleteAccountData (transactional DB RPC, then auth
                         user removal; explicit fallback for pre-migration installs)
@@ -130,7 +131,7 @@ components/
 docs/M13-trust-layer.md Design + migration doc for the trust layer (facts/scoring/partial success)
 docs/M15-workspace.md   PRD + state diagram + acceptance criteria for the launch workspace
 docs/M16-copilot-actions.md  Design contract for the copilot action engine
-docs/M17-privacy-trust.md    Data-flow map, inventory, threat model, counsel questions
+docs/M17-privacy-trust.md    Private-beta data-flow map, inventory, threat model and controls
 tests/                  vitest suites: urlPolicy, safeFetch, billing, webhook route, validate,
                         golden (12-fixture offline evals), generateRoute, flowReducer
                         (state-machine invariants), storage (draft migrations), workspace
@@ -202,6 +203,13 @@ Inactive projects and webhook ids are retained for 30 days. `Pricing` is hidden 
 Redeploy: `npx vercel --prod --yes`. Push env from `.env.local`: `~/push-env.sh`.
 
 ## Status / changelog
+- **2026-07-13**: **M17.5 — private-beta truth + save/export hardening.** Public
+  Privacy/Private-beta-use/Data-vendors pages now describe only current behavior: removed
+  company entity, paid-plan, governing-law and liability placeholders; dormant vendors and
+  billing rows render only when actually configured. Project saves no longer fail silently:
+  the UI shows a bounded failure state, localStorage failure is detectable, and account export
+  first waits for the current project to save (or stops instead of downloading a misleading
+  empty file). M15 acceptance boxes and the retention GET-only doc were synchronized.
 - **2026-07-13**: **M17.4 — beta account boundary + production policy.** A same-browser account
   switch could leave the previous account's in-memory plan visible even though Supabase RLS correctly
   isolated saved rows. Auth identity changes now hard-reset the flow and local draft; autosave keys

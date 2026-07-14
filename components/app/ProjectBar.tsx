@@ -37,14 +37,16 @@ export function ProjectBar({
   snapshot,
   onLoad,
   lastSaved,
+  saveError,
   saving,
   onSaveNow,
 }: {
   snapshot: ProjectSnapshot;
   onLoad: (p: SavedProject) => void;
   lastSaved: string;
+  saveError: string;
   saving: boolean;
-  onSaveNow: () => void;
+  onSaveNow: () => Promise<boolean>;
 }) {
   const { userId, userEmail, displayName, supabase, updateDisplayName } = useSupabaseUser();
   const [projects, setProjects] = useState<SavedProject[]>([]);
@@ -92,6 +94,13 @@ export function ProjectBar({
     setDataBusy(true);
     setDataMsg("");
     try {
+      if (snapshot.profile || snapshot.url) {
+        const saved = await onSaveNow();
+        if (!saved) {
+          setDataMsg("Export stopped because the current project was not saved.");
+          return;
+        }
+      }
       downloadFile(
         "postbeacon-account-export.json",
         await api.exportAccount(),
@@ -130,7 +139,11 @@ export function ProjectBar({
         <span className="text-neutral-500">
           {saving ? "Saving…" : lastSaved ? `Saved ✓ ${lastSaved}` : ""}
         </span>
-        <Button size="sm" onClick={onSaveNow} disabled={saving || !snapshot.profile}>
+        <Button
+          size="sm"
+          onClick={() => void onSaveNow()}
+          disabled={saving || !snapshot.profile}
+        >
           Save now
         </Button>
         <button
@@ -154,11 +167,13 @@ export function ProjectBar({
         </button>
       </div>
 
+      {saveError && <p className="max-w-sm text-right text-xs text-red-400">{saveError}</p>}
+
       {dataOpen && (
         <div className="w-64 space-y-2 rounded-md border border-line bg-surface-2 p-3 text-left text-xs">
           <button
             onClick={exportData}
-            disabled={dataBusy}
+            disabled={dataBusy || saving}
             className="block text-neutral-300 hover:text-accent-300 disabled:opacity-40"
           >
             Export my data (JSON)

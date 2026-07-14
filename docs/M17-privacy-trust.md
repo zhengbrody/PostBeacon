@@ -1,9 +1,9 @@
 # M17 — Privacy & trust foundation
 
-> Engineering implementation + **draft copy for legal review**. Nothing in this
-> document or in the generated pages is legal advice; every statement that needs
-> a lawyer's sign-off is collected in [Open questions for counsel](#open-questions-for-counsel).
-> Single code source: `lib/privacy.ts` (inventory, subprocessors, provider notes)
+> Engineering implementation + factual private-beta data behavior. Paid-service,
+> company-entity and jurisdiction decisions are intentionally out of scope until
+> PostBeacon prepares for public launch or monetization. Single code source:
+> `lib/privacy.ts` (inventory, configured data vendors, provider notes)
 > — the /privacy, /terms and /subprocessors pages render from it, so the public
 > claims can't drift from what the code actually does.
 
@@ -20,22 +20,18 @@
                                           ▼
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │                        POSTBEACON on VERCEL (US)                             │
-│  API routes (analyze/strategy/generate/regenerate/copilot/usage/billing/     │
-│  account/retention) · server logs (platform-managed) · Vercel Web Analytics  │
-│  (cookieless, aggregated page views)                                         │
-└──┬───────────────┬──────────────────┬──────────────────┬────────────────┬────┘
-   │               │                  │                  │                │
-   ▼               ▼                  ▼                  ▼                ▼
- SUPABASE       LLM PROVIDER       FIRECRAWL          TAVILY            POLAR
- (accounts,     (primary per       (only if           (only if         (only if
-  projects,      run: Anthropic /   SCRAPE_API_KEY:    SEARCH_API_KEY:  billing on:
-  entitlements,  OpenAI /           the product URL    profile-derived  checkout,
-  workspace      DeepSeek; an       for headless       search queries)  merchant of
-  tables,        automatic         rendering)                          record)
-  webhook ids)   fallback may retry after availability/credit/key/rate-limit/
-                 format failure; DeepSeek requires a public beta opt-in. Prompt = page text + profile +
-                 edits + pasted
-                 feedback)
+│  API routes (analyze/strategy/generate/regenerate/copilot/usage/account/     │
+│  retention) · server logs (platform-managed) · cookieless web analytics      │
+└──┬───────────────────┬────────────────────┬──────────────────┬───────────────┘
+   │                   │                    │                  │
+   ▼                   ▼                    ▼                  ▼
+ SUPABASE          LLM PROVIDER         FIRECRAWL           TAVILY
+ (accounts,        (OpenAI primary;     (only if            (only if
+  projects,         DeepSeek selected/   SCRAPE_API_KEY       SEARCH_API_KEY:
+  entitlements,     disclosed fallback;  and a plain fetch    profile-derived
+  workspace)        prompt = page text +  is insufficient)    search queries)
+                    profile + edits +
+                    pasted feedback)
 ```
 
 Two hard product invariants shape everything below:
@@ -49,52 +45,45 @@ Two hard product invariants shape everything below:
 
 ## 2. Data inventory
 
-Legal-basis column is a **suggestion for counsel** (GDPR framing), not a
-determination. "Region" is the primary processing region per the subprocessor's
-public docs — counsel must confirm transfer mechanisms (SCCs/DPF) per contract.
+This table describes current private-beta behavior, not dormant integrations.
 
-| # | Category | Contents | Purpose | Suggested legal basis | Retention | Region | Deletion path | Subprocessors |
-|---|----------|----------|---------|----------------------|-----------|--------|---------------|---------------|
-| 1 | Anonymous draft | url, profile, facts, strategy, generated posts, workspace (experiments/outcomes incl. metrics the user typed), product memory | Resume work without an account | Not personal data processing by us (stays on device); disclose anyway | Until the user clears it (Clear local draft / browser data) | User's device only | **Clear local draft** button; browser storage clear | none |
-| 2 | Account identity | email, OAuth identity (Google `sub`), display name | Sign-in, project ownership | Contract (account provision) | Life of account | Supabase project region (currently unset in prod; when enabled: chosen at project creation) | **Delete account** (removes auth user) | Supabase; Google (only if user picks Google sign-in) |
-| 3 | Product URL + scraped page text | The URL pasted, extracted page text/title | Build the product profile | Contract | Transient on server (request lifetime); persisted only as part of the plan the user saves | Vercel (US) → chosen LLM | Delete project / delete account / clear draft | Vercel, LLM provider, Firecrawl (render fallback only) |
-| 4 | Product profile + fact ledger | name, audience, tone, pricing, stage, goals, user corrections/confirmations | Score platforms, generate content | Contract | With the project | Supabase (signed in) / device (anon) | Delete project / account / draft | Supabase, LLM provider |
-| 5 | Generated plan + content | strategy, scores, posts, calendar, playbooks | The product's output | Contract | With the project | same as 4 | same as 4 | Supabase, LLM provider (as prompt context on follow-up calls) |
-| 6 | Workspace + outcomes | experiments (platform, community, angle, tracked URL), outcomes (impressions/replies/clicks/signups/revenue, qualitative feedback), tasks, audit log | The learning loop (M15/M16) | Contract | With the project | same as 4 | Delete project cascades campaigns→experiments→outcomes→tasks (FKs); delete account removes all | Supabase, LLM provider (compact context) |
-| 7 | Product memory | tone, banned claims, angle verdicts, rewrite accept/reject summaries | Personalize copilot output | Contract | With the project (in `projects.meta`) | same as 4 | same as 4 (rides the project row) | Supabase, LLM provider |
-| 8 | Pasted feedback / copilot chat | free text the user sends the copilot, incl. "I'm pasting feedback" content | Answer the user's question | Contract | **Not stored by us** (transcripts are session-only by design, M16); provider retains per its API policy | Vercel → LLM provider | n/a on our side; provider-side per provider policy | LLM provider |
-| 9 | Entitlements / usage | plan, launches used, calls today | Metering, abuse control | Contract + legitimate interest (abuse prevention) | Life of account | Supabase | Delete account | Supabase |
-| 10 | Billing | checkout + subscription events (Polar is merchant of record; we never see card numbers) | Payment | Contract; legal obligation (tax/accounting on Polar's side) | Our webhook ledger: event **ids only**; Polar retains transaction records per law | Polar (EU/US) | webhook ids swept by retention task; Polar records governed by Polar ToS — counsel to confirm | Polar |
-| 11 | Webhook event ids | Polar event id + received-at (idempotency only — no payload stored) | Replay protection | Legitimate interest (security) | Retention task (operator-configured) | Supabase | Retention sweep | Supabase |
-| 12 | Server logs / analytics | Platform request logs (IP, UA, path) managed by Vercel; Vercel Web Analytics (cookieless, aggregated) | Ops, security, aggregate traffic | Legitimate interest | Vercel platform defaults (~ short-lived); we add **no** application logging of user content — enforced by ESLint `no-console` + `lib/log.ts` redaction for the few allowed error lines | Vercel (US) | Ages out per Vercel retention | Vercel |
+| Category | Purpose | Stored where / how long | Delete | Active vendors |
+|----------|---------|-------------------------|--------|----------------|
+| Anonymous draft | Resume without an account | Browser localStorage until cleared | Clear local draft / browser data | none |
+| Account identity | Sign-in and row ownership | Supabase for the life of the account | Delete account | Supabase; Google only when chosen |
+| Product URL + page text | Build the product profile | Transient request data; saved only inside a project | Delete project/account/draft | Vercel, selected LLM; Firecrawl only if configured and needed |
+| Profile, facts, strategy and generated content | Build and retain the launch plan | Browser for anonymous use; owner-only Supabase row when signed in | Delete project/account/draft | Supabase, selected/fallback LLM |
+| Workspace, experiments, outcomes and product memory | Publish → measure → learn loop | With the project; inactive signed-in projects are retained for the configured window | Project deletion cascades; delete account | Supabase, LLM when used as prompt context |
+| Copilot input / pasted feedback | Answer the current request | Session only in PostBeacon; provider retention follows its API policy | Session ends automatically; provider-side policy applies | selected/fallback LLM |
+| Usage counters | Private-beta limits and abuse control | Supabase for the account lifetime | Delete account | Supabase |
+| Server logs and aggregate analytics | Reliability and security | Vercel platform defaults; application logs exclude user content | Ages out automatically | Vercel |
 
-**What we never collect:** social-platform credentials, card numbers (Polar is
-merchant of record), analytics cookies, cross-site trackers, chat transcripts as
-long-term memory.
+**What we never collect:** social-platform credentials, payment-card data,
+advertising cookies, cross-site trackers, or chat transcripts as long-term memory.
+Billing code exists in the repository but is not configured and is excluded from
+the current public inventory and data-vendor page.
 
-## 3. Subprocessors (rendered at /subprocessors from `lib/privacy.ts`)
+## 3. Active data vendors (rendered at /subprocessors from `lib/privacy.ts`)
 
 | Vendor | Role | Data it sees | Region | Always on? |
 |--------|------|--------------|--------|------------|
 | Vercel | Hosting, serverless functions, cookieless web analytics | All request traffic; aggregated page views | US | Yes |
 | Supabase | Auth + database | Account identity, projects, workspace, entitlements | Project region (operator-chosen) | Only when accounts are configured |
-| Anthropic | LLM (Claude) | Prompt: page text, profile, plan context, pasted feedback | US | When configured and primary/fallback |
-| OpenAI | LLM (GPT) | same as Anthropic | US | When configured and primary/fallback |
-| DeepSeek | LLM | same as Anthropic | China | When selected, or when the public beta fallback opt-in is enabled |
-| Firecrawl | Headless rendering of SPA product pages | The product URL being analyzed | US | Only if SCRAPE_API_KEY set and static fetch came back empty |
-| Tavily | Web search for community discovery | Search queries derived from the product profile (not the raw page) | US | Only if SEARCH_API_KEY set |
-| Polar | Merchant of record (checkout, tax, invoices) | Purchase identity + transaction data (their side) | EU/US | Only when billing is configured |
+| OpenAI | Primary LLM | Page text, profile, plan context, pasted feedback | US | Configured in production |
+| DeepSeek | Selectable/fallback LLM | Same prompt content as OpenAI | China | Configured; fallback is publicly disclosed |
 | Google | OAuth sign-in option | OAuth handshake only | US | Only if the user chooses "Continue with Google" |
+
+`activeSubprocessors()` filters this public page from real deployment
+configuration. Dormant Anthropic, Firecrawl, Tavily and Polar integrations do
+not appear unless their required environment configuration is present.
 
 ## 4. AI-provider data handling (rendered next to the model picker)
 
-Statements below reflect each provider's **published API policy as of
-2026-07-12 and must be re-verified by counsel** before being treated as
-contractual:
+Statements below reflect each provider's published API policy as of 2026-07-12
+and must be re-verified before changing the production provider configuration:
 
 | Provider | API data used for training? | Stated API retention | Region | Product stance |
 |----------|----------------------------|----------------------|--------|----------------|
-| Anthropic (Claude) | Not by default for API traffic | Bounded (abuse monitoring window) | US | OK as default |
 | OpenAI | Not by default for API traffic | Up to ~30 days (abuse monitoring) | US | OK as default |
 | DeepSeek | **Not clearly excluded** in public API terms | Unclear; data processed/stored in China | China | **Never the code default.** Selectable and eligible for fallback only under a public beta operator opt-in; every call surface labels the China/training uncertainty |
 
@@ -116,8 +105,8 @@ provider actually completed the call.
 
 Assets, in priority order: (A1) unreleased product ideas — page text, profile,
 strategy (confidentiality is the pitch: founders paste pre-launch products),
-(A2) account identity (email/OAuth), (A3) experiment metrics incl. revenue
-numbers the user types, (A4) operator API keys, (A5) billing state.
+(A2) account identity (email/OAuth), (A3) experiment metrics the user types,
+(A4) operator API keys.
 
 | Threat | Vector | Mitigation (exists) | Residual risk / follow-up |
 |--------|--------|--------------------|---------------------------|
@@ -128,10 +117,9 @@ numbers the user types, (A4) operator API keys, (A5) billing state.
 | Secrets/PII in logs | App logging, error paths | **Zero `console.*` in app code today**, now locked in by ESLint `no-console`; the two allowed sinks route through `lib/log.ts` which strips query strings, emails, bearer/JWT/`sk-` tokens and truncates | Vercel platform request logs still record IP/path — disclosed |
 | Token theft via URL params | Careless link building | No user data in query strings (policy + review); magic-link/OAuth tokens are handled by Supabase in fragments, `detectSessionInUrl` consumes them | — |
 | Shared/stolen device reads the anonymous draft | localStorage | Disclosed honestly (FAQ + privacy page); **Clear local draft** control on the input step | localStorage is by-design unencrypted; users warned |
-| Webhook forgery / replay | Polar endpoint | HMAC + timestamp window + id idempotency; fails closed without secret (M12) | — |
 | Stale data outliving its use | No lifecycle | **Retention task** `/api/retention` (CRON_SECRET-gated, RETENTION_DAYS-configured, off by default) sweeping inactive projects + webhook ids; account/project deletion cascades | Enabling retention must be reflected on /privacy — the page reads the same env, so it self-updates |
 | Deletion that doesn't actually delete | Partial cleanup | Service-role-only `delete_postbeacon_user_data` RPC deletes all six data tables in one DB transaction, then `auth.admin.deleteUser`; pre-migration installs use the tested explicit fallback | Auth deletion is outside the DB transaction; if it fails, data is gone but the login record remains for operator cleanup. Provider backups age out separately |
-| Cross-user aggregation / training on user content | Product temptation | **Not done, and stated as a commitment**: no cross-user training or aggregation by default. Any future anonymized-outcomes moat requires a separate, explicit, revocable opt-in + de-identification + minimum-cohort threshold (k ≥ 20) before anything is computed | Contract terms must reserve the right ONLY under that opt-in — drafted, needs counsel |
+| Cross-user aggregation / training on user content | Product temptation | **Not done, and stated as a commitment**: no cross-user training or aggregation by default. Any future anonymized-outcomes moat requires a separate, explicit, revocable opt-in + de-identification + minimum-cohort threshold (k ≥ 20) before anything is computed | Feature remains blocked until an explicit opt-in design is implemented and reviewed |
 
 ## 6. Data-rights implementation
 
@@ -140,46 +128,25 @@ numbers the user types, (A4) operator API keys, (A5) billing state.
 | Clear local draft | Input step (anon) | `clearDraft()` + flow reset — wipes the single localStorage slot |
 | Export account data | Project bar → Data & privacy | `GET /api/account/export` (bearer) — RLS-scoped read of projects, campaigns, experiments, outcomes, tasks, entitlement + identity; downloads as JSON. Works with anon key only (no service role needed) |
 | Delete account | Project bar → Data & privacy (type-DELETE confirm) | `POST /api/account/delete` (bearer + literal confirm string): transactional RPC wipes all six user tables, then `auth.admin.deleteUser`. Requires service role; **fails closed (503)** when the deployment can't do it — never pretends |
-| Retention | Operator | `GET/POST /api/retention`: 503 without CRON_SECRET, 401 on wrong secret, `{enabled:false}` no-op without RETENTION_DAYS/service role; else deletes projects with `updated_at < now-days` (cascades) + old webhook ids. `vercel.json` cron wired daily; Vercel injects `Authorization: Bearer $CRON_SECRET` automatically |
+| Retention | Operator | `GET /api/retention`: 503 without CRON_SECRET, 401 on wrong secret, `{enabled:false}` no-op without RETENTION_DAYS/service role; else deletes projects with `updated_at < now-days` (cascades) + old webhook ids. `vercel.json` cron wired daily; Vercel injects `Authorization: Bearer $CRON_SECRET` automatically |
 
-## 7. Open questions for counsel
+## 7. Private-beta scope
 
-1. **Entity + contact**: legal entity name and registered address remain for
-   counsel. `privacy@postbeacon.app` is live on the legal pages; its Porkbun
-   forwarding path passed an external inbound delivery test on 2026-07-13.
-2. **Governing law / venue** for the Terms (placeholders marked `[COUNSEL]`).
-3. **GDPR posture**: are we targeting EU users (site is English, founder-tool)?
-   If yes: confirm legal bases per inventory row, Art. 28 DPAs with every
-   subprocessor, transfer mechanism per vendor (DPF/SCCs), whether an EU/UK
-   representative is required, and a DPIA for the DeepSeek/China flow.
-4. **DeepSeek**: is offering a China-processed LLM on user product data
-   acceptable with the caution-label approach, or must it be opt-in per run /
-   removed for EU users? Verify current DeepSeek API terms on training use.
-5. **US state laws (CPRA etc.)**: confirm we are outside "sale/share"
-   definitions (no ad tech; cookieless analytics) and whether a "Do Not
-   Sell/Share" link is nonetheless required.
-6. **Retention vs. legal holds**: Polar (merchant of record) holds transaction
-   records — confirm we may fully delete our side (entitlements, webhook ids)
-   on account deletion, and what to say about backup persistence windows.
-7. **Terms substance**: AI-output disclaimer (no guarantee of accuracy or
-   results; user reviews before posting), beta/as-is warranty disclaimer,
-   liability cap, acceptable use (only analyze URLs you have the right to
-   analyze), IP position (user owns inputs; we assign/waive our interest in
-   generated outputs to the extent permitted), termination, age minimum (16?
-   18?), export-control boilerplate.
-8. **Sign-in clickwrap**: is the "By continuing you agree…" line at the auth
-   screen sufficient assent for these Terms?
-9. **Cookie banner**: we set no marketing cookies (Supabase auth uses
-   localStorage; Vercel Analytics is cookieless) — confirm no consent banner is
-   required in target markets.
-10. **Future outcomes-data opt-in** (§5 last row): review the reserved-rights
-    clause draft — separate consent, revocable, de-identified, k-anonymity
-    threshold — before any such feature ships.
+- There is no paid service, public-launch entity claim, governing-law choice or
+  liability-cap claim on the current pages. Those decisions are deferred until
+  they become real product requirements.
+- The current pages stay focused on verifiable behavior: what data is stored,
+  which configured vendors receive it, provider-region warnings, retention,
+  export and deletion.
+- `privacy@postbeacon.app` is live and its forwarding path passed an external
+  inbound delivery test on 2026-07-13.
+- Before any public/paid launch, create a new review milestone based on the
+  actual target markets, entity and billing design rather than placeholders.
 
 ## 8. Acceptance criteria
 
 - /privacy, /terms, /subprocessors render from `lib/privacy.ts`, are linked in
-  the footer, in the sitemap, and marked "draft pending legal review".
+  the footer and sitemap, and state the current private-beta posture.
 - FAQ contains no false claims (BYOK removed; localStorage persistence stated;
   provider list includes DeepSeek; "profile + feedback go to the selected AI
   provider" stated).

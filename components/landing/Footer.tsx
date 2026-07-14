@@ -22,7 +22,7 @@ export function Footer() {
             Terms
           </Link>
           <Link href="/subprocessors" className="hover:text-neutral-300">
-            Subprocessors
+            Data vendors
           </Link>
         </div>
         <p className="mt-4 text-xs text-neutral-600">

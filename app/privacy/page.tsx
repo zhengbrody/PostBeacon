@@ -2,11 +2,11 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { LegalShell, LegalSection, LegalTable } from "@/components/legal/LegalShell";
 import {
-  DATA_CATEGORIES,
-  PROVIDER_PRIVACY,
+  configuredProviderPrivacy,
   deepseekAutomaticFallbackEnabled,
   providerFallbackNotice,
   retentionDays,
+  visibleDataCategories,
 } from "@/lib/privacy";
 
 export const metadata: Metadata = {
@@ -18,6 +18,8 @@ export const metadata: Metadata = {
 export default function PrivacyPage() {
   const retention = retentionDays();
   const deepseekFallback = deepseekAutomaticFallbackEnabled();
+  const dataCategories = visibleDataCategories();
+  const providerPrivacy = configuredProviderPrivacy();
   return (
     <LegalShell
       title="Privacy"
@@ -39,8 +41,8 @@ export default function PrivacyPage() {
             {providerFallbackNotice()}
           </li>
           <li>
-            We <strong>never post to any platform for you</strong>, never see card numbers,
-            set no advertising cookies, and{" "}
+            We <strong>never post to any platform for you</strong>, set no advertising
+            cookies, and{" "}
             <strong>
               don’t use your content to train models or build cross-user datasets
             </strong>
@@ -56,7 +58,7 @@ export default function PrivacyPage() {
       <LegalSection title="What we handle, where it lives">
         <LegalTable
           headers={["Data", "Where", "Why", "Kept", "How to delete"]}
-          rows={DATA_CATEGORIES.map((c) => [
+          rows={dataCategories.map((c) => [
             c.what,
             c.where,
             c.why,
@@ -85,7 +87,7 @@ export default function PrivacyPage() {
         </p>
         <LegalTable
           headers={["Model", "Region", "Published API policy (as we read it)"]}
-          rows={Object.values(PROVIDER_PRIVACY).map((p) => [
+          rows={providerPrivacy.map((p) => [
             <a
               key={p.label}
               href={p.policyUrl}
@@ -175,7 +177,7 @@ export default function PrivacyPage() {
         <p>
           The full list of vendors that touch data, what each sees, and when, is on the{" "}
           <Link href="/subprocessors" className="text-accent-300 hover:underline">
-            subprocessors page
+            data-vendors page
           </Link>
           . Hosting is on Vercel (US); if you’re outside the US your data is processed there
           and by the model provider’s region shown above.
@@ -185,8 +187,8 @@ export default function PrivacyPage() {
       <LegalSection title="Changes">
         <p>
           We’ll update this page as the product evolves and bump the date at the top;
-          material changes will be visible in the app. This is a beta draft under legal
-          review — if anything here looks wrong or unclear, please tell us.
+          material changes will be visible in the app. During the private beta, please tell
+          us if this page does not match what the product actually does.
         </p>
       </LegalSection>
     </LegalShell>

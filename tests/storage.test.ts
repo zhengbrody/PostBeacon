@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { DRAFT_SCHEMA_VERSION, migrateDraft } from "@/lib/storage";
+import { DRAFT_SCHEMA_VERSION, migrateDraft, saveDraft } from "@/lib/storage";
 
 describe("draft schema migrations", () => {
+  it("reports when browser persistence is unavailable", () => {
+    expect(saveDraft({ url: "x.com" })).toBe(false);
+  });
+
   it("stamps a v1 (pre-M11) blob: no selected/launchDate/facts anywhere", () => {
     const d = migrateDraft({ url: "x.com", profile: { name: "X" }, posted: {} })!;
     expect(d.schemaVersion).toBe(DRAFT_SCHEMA_VERSION);

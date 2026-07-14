@@ -3,10 +3,9 @@ import { PRIVACY_LAST_UPDATED } from "@/lib/privacy";
 import { PRIVACY_CONTACT_URL, PRIVACY_EMAIL } from "@/lib/site";
 
 /**
- * Shared shell for the /privacy, /terms and /subprocessors pages: minimal
- * header, an honest "draft pending legal review" banner, and the legal footer.
- * Copy renders from lib/privacy.ts wherever possible so pages can’t drift
- * from what the code does.
+ * Shared shell for the /privacy, /terms and /subprocessors pages. During the
+ * private beta these pages document current product behavior without implying
+ * a paid-service or company-law posture that does not exist yet.
  */
 export function LegalShell({
   title,
@@ -32,7 +31,7 @@ export function LegalShell({
               Terms
             </Link>
             <Link href="/subprocessors" className="hover:text-white">
-              Subprocessors
+              Data vendors
             </Link>
           </div>
         </div>
@@ -43,7 +42,8 @@ export function LegalShell({
         <p className="mt-2 text-xs text-neutral-500">
           Last updated {PRIVACY_LAST_UPDATED} ·{" "}
           <span className="text-amber-400/90">
-            Beta draft — under legal review; wording may change.
+            Private beta — current product behavior; this notice may change as testing
+            evolves.
           </span>
         </p>
         <p className="mt-5 text-sm leading-relaxed text-neutral-300">{intro}</p>
