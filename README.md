@@ -11,9 +11,9 @@
 
 [**Live app**](https://postbeacon.app) · [**Full example plan**](https://postbeacon.app/app?demo=1) (no signup, no API key) · [Privacy](https://postbeacon.app/privacy)
 
-<img src="docs/assets/workspace.png" alt="The PostBeacon launch workspace: Today view with the activation path, three prioritized posting actions with time estimates, and the Ask-your-CMO copilot" width="920" />
+<img src="docs/assets/workspace.png" alt="The PostBeacon growth workspace: one next best move, launch progress, and contextual AI Copilot" width="920" />
 
-<sub>The launch workspace — every day is ≤3 concrete actions, every post becomes a measured experiment.</sub>
+<sub>The growth workspace — one next best move, with alternatives available but never competing for attention.</sub>
 
 </div>
 
@@ -61,6 +61,7 @@ At least one model key is required; everything else is optional and degrades gra
 | `SUPABASE_SERVICE_ROLE_KEY` | Server-side metering + full account deletion (deletion fails closed without it) |
 | `POLAR_ACCESS_TOKEN` + `POLAR_PRODUCT_ID` + `POLAR_WEBHOOK_SECRET` | Billing via Polar (merchant of record); webhook fails closed without the secret |
 | `CRON_SECRET` + `RETENTION_DAYS` | Operator data-retention sweep (off by default; the privacy page renders whatever is configured) |
+| `NEXT_PUBLIC_EMAIL_REMINDERS_ENABLED` + `RESEND_API_KEY` + `REMINDER_FROM_EMAIL` | Optional 24h/72h/weekly event emails; explicit opt-in and off until the complete path is configured |
 | `NEXT_PUBLIC_FEEDBACK_URL` / `NEXT_PUBLIC_PRIVACY_EMAIL` | Feedback link + monitored privacy contact |
 
 ## Architecture
@@ -72,7 +73,7 @@ flowchart LR
     subgraph client["Your browser"]
         UI["React 19 UI<br/>(presentational components)"]
         SM["launchFlowReducer<br/>pure state machine + invariants"]
-        LS[("localStorage draft<br/>anonymous users, versioned v1→v5")]
+        LS[("localStorage draft<br/>anonymous users, versioned v1→v6")]
         UI --> SM --> LS
     end
 
@@ -128,14 +129,14 @@ The north star metric is **completed learning loops per week** — published →
 | --- | --- | --- |
 | UI | `components/` | Presentational only — no fetches, no business rules |
 | State | `hooks/launchFlowReducer.ts` | One pure reducer; `normalize()` makes contradictory plan states unrepresentable |
-| Engines | `lib/facts.ts` · `scoring.ts` · `today.ts` · `copilotActions.ts` | Deterministic, unit-tested logic: fact verification, score math, Today derivation, action validation |
+| Engines | `lib/facts.ts` · `scoring.ts` · `growth.ts` · `today.ts` · `copilotActions.ts` | Deterministic logic: fact verification, score math, lifecycle/goal derivation, next-best-move ordering, action validation |
 | Model seam | `lib/llm.ts` | Three providers behind one function; JSON repair; failover only through clear-policy providers |
 | Trust & safety | `lib/validate.ts` · `safeFetch.ts` · `urlPolicy.ts` · `log.ts` | zod on every body, SSRF policy, redacting log sink (`no-console` enforced) |
 | Persistence | `lib/storage.ts` · `useAutosave.ts` · `supabase/` | Versioned drafts with migrations; RLS-scoped rows; account-switch hard boundary |
 
 Design rules the codebase holds itself to:
 
-- **One state machine.** All plan state flows through a pure reducer (`hooks/launchFlowReducer.ts`) whose `normalize()` makes contradictory states unrepresentable — no result without its strategy, selections always ⊆ channels, versioned drafts (v1→v5 migrations) for every historical save.
+- **One state machine.** All plan state flows through a pure reducer (`hooks/launchFlowReducer.ts`) whose `normalize()` makes contradictory states unrepresentable — no result without its strategy, selections always ⊆ channels, versioned drafts (v1→v6 migrations) for every historical save.
 - **Security invariants** (see `AGENTS.md`): every user/model-supplied URL goes through `lib/safeFetch.ts` (SSRF policy: IP-range allowlists, DNS pinned at connect time, per-hop redirect revalidation); every API body is parsed with a zod schema; routes return only public error messages; `no-console` is enforced repo-wide with one redacting log sink.
 - **Privacy by design**: no training on your content, no cross-user aggregation, no auto-posting; public privacy/terms/subprocessor pages render from the same source file the code uses (`lib/privacy.ts`), so published claims can't drift from behavior. Export everything as JSON or delete your account from inside the app.
 
@@ -145,7 +146,7 @@ A full architecture map lives in [AGENTS.md](./AGENTS.md); design docs for the t
 
 ```bash
 npm run typecheck        # tsc --noEmit (strict)
-npm test                 # 290 offline tests — no API keys needed
+npm test                 # 301 offline tests — no API keys needed
 npm run lint             # eslint (flat config) incl. no-console
 npm run format:check     # prettier
 npm run build            # must stay green
@@ -156,7 +157,7 @@ The offline suite includes 12 golden product fixtures asserting completeness (al
 
 ## Deployment
 
-Import the repo in [Vercel](https://vercel.com), set the env vars above, point your domain. Accounts need `supabase/schema.sql` run once in the Supabase SQL editor (production repair migrations and a single-query PASS/FAIL audit live in [supabase/](./supabase)). A daily cron (`vercel.json`) drives the optional retention sweep.
+Import the repo in [Vercel](https://vercel.com), set the env vars above, point your domain. Accounts need `supabase/schema.sql` run once in the Supabase SQL editor (production repair migrations and a single-query PASS/FAIL audit live in [supabase/](./supabase)). Daily crons (`vercel.json`) drive the optional retention sweep and fail-closed event reminders.
 
 ## Roadmap
 

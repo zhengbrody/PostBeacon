@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useLaunchFlow, type Step } from "@/hooks/useLaunchFlow";
 import { useAutosave } from "@/hooks/useAutosave";
@@ -15,7 +15,7 @@ import { ProjectBar } from "@/components/app/ProjectBar";
 import { Paywall } from "@/components/app/Paywall";
 import { UsageBadge } from "@/components/app/UsageBadge";
 import { FeedbackCTA } from "@/components/app/FeedbackCTA";
-import { CopilotPanel } from "@/components/app/CopilotPanel";
+import { CopilotPanel, type CopilotOpenRequest } from "@/components/app/CopilotPanel";
 import { AuthScreen } from "@/components/app/AuthScreen";
 import { useSupabaseUser } from "@/components/app/SignIn";
 import { supabaseConfigured } from "@/lib/supabase/client";
@@ -76,13 +76,27 @@ export default function AppPage() {
       ) : needsAuth ? (
         <AuthScreen onDemo={f.loadDemo} />
       ) : (
-        <AppFlow f={f} />
+        <AppFlow f={f} canReceiveEmail={Boolean(userEmail)} />
       )}
     </main>
   );
 }
 
-function AppFlow({ f }: { f: ReturnType<typeof useLaunchFlow> }) {
+function AppFlow({
+  f,
+  canReceiveEmail,
+}: {
+  f: ReturnType<typeof useLaunchFlow>;
+  canReceiveEmail: boolean;
+}) {
+  const [copilotOpenRequest, setCopilotOpenRequest] = useState<CopilotOpenRequest | null>(
+    null
+  );
+  const copilotRequestId = useRef(0);
+  const openCopilot = (prompt: string) => {
+    copilotRequestId.current += 1;
+    setCopilotOpenRequest({ id: copilotRequestId.current, prompt });
+  };
   const reachable: Step[] = ["input"];
   if (f.profile) reachable.push("profile");
   if (f.strategy) reachable.push("strategy");
@@ -174,6 +188,9 @@ function AppFlow({ f }: { f: ReturnType<typeof useLaunchFlow> }) {
             setLaunchDate={f.setLaunchDate}
             weeklyMinutes={f.workspace.weeklyMinutes}
             setWeeklyMinutes={f.setWeeklyMinutes}
+            primaryGoal={f.profile.conversionGoal}
+            stage={f.profile.stage}
+            setPrimaryGoal={(goal) => f.answerQuestion("conversionGoal", goal)}
           />
           <ProfileForm
             profile={f.profile}
@@ -226,6 +243,11 @@ function AppFlow({ f }: { f: ReturnType<typeof useLaunchFlow> }) {
           loading={f.loading}
           demo={f.demo}
           onReset={f.reset}
+          onAskCopilot={openCopilot}
+          emailRemindersAvailable={
+            canReceiveEmail && process.env.NEXT_PUBLIC_EMAIL_REMINDERS_ENABLED === "true"
+          }
+          onToggleEmailReminders={f.setEmailReminders}
         />
       )}
 
@@ -258,6 +280,7 @@ function AppFlow({ f }: { f: ReturnType<typeof useLaunchFlow> }) {
           stopExperiment={f.stopExperiment}
           generateVariant={f.generateVariant}
           onProviderFallback={f.setProvider}
+          openRequest={copilotOpenRequest}
         />
       )}
 

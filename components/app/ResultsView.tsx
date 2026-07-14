@@ -64,6 +64,9 @@ export function ResultsView({
   loading,
   demo,
   onReset,
+  onAskCopilot,
+  emailRemindersAvailable,
+  onToggleEmailReminders,
 }: {
   result: GenerateResult;
   strategy: MarketingStrategy | null;
@@ -96,6 +99,9 @@ export function ResultsView({
   loading: boolean;
   demo: boolean;
   onReset: () => void;
+  onAskCopilot: (prompt: string) => void;
+  emailRemindersAvailable: boolean;
+  onToggleEmailReminders: (enabled: boolean, timezone?: string) => void;
 }) {
   const [surface, setSurface] = useState<Surface>("today");
   const [publishFor, setPublishFor] = useState<{
@@ -131,9 +137,9 @@ export function ResultsView({
       label: "Today",
       ...(today.dueRecordCount ? { count: today.dueRecordCount } : {}),
     },
-    { id: "plan", label: "Full plan" },
-    { id: "timeline", label: "Timeline" },
-    { id: "review", label: "Review" },
+    { id: "plan", label: "Strategy library", shortLabel: "Strategy" },
+    { id: "timeline", label: "Progress" },
+    { id: "review", label: "Weekly review", shortLabel: "Review" },
   ];
 
   const publishContent = publishFor
@@ -210,6 +216,8 @@ export function ResultsView({
       {surface === "today" && !printing && (
         <TodayTab
           view={today}
+          productName={profile?.name}
+          primaryGoal={profile?.conversionGoal}
           loading={loading}
           onPublish={(platformId) => {
             const content = result.content.find((c) => c.platformId === platformId);
@@ -226,6 +234,21 @@ export function ResultsView({
           onDoneCustom={doneCustom}
           onOpenContent={() => setSurface("plan")}
           onOpenReview={() => setSurface("review")}
+          onAskCopilot={(action) =>
+            onAskCopilot(
+              `Help me execute my current next best move: “${action.title}”. Explain the sharpest way to do it for this product, use evidence from my plan, and propose only changes I can review before applying.`
+            )
+          }
+          emailRemindersAvailable={emailRemindersAvailable}
+          emailRemindersEnabled={workspace.reminderPreferences?.email === true}
+          onToggleEmailReminders={(enabled) =>
+            onToggleEmailReminders(
+              enabled,
+              typeof Intl !== "undefined"
+                ? Intl.DateTimeFormat().resolvedOptions().timeZone
+                : undefined
+            )
+          }
         />
       )}
 

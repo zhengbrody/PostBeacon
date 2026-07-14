@@ -126,6 +126,7 @@ function QuestionRow({
   onAnswer: (id: ContextField, answer: string) => void;
 }) {
   const [text, setText] = useState("");
+  const canSkip = q.id !== "conversionGoal";
   return (
     <li className="rounded-lg bg-surface-2 p-3">
       <p className="text-sm font-medium text-neutral-100">{q.question}</p>
@@ -160,13 +161,15 @@ function QuestionRow({
         <Button size="sm" disabled={!text.trim()} onClick={() => onAnswer(q.id, text)}>
           Save
         </Button>
-        <button
-          className="shrink-0 px-2 text-xs text-neutral-500 hover:text-neutral-300"
-          title="Skip — the plan will treat this as unknown instead of guessing"
-          onClick={() => onAnswer(q.id, "")}
-        >
-          Skip
-        </button>
+        {canSkip && (
+          <button
+            className="shrink-0 px-2 text-xs text-neutral-500 hover:text-neutral-300"
+            title="Skip — the plan will treat this as unknown instead of guessing"
+            onClick={() => onAnswer(q.id, "")}
+          >
+            Skip
+          </button>
+        )}
       </div>
     </li>
   );

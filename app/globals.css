@@ -51,6 +51,12 @@
     background-clip: text;
     color: transparent;
   }
+  .scrollbar-none {
+    scrollbar-width: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
 }
 
 /* Print / "Save as PDF": drop interactive chrome and ink the content for paper. */

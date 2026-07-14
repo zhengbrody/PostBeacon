@@ -20,9 +20,10 @@ const KEY = "postbeacon:draft";
  *   v3 — M13: + facts
  *   v4 — M15: + workspace (experiments, task log, weekly budget)
  *   v5 — M16: + memory (product memory: tone, banned claims, angle verdicts)
+ *   v6 — M18: + explicit event-email reminder preference
  * Bump this and extend migrateDraft() when the persisted shape changes.
  */
-export const DRAFT_SCHEMA_VERSION = 5;
+export const DRAFT_SCHEMA_VERSION = 6;
 
 export interface Draft {
   schemaVersion?: number; // absent on pre-versioning saves; stamped on write
@@ -63,6 +64,12 @@ export function migrateDraft(raw: unknown): Draft | null {
       angles: [],
       rewriteFeedback: [],
       userEditedFields: [],
+    };
+  }
+  if (version < 6) {
+    out.workspace = {
+      ...(out.workspace ?? { experiments: [], taskLog: [] }),
+      reminderPreferences: { email: false, updatedAt: "" },
     };
   }
   out.schemaVersion = DRAFT_SCHEMA_VERSION;

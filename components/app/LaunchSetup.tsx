@@ -1,12 +1,11 @@
 "use client";
 
 import { Card } from "@/components/ui/Card";
+import { PRIMARY_GOALS, recommendedPrimaryGoal } from "@/lib/growth";
 
 /**
- * Launch setup (M15 intake): the two workspace facts a landing page never
- * states — launch date and weekly time budget. Lives on the Diagnose step
- * next to the clarifying questions; both are skippable (Today degrades to
- * relative days / no budget meter).
+ * Growth-workspace intake. The primary goal is required; launch date and
+ * weekly time budget remain optional and degrade to relative days/no meter.
  */
 
 const BUDGETS: { label: string; minutes: number }[] = [
@@ -21,19 +20,72 @@ export function LaunchSetup({
   setLaunchDate,
   weeklyMinutes,
   setWeeklyMinutes,
+  primaryGoal,
+  stage,
+  setPrimaryGoal,
 }: {
   launchDate: string;
   setLaunchDate: (v: string) => void;
   weeklyMinutes?: number;
   setWeeklyMinutes: (m?: number) => void;
+  primaryGoal?: string;
+  stage?: string;
+  setPrimaryGoal: (goal: string) => void;
 }) {
+  const recommended = recommendedPrimaryGoal(stage);
+  const customGoal =
+    primaryGoal && !(PRIMARY_GOALS as readonly string[]).includes(primaryGoal);
+
   return (
     <Card className="p-6">
       <h2 className="text-lg font-semibold">Launch setup</h2>
       <p className="mb-4 mt-1 text-xs text-neutral-500">
-        Two things your page can&apos;t tell us. They shape your day-by-day plan — skip
-        either and the workspace still works, just less precisely.
+        Set the outcome that matters, then give the workspace enough context to budget the
+        work around you.
       </p>
+      <div className="mb-5 rounded-lg border border-accent-700/40 bg-accent-600/10 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-accent-300">
+              Primary growth goal · required
+            </h3>
+            <p className="mt-1 text-xs text-neutral-400">
+              PostBeacon uses one goal to judge every experiment. You can change it later.
+            </p>
+          </div>
+          {!primaryGoal && (
+            <button
+              type="button"
+              className="text-xs font-medium text-accent-300 hover:underline"
+              onClick={() => setPrimaryGoal(recommended)}
+            >
+              Help me decide → {recommended}
+            </button>
+          )}
+        </div>
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {PRIMARY_GOALS.map((goal) => (
+            <button
+              type="button"
+              key={goal}
+              onClick={() => setPrimaryGoal(goal)}
+              className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
+                primaryGoal === goal
+                  ? "border-accent-500 bg-accent-600/25 text-accent-100"
+                  : "border-line bg-surface-2 text-neutral-300 hover:border-neutral-600"
+              }`}
+            >
+              {goal}
+            </button>
+          ))}
+          {customGoal && (
+            <span className="rounded-full border border-accent-500 bg-accent-600/25 px-2.5 py-1 text-xs text-accent-100">
+              {primaryGoal}
+            </span>
+          )}
+        </div>
+      </div>
+
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="block text-xs text-neutral-400">
           When do you want to launch?

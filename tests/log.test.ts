@@ -29,6 +29,7 @@ describe("redact — logs can never carry user data (M17 §7)", () => {
       "upstream said key [key] invalid"
     );
     expect(redact("secret_0123456789abcdef0123 rejected")).toBe("[key] rejected");
+    expect(redact("Resend re_0123456789abcdef0123 rejected")).toBe("Resend [key] rejected");
   });
 
   it("collapses newlines (log injection) and truncates long messages", () => {

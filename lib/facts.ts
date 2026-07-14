@@ -181,6 +181,8 @@ const QUESTION_DEFS: Record<ContextField, Omit<ClarifyingQuestion, "id">> = {
       "Waitlist signups",
       "Free signups / installs",
       "Paying customers",
+      "User feedback / conversations",
+      "Qualified traffic / awareness",
       "GitHub stars / community",
     ],
   },

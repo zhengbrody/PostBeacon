@@ -45,18 +45,25 @@ describe("draft schema migrations", () => {
       facts: [{ id: "audience", claim: "devs" }],
     })!;
     expect(d.schemaVersion).toBe(DRAFT_SCHEMA_VERSION);
-    expect(d.workspace).toEqual({ experiments: [], taskLog: [] });
+    expect(d.workspace).toEqual({
+      experiments: [],
+      taskLog: [],
+      reminderPreferences: { email: false, updatedAt: "" },
+    });
     expect(d.facts).toHaveLength(1); // untouched
   });
 
-  it("current (v4) drafts keep their workspace untouched", () => {
+  it("v4 drafts keep their workspace and gain the disabled reminder default", () => {
     const workspace = {
       weeklyMinutes: 300,
       experiments: [{ id: "e1" }],
       taskLog: [{ id: "t1" }],
     };
     const d = migrateDraft({ schemaVersion: 4, url: "x.com", workspace })!;
-    expect(d.workspace).toEqual(workspace);
+    expect(d.workspace).toEqual({
+      ...workspace,
+      reminderPreferences: { email: false, updatedAt: "" },
+    });
   });
 
   it("v4 (M15) drafts gain an empty product memory (v5 migration)", () => {
@@ -75,7 +82,7 @@ describe("draft schema migrations", () => {
     expect(d.workspace?.experiments).toHaveLength(1); // untouched
   });
 
-  it("current (v5) drafts keep their memory untouched", () => {
+  it("v5 drafts keep their memory and gain the M18 reminder preference", () => {
     const memory = {
       tone: "dry",
       bannedClaims: ["AI-powered"],
@@ -85,6 +92,7 @@ describe("draft schema migrations", () => {
     };
     const d = migrateDraft({ schemaVersion: 5, url: "x.com", memory })!;
     expect(d.memory).toEqual(memory);
+    expect(d.workspace?.reminderPreferences).toEqual({ email: false, updatedAt: "" });
   });
 
   it("rejects non-object garbage instead of throwing", () => {

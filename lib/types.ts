@@ -309,6 +309,11 @@ export interface TaskRecord {
 /** Everything the workspace persists beyond the plan itself. */
 export interface WorkspaceState {
   weeklyMinutes?: number; // intake: weekly time budget
+  reminderPreferences?: {
+    email: boolean; // explicit opt-in; in-app due states are always on
+    timezone?: string; // browser IANA zone, used only to time useful reminders
+    updatedAt: string;
+  };
   experiments: Experiment[];
   taskLog: TaskRecord[];
   auditLog?: AuditEntry[]; // M16 — copilot proposals and their fates (≤100)

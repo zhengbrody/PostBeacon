@@ -98,6 +98,9 @@ describe("deriveToday", () => {
   it("never shows more than 3 actions", () => {
     const view = deriveToday(plan(ws()), NOW);
     expect(view.actions.length).toBeLessThanOrEqual(MAX_TODAY_ACTIONS);
+    expect(view.primaryAction).toEqual(view.actions[0]);
+    expect(view.alternatives).toEqual(view.actions.slice(1));
+    expect(view.mode).toBe("launch");
   });
 
   it("due check-ins outrank posting actions", () => {
@@ -105,6 +108,7 @@ describe("deriveToday", () => {
     expect(view.actions[0].kind).toBe("record");
     expect(view.actions[0].checkpoint).toBe("24h");
     expect(view.dueRecordCount).toBe(1);
+    expect(view.mode).toBe("growth");
   });
 
   it("24h and 72h checkpoints come due independently and only once", () => {
@@ -347,11 +351,18 @@ describe("reducer workspace transitions", () => {
       built,
       generated,
       { type: "WEEKLY_MINUTES_SET", minutes: 300 },
+      {
+        type: "EMAIL_REMINDERS_SET",
+        enabled: true,
+        timezone: "America/Los_Angeles",
+        at: NOW.toISOString(),
+      },
       { type: "EXPERIMENT_CREATED", experiment: experiment() },
       analyzed
     );
     expect(s.workspace.experiments).toEqual([]);
     expect(s.workspace.weeklyMinutes).toBe(300);
+    expect(s.workspace.reminderPreferences?.email).toBe(true);
   });
 
   it("hydrates workspace from flat draft or meta, empty for pre-M15 saves", () => {

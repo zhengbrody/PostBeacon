@@ -57,6 +57,7 @@ export interface FlowState {
 }
 
 export const emptyWorkspace: WorkspaceState = {
+  reminderPreferences: { email: false, updatedAt: "" },
   experiments: [],
   taskLog: [],
   auditLog: [],
@@ -167,6 +168,7 @@ export type FlowAction =
   | { type: "PROJECT_ID_SET"; id: string }
   // ---- workspace (M15) ----
   | { type: "WEEKLY_MINUTES_SET"; minutes?: number }
+  | { type: "EMAIL_REMINDERS_SET"; enabled: boolean; timezone?: string; at: string }
   | { type: "TASK_ACTED"; record: TaskRecord }
   | { type: "EXPERIMENT_CREATED"; experiment: Experiment; taskId?: string }
   | { type: "OUTCOME_RECORDED"; experimentId: string; outcome: Outcome }
@@ -290,7 +292,10 @@ function transition(s: FlowState, a: FlowAction): FlowState {
           p.selected ?? p.meta?.selected ?? defaultSelection(p.strategy?.recommendations),
         // Workspace: flat field (local draft v4) or meta (Supabase row);
         // pre-M15 saves have neither → empty loop history.
-        workspace: p.workspace ?? p.meta?.workspace ?? emptyWorkspace,
+        workspace: {
+          ...emptyWorkspace,
+          ...(p.workspace ?? p.meta?.workspace ?? {}),
+        },
         // Memory: v5 flat field or meta; pre-M16 saves → empty memory.
         memory: p.memory ?? p.meta?.memory ?? emptyMemory,
         demo: a.demo,
@@ -319,7 +324,11 @@ function transition(s: FlowState, a: FlowAction): FlowState {
         selected: [],
         result: null,
         posted: {},
-        workspace: { ...emptyWorkspace, weeklyMinutes: s.workspace.weeklyMinutes },
+        workspace: {
+          ...emptyWorkspace,
+          weeklyMinutes: s.workspace.weeklyMinutes,
+          reminderPreferences: s.workspace.reminderPreferences,
+        },
         // Tone + banned claims are durable preferences; angle verdicts,
         // rewrite feedback and edit tracking belong to the old plan.
         memory: {
@@ -608,6 +617,19 @@ function transition(s: FlowState, a: FlowAction): FlowState {
 
     case "WEEKLY_MINUTES_SET":
       return { ...s, workspace: { ...s.workspace, weeklyMinutes: a.minutes } };
+
+    case "EMAIL_REMINDERS_SET":
+      return {
+        ...s,
+        workspace: {
+          ...s.workspace,
+          reminderPreferences: {
+            email: a.enabled,
+            timezone: a.timezone,
+            updatedAt: a.at,
+          },
+        },
+      };
 
     case "TASK_ACTED":
       // One record per card id — acting twice replaces (idempotent).

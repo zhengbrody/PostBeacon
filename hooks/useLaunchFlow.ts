@@ -103,6 +103,9 @@ export function useLaunchFlow() {
   const buildStrategy = () =>
     run(async () => {
       if (!profile) return;
+      if (!profile.conversionGoal?.trim()) {
+        throw new Error("Choose one primary growth goal before building the strategy.");
+      }
       const strategy = await api.strategy(profile, provider, facts);
       adoptFallback(strategy.meta);
       dispatch({ type: "STRATEGY_BUILT", strategy });
@@ -474,6 +477,13 @@ export function useLaunchFlow() {
     removeBannedClaim: (idx: number) => dispatch({ type: "MEMORY_BANNED_REMOVED", idx }),
     setWeeklyMinutes: (minutes?: number) =>
       dispatch({ type: "WEEKLY_MINUTES_SET", minutes }),
+    setEmailReminders: (enabled: boolean, timezone?: string) =>
+      dispatch({
+        type: "EMAIL_REMINDERS_SET",
+        enabled,
+        timezone,
+        at: new Date().toISOString(),
+      }),
     actTask: (record: TaskRecord) => dispatch({ type: "TASK_ACTED", record }),
     publishExperiment: (experiment: Experiment, taskId?: string) =>
       dispatch({ type: "EXPERIMENT_CREATED", experiment, taskId }),

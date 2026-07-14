@@ -8,7 +8,7 @@
 import type { Provider } from "./types";
 
 /** Bump when the published policy text meaningfully changes. */
-export const PRIVACY_LAST_UPDATED = "2026-07-13";
+export const PRIVACY_LAST_UPDATED = "2026-07-14";
 
 /**
  * How each LLM provider handles API data, per its PUBLIC policy as of
@@ -182,6 +182,14 @@ export const SUBPROCESSORS: Subprocessor[] = [
     when: "Only if you choose “Continue with Google”",
     policyUrl: "https://policies.google.com/privacy",
   },
+  {
+    name: "Resend",
+    role: "Opt-in event email delivery",
+    data: "Your account email, project name, and the reminder event that is due",
+    region: "US",
+    when: "Only when email reminders are configured and you explicitly turn them on",
+    policyUrl: "https://resend.com/legal/privacy-policy",
+  },
 ];
 
 /** Whether paid billing is actually live in this deployment. */
@@ -190,6 +198,17 @@ export function billingConfigured(): boolean {
     process.env.POLAR_ACCESS_TOKEN &&
     process.env.POLAR_PRODUCT_ID &&
     process.env.POLAR_WEBHOOK_SECRET
+  );
+}
+
+/** Email opt-in is public only when the complete sending path is live. */
+export function emailRemindersConfigured(): boolean {
+  return Boolean(
+    process.env.NEXT_PUBLIC_EMAIL_REMINDERS_ENABLED === "true" &&
+    process.env.RESEND_API_KEY &&
+    process.env.REMINDER_FROM_EMAIL &&
+    process.env.CRON_SECRET &&
+    process.env.SUPABASE_SERVICE_ROLE_KEY
   );
 }
 
@@ -217,6 +236,8 @@ export function activeSubprocessors(): Subprocessor[] {
         return Boolean(process.env.SEARCH_API_KEY);
       case "Polar":
         return billingConfigured();
+      case "Resend":
+        return emailRemindersConfigured();
       default:
         return true;
     }
@@ -231,7 +252,7 @@ export interface DataCategory {
   retention: string;
   deletion: string;
   /** Hide dormant product surfaces from the current public beta notice. */
-  requires?: "billing";
+  requires?: "billing" | "reminders";
 }
 
 export const DATA_CATEGORIES: DataCategory[] = [
@@ -288,6 +309,14 @@ export const DATA_CATEGORIES: DataCategory[] = [
     deletion: "Delete account",
   },
   {
+    what: "Opt-in reminder delivery history",
+    where: "Supabase tasks (delivery deduplication) and Resend (email delivery)",
+    why: "Send a reminder only when a 24h, 72h or weekly-review action is due",
+    retention: "With its project",
+    deletion: "Turn reminders off; deleting the project/account removes our history",
+    requires: "reminders",
+  },
+  {
     what: "Billing",
     where: "Polar (merchant of record) — we store processed webhook event IDs only",
     why: "Payment, invoices, tax",
@@ -307,9 +336,11 @@ export const DATA_CATEGORIES: DataCategory[] = [
 
 /** Data inventory rows that describe features active in this deployment. */
 export function visibleDataCategories(): DataCategory[] {
-  return DATA_CATEGORIES.filter(
-    (category) => category.requires !== "billing" || billingConfigured()
-  );
+  return DATA_CATEGORIES.filter((category) => {
+    if (category.requires === "billing") return billingConfigured();
+    if (category.requires === "reminders") return emailRemindersConfigured();
+    return true;
+  });
 }
 
 /**

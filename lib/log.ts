@@ -21,6 +21,8 @@ export function redact(text: string): string {
       .replace(/\beyJ[\w-]+\.[\w-]+\.[\w-]+\b/g, "[jwt]")
       // Common API-key shapes (sk-…, key-ish long tokens with a known prefix).
       .replace(/\b(sk|pk|rk|key|token|secret)[-_][\w-]{16,}\b/gi, "[key]")
+      // Resend server keys use an `re_` prefix rather than the generic shapes above.
+      .replace(/\bre_[\w-]{16,}\b/g, "[key]")
       // Email addresses.
       .replace(/\b[\w.+-]+@[\w-]+\.[\w.-]+\b/g, "[email]")
       // URL query strings + fragments (may carry tokens or personal data).

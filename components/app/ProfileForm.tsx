@@ -31,6 +31,7 @@ export function ProfileForm({
   const set = (patch: Partial<ProductProfile>) => setProfile({ ...profile, ...patch });
 
   const diagnosis = profile.whatItIs || profile.whyCare || profile.useCase;
+  const goalReady = Boolean(profile.conversionGoal?.trim());
 
   return (
     <div className="space-y-6">
@@ -111,9 +112,14 @@ export function ProfileForm({
         <Button variant="outline" onClick={onBack}>
           ← Start over
         </Button>
-        <Button onClick={onNext} disabled={loading}>
+        <Button onClick={onNext} disabled={loading || !goalReady}>
           Build my marketing strategy →
         </Button>
+        {!goalReady && (
+          <span className="self-center text-xs text-amber-300">
+            Choose one primary growth goal above first.
+          </span>
+        )}
       </div>
     </div>
   );

@@ -45,6 +45,11 @@ interface PanelMessage {
   providerNote?: string;
 }
 
+export interface CopilotOpenRequest {
+  id: number;
+  prompt: string;
+}
+
 const QUICK_ACTIONS: { label: string; action: CopilotAction }[] = [
   { label: "Explain this plan", action: "explain-plan" },
   { label: "What's next?", action: "next-steps" },
@@ -85,6 +90,7 @@ export function CopilotPanel({
   stopExperiment,
   generateVariant,
   onProviderFallback,
+  openRequest,
 }: {
   profile: ProductProfile;
   strategy: MarketingStrategy;
@@ -107,6 +113,7 @@ export function CopilotPanel({
   stopExperiment: (experimentId: string) => void;
   generateVariant: (experiment: Experiment) => void;
   onProviderFallback: (provider: Provider) => void;
+  openRequest?: CopilotOpenRequest | null;
 }) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -129,6 +136,7 @@ export function CopilotPanel({
     checkpoint: OutcomeCheckpoint;
   } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const handledOpenRequest = useRef<number | null>(null);
 
   const ctx: ActionContext = {
     strategy,
@@ -154,6 +162,17 @@ export function CopilotPanel({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [open]);
+
+  // The command center can open Copilot already scoped to its primary move.
+  // Prefill rather than auto-send so the founder remains in control of the call.
+  useEffect(() => {
+    if (!openRequest || handledOpenRequest.current === openRequest.id) return;
+    handledOpenRequest.current = openRequest.id;
+    setOpen(true);
+    setView("chat");
+    setFeedbackMode(false);
+    setInput(openRequest.prompt);
+  }, [openRequest]);
 
   // Proactive opener: a deterministic briefing computed from the plan —
   // instant, costless, and it can't hallucinate.

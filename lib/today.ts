@@ -1,5 +1,6 @@
 import { PLATFORMS } from "./platforms";
 import { clipString } from "./coerce";
+import { growthMode, type GrowthMode } from "./growth";
 import type {
   Experiment,
   ExperimentVerdict,
@@ -45,6 +46,10 @@ export interface TodayAction {
 
 export interface TodayView {
   actions: TodayAction[];
+  primaryAction: TodayAction;
+  alternatives: TodayAction[];
+  mode: GrowthMode;
+  loopsThisWeek: number;
   dueRecordCount: number; // nav badge: check-ins waiting
   plannedMinutes: number; // sum of shown due actions
   weeklyMinutes?: number;
@@ -213,8 +218,13 @@ export function deriveToday(plan: PlanSlice, now: Date): TodayView {
   }
 
   const shown = actions.slice(0, MAX_TODAY_ACTIONS);
+  const primaryAction = shown[0];
   return {
     actions: shown,
+    primaryAction,
+    alternatives: shown.slice(1),
+    mode: growthMode(workspace),
+    loopsThisWeek: weeklyReview({ strategy, workspace }, now).loopsThisWeek,
     dueRecordCount: records.length,
     plannedMinutes: shown.filter((a) => a.due).reduce((n, a) => n + a.estMinutes, 0),
     weeklyMinutes: workspace.weeklyMinutes,

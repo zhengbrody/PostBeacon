@@ -7,6 +7,7 @@ import {
   clearPolicyProviders,
   configuredProviderPrivacy,
   DATA_CATEGORIES,
+  emailRemindersConfigured,
   providerFallbackNotice,
   PROVIDER_PRIVACY,
   SUBPROCESSORS,
@@ -24,6 +25,11 @@ const KEY_ENVS = [
   "POLAR_ACCESS_TOKEN",
   "POLAR_PRODUCT_ID",
   "POLAR_WEBHOOK_SECRET",
+  "NEXT_PUBLIC_EMAIL_REMINDERS_ENABLED",
+  "RESEND_API_KEY",
+  "REMINDER_FROM_EMAIL",
+  "CRON_SECRET",
+  "SUPABASE_SERVICE_ROLE_KEY",
 ] as const;
 const saved = KEY_ENVS.map((k) => [k, process.env[k]] as const);
 afterEach(() => {
@@ -98,6 +104,25 @@ describe("privacy single source stays complete", () => {
       "OpenAI",
       "DeepSeek",
     ]);
+  });
+
+  it("publishes Resend and reminder data only when the complete opt-in path is configured", () => {
+    delete process.env.RESEND_API_KEY;
+    expect(emailRemindersConfigured()).toBe(false);
+    expect(activeSubprocessors().some((vendor) => vendor.name === "Resend")).toBe(false);
+
+    process.env.NEXT_PUBLIC_EMAIL_REMINDERS_ENABLED = "true";
+    process.env.RESEND_API_KEY = "test";
+    process.env.REMINDER_FROM_EMAIL = "PostBeacon <reminders@postbeacon.app>";
+    process.env.CRON_SECRET = "test";
+    process.env.SUPABASE_SERVICE_ROLE_KEY = "test";
+    expect(emailRemindersConfigured()).toBe(true);
+    expect(activeSubprocessors().some((vendor) => vendor.name === "Resend")).toBe(true);
+    expect(
+      visibleDataCategories().some((category) =>
+        category.what.includes("reminder delivery")
+      )
+    ).toBe(true);
   });
 });
 

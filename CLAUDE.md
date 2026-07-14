@@ -6,6 +6,9 @@
 An AI-CMO SaaS for vibecoders. Paste a product URL → PostBeacon scrapes the page,
 distills a product profile, scans 19+ platforms and **scores/ranks** them for that
 specific product, then generates **ready-to-post** native content + a launch calendar.
+The plan opens into an action-first growth workspace: one next best move → manual publish →
+24h/72h result → verdict → next experiment. Launch mode becomes Growth mode after the first
+measured publish; weekly completed learning loops are the retention north star.
 **No auto-posting** by design (copy-paste keeps users off platform ban radar).
 
 - Brand: **PostBeacon**, domain **postbeacon.app** (owned). `postbeacon.com` was also
@@ -43,7 +46,8 @@ app/
     analyze|strategy|generate|regenerate|providers|usage/route.ts   server endpoints
     account/{export,delete}/route.ts   data rights (bearer; delete = typed confirm +
                                        service role, fails closed 503 without it)
-    retention/route.ts                 CRON_SECRET-gated retention sweep (vercel.json cron)
+    retention|reminders/route.ts       CRON_SECRET-gated daily operator jobs; reminders
+                                       are explicit opt-in and fail closed without Resend
     copilot/route.ts                                                 Launch Copilot (plan-scoped CMO chat)
     billing/{checkout,webhook}/route.ts                              Polar checkout + webhook
 lib/
@@ -78,6 +82,8 @@ lib/
                         in-memory/local draft state before the next identity sees it
   retention.ts          Operator retention sweep: stale projects (cascades workspace)
                         + old webhook ids past RETENTION_DAYS cutoff
+  reminders.ts          M18 opt-in 24h/72h/weekly event emails: pure due derivation,
+                        Resend delivery + provider idempotency, tasks-table delivery ledger
   log.ts                logError/redact — the ONLY sanctioned console sink (eslint
                         no-console repo-wide); strips emails/query strings/tokens
   export.ts             Launch plan → Markdown / JSON; downloadFile helper
@@ -86,8 +92,9 @@ lib/
   usage.ts              Entitlement read/increment + FREE_LAUNCHES (server metering)
   plan.ts               Shared plan shaping: rank ordering, canonical calendar entries (M14)
   today.ts              Workspace engine (M15): Today derivation (≤3 actions), 24h/72h
-                        check-in due logic, rule-based verdicts, first-value activation
-                        path, timeline, weekly review
+                        check-in due logic, one primary move + collapsed alternatives,
+                        rule-based verdicts, first-value path, timeline, weekly review
+  growth.ts             M18 Launch/Growth mode boundary + stage-aware primary-goal helper
   workspace.ts          Write-through sync to the campaigns/experiments/outcomes/tasks
                         tables (feature-detected, best-effort; meta.workspace hydrates)
   coerce.ts             unknown-typed coercers for loose JSON (replaces per-file any helpers, M14)
@@ -108,7 +115,7 @@ lib/
   api.ts                Browser→server typed client (used by the hook)
   projectSaveError.ts   Bounded Supabase/PostgREST project-save error copy
   storage.ts            Versioned localStorage draft (DRAFT_SCHEMA_VERSION + migrateDraft;
-                        the Supabase projects.meta jsonb carries the same version)
+                        v6 includes reminder preference; projects.meta carries the same version)
   supabase/client.ts    Browser Supabase client (graceful if unconfigured)
   supabase/server.ts    Service-role client (server-only; trust-counts usage)
 hooks/
@@ -120,7 +127,7 @@ hooks/
 components/
   ui/                   Button, Card, Badge, Spinner, Field, Tabs (design system primitives)
   app/                  Stepper, UrlStep, ProfileForm, FactLedger, StrategyView, ResultsView
-                        (tab orchestrator), PlanSummary (shared plan-section cards),
+                        (action-first Today + Strategy Library/Progress/Weekly Review), PlanSummary,
                         CopilotPanel (Launch Copilot drawer), ProjectBar, SignIn, AuthScreen,
                         Paywall, UsageBadge, FeedbackCTA
   app/results/          Workspace surfaces (M15): TodayTab, PublishDialog, OutcomePanel,
@@ -133,6 +140,7 @@ docs/M13-trust-layer.md Design + migration doc for the trust layer (facts/scorin
 docs/M15-workspace.md   PRD + state diagram + acceptance criteria for the launch workspace
 docs/M16-copilot-actions.md  Design contract for the copilot action engine
 docs/M17-privacy-trust.md    Private-beta data-flow map, inventory, threat model and controls
+docs/M18-growth-workspace.md Product contract for lifecycle modes, next-best-move and reminders
 tests/                  vitest suites: urlPolicy, safeFetch, billing, webhook route, validate,
                         golden (12-fixture offline evals), generateRoute, flowReducer
                         (state-machine invariants), storage (draft migrations), workspace
@@ -204,9 +212,25 @@ RPC all PASS. Billing remains unverified/off unless all Polar variables are set.
 external inbound test to the monitored founder mailbox. `DEFAULT_PROVIDER=openai`;
 `NEXT_PUBLIC_DEEPSEEK_FALLBACK=true` allows a visibly disclosed DeepSeek retry during beta.
 Inactive projects and webhook ids are retained for 30 days. `Pricing` is hidden during beta.
+Event email code is deployed fail-closed but remains off until Resend/sender/public flag are
+configured and verified; in-app reminders remain active.
 Redeploy: `npx vercel --prod --yes`. Push env from `.env.local`: `~/push-env.sh`.
 
 ## Status / changelog
+- **2026-07-14**: **M18 — report → growth workspace.** Product contract first
+  (`docs/M18-growth-workspace.md`). The same founder now moves automatically from **Launch
+  mode** (no measured publish yet) to **Growth mode** (first experiment created). Today became
+  a command center with exactly one visually dominant **Next best move**, why-now/time/goal,
+  a contextual Copilot entry that prefills the current move without auto-sending, and up to two
+  alternatives behind disclosure; the report is now **Strategy Library**, with Progress and
+  Weekly Review secondary. A concrete primary growth goal is mandatory; “Help me decide” maps
+  stage to a real deterministic goal instead of vague prompt text. Draft schema v6 persists an
+  explicit per-project event-email preference. In-app 24h/72h/review reminders stay always on;
+  optional Resend delivery is CRON_SECRET-gated, fails closed until every env is set, derives
+  only due events, uses Resend idempotency keys plus existing tasks as its delivery ledger, and
+  remains off in production. Desktop/mobile browser verification covered action hierarchy,
+  alternative disclosure, contextual Copilot, and Launch→Growth; zero console errors. 11 new
+  tests; 301 offline tests green.
 - **2026-07-13**: **Project-wide bug audit + public README.** Architect pass over
   the whole codebase (baseline: 283 tests green, madge no cycles, zero
   TODO/console). Fixed four real issues: (1) **pasted outcome metrics poisoned

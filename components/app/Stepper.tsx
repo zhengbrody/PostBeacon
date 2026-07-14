@@ -4,7 +4,7 @@ const STEPS: { id: Step; label: string }[] = [
   { id: "input", label: "Analyze" },
   { id: "profile", label: "Diagnose" },
   { id: "strategy", label: "Strategy" },
-  { id: "results", label: "Launch plan" },
+  { id: "results", label: "Workspace" },
 ];
 
 export function Stepper({

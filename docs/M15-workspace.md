@@ -31,10 +31,10 @@ In: intake (5 workspace facts), Today view (≤3 actions), publish→experiment,
 follow-up variant OR stop suggestion, Timeline, Weekly Review, persistence
 (anon + Supabase) with normalized tables.
 
-Out (documented, deliberate): auto-posting (never), email/push notifications
-(no infra; reminders surface in-app), automatic metric scraping (results are
-typed or pasted by the user), multi-campaign dashboards (schema supports it;
-UI later), team seats.
+Out at M15 (documented, deliberate): auto-posting (never), email/push notifications
+(M18 later added explicit opt-in, event-only email with fail-closed infrastructure),
+automatic metric scraping (results are typed or pasted by the user), multi-campaign
+dashboards (schema supports it; UI later), team seats.
 
 ## 4. Intake (requirement 1)
 
@@ -108,8 +108,9 @@ the post as posted. Un-marking a post later does not delete the experiment
 ## 7. Check-ins & outcomes (requirement 4)
 
 At `publishedAt + 24h` and `+72h` a **Record results** card appears on Today
-(and a count badge on the Today nav item). No email/push in MVP — the
-reminder is the workspace itself. The outcome form takes:
+(and a count badge on the Today nav item). At M15 the reminder was the
+workspace itself; M18 retains that and adds optional event-only email. The outcome
+form takes:
 
 `impressions · replies · clicks · signups · revenue` (all optional numbers)
 + `qualitativeFeedback` (textarea — paste anything: comments, DMs, notes).

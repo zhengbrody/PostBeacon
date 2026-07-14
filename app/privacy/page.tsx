@@ -52,6 +52,10 @@ export default function PrivacyPage() {
             You can export everything as JSON and delete a project or your whole account
             from inside the app.
           </li>
+          <li>
+            In-app action reminders are automatic. Event emails are off unless you
+            explicitly enable them, and can be switched off from the workspace.
+          </li>
         </ul>
       </LegalSection>
 
