@@ -13,6 +13,20 @@ expected_tables(table_name) as (
     ('outcomes'),
     ('tasks')
 ),
+expected_project_columns(column_name) as (
+  values
+    ('id'),
+    ('user_id'),
+    ('name'),
+    ('url'),
+    ('profile'),
+    ('strategy'),
+    ('result'),
+    ('posted'),
+    ('meta'),
+    ('created_at'),
+    ('updated_at')
+),
 table_state as (
   select c.relname as table_name, c.relrowsecurity as rls_enabled
   from pg_class c
@@ -71,36 +85,45 @@ checks(sort_order, check_name, expected, actual, passed, detail) as (
   from expected_tables e join table_state t using (table_name)
 
   union all
-  select 2, 'RLS enabled on every table', 7, count(*)::int, count(*) = 7,
+  select 2, 'project save columns installed', 11, count(*)::int, count(*) = 11,
+    'every column used by the browser project upsert must exist'
+  from expected_project_columns e
+  join information_schema.columns c
+    on c.table_schema = 'public'
+   and c.table_name = 'projects'
+   and c.column_name = e.column_name
+
+  union all
+  select 3, 'RLS enabled on every table', 7, count(*)::int, count(*) = 7,
     'no user-data table may run without row-level security'
   from expected_tables e join table_state t using (table_name)
   where t.rls_enabled
 
   union all
-  select 3, 'owner policies exact', 6, count(*)::int, count(*) = 6,
+  select 4, 'owner policies exact', 6, count(*)::int, count(*) = 6,
     'five ALL owner policies plus SELECT-only entitlement access'
   from matching_policies
 
   union all
-  select 4, 'webhook ledger closed to clients', 0, count(*)::int, count(*) = 0,
+  select 5, 'webhook ledger closed to clients', 0, count(*)::int, count(*) = 0,
     'webhook_events has RLS and no anon/authenticated policy'
   from pg_policies
   where schemaname = 'public' and tablename = 'webhook_events'
 
   union all
-  select 5, 'auth-user cascades', 6, count(*)::int, count(*) = 6,
+  select 6, 'auth-user cascades', 6, count(*)::int, count(*) = 6,
     'every user-owned table cascades from auth.users'
   from expected_fks e join cascade_fks f using (child_schema, child_table, parent_schema, parent_table)
   where e.parent_schema = 'auth'
 
   union all
-  select 6, 'workspace parent cascades', 4, count(*)::int, count(*) = 4,
+  select 7, 'workspace parent cascades', 4, count(*)::int, count(*) = 4,
     'project -> campaign -> experiment -> outcome/task chain'
   from expected_fks e join cascade_fks f using (child_schema, child_table, parent_schema, parent_table)
   where e.parent_schema = 'public'
 
   union all
-  select 7, 'transactional delete RPC locked', 1,
+  select 8, 'transactional delete RPC locked', 1,
     case
       when to_regprocedure('public.delete_postbeacon_user_data(uuid)') is not null
        and has_function_privilege('service_role', to_regprocedure('public.delete_postbeacon_user_data(uuid)'), 'EXECUTE')

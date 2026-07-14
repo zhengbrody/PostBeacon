@@ -168,9 +168,31 @@ describe("deletion cleanup coverage (the 'nothing survives' proof)", () => {
     expect(migration.trimEnd()).toMatch(/commit;$/i);
   });
 
+  it("the project-save repair installs the complete upsert contract and reloads PostgREST", () => {
+    const migration = readFileSync(
+      join(__dirname, "../supabase/migrations/20260713_projects_save_contract.sql"),
+      "utf-8"
+    );
+    for (const column of [
+      "name",
+      "url",
+      "profile",
+      "strategy",
+      "result",
+      "posted",
+      "meta",
+      "created_at",
+      "updated_at",
+    ]) {
+      expect(migration).toMatch(new RegExp(`add column if not exists ${column}\\b`, "i"));
+    }
+    expect(migration).toMatch(/notify pgrst,\s*'reload schema'/i);
+  });
+
   it("the production audit reports explicit PASS/FAIL rows for missing objects", () => {
     const audit = readFileSync(join(__dirname, "../supabase/audit.sql"), "utf-8");
     expect(audit).toContain("all tables installed");
+    expect(audit).toContain("project save columns installed");
     expect(audit).toContain("workspace parent cascades");
     expect(audit).toContain("transactional delete RPC locked");
     expect(audit).toMatch(/case when passed then 'PASS' else 'FAIL' end as status/i);

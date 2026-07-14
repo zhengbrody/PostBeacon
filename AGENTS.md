@@ -108,6 +108,7 @@ lib/
   search.ts             Live web search seam (Tavily; SEARCH_API_KEY) for grounding
   discovery.ts          Niche-channel discovery: search→ground→URL-validate, LLM fallback
   api.ts                Browser→server typed client (used by the hook)
+  projectSaveError.ts   Bounded Supabase/PostgREST project-save error copy
   storage.ts            Versioned localStorage draft (DRAFT_SCHEMA_VERSION + migrateDraft;
                         the Supabase projects.meta jsonb carries the same version)
   supabase/client.ts    Browser Supabase client (graceful if unconfigured)
@@ -147,7 +148,8 @@ tests/golden/           fixtures.ts — 12 product-type golden fixtures with gro
 supabase/schema.sql     projects + entitlements + webhook_events + M15 campaigns/
                         experiments/outcomes/tasks tables (owner-only RLS) + delete RPC
 supabase/migrations/    production-safe, transactional repair migrations
-supabase/audit.sql      single-result PASS/FAIL report for tables/RLS/policies/cascades/RPC
+supabase/audit.sql      single-result PASS/FAIL report for project columns/tables/RLS/
+                        policies/cascades/RPC
 .github/workflows/ci.yml  typecheck · lint · format:check · offline tests · build on every push/PR
 eslint.config.mjs / .prettierrc.json   non-interactive lint + format (next lint is deprecated)
 ```
@@ -220,8 +222,9 @@ post-checkout redirect; defaults to https://postbeacon.app),
 Porkbun DNS: apex `A 76.76.21.21`, www `CNAME cname.vercel-dns.com` (nameservers stay on Porkbun).
 Set in Vercel: OPENAI/DEEPSEEK keys; Claude is intentionally disabled. Supabase public configuration is enabled and the
 production login gate is active. `SUPABASE_SERVICE_ROLE_KEY` is configured as a Sensitive,
-Production-only secret; Preview has only the public Supabase URL/anon key. Schema/RLS/cascade
-audit is fully green in production: seven tables/RLS, six owner policies, six auth-user cascades,
+Production-only secret; Preview has only the public Supabase URL/anon key. The original
+seven-check schema/RLS/cascade audit is fully green in production: seven tables/RLS, six
+owner policies, six auth-user cascades,
 four workspace-parent cascades, closed webhook ledger and service-role-only transactional deletion
 RPC all PASS. Billing remains unverified/off unless all Polar variables are set.
 `NEXT_PUBLIC_PRIVACY_EMAIL=privacy@postbeacon.app` is live; Porkbun forwarding delivered an
@@ -231,6 +234,16 @@ Inactive projects and webhook ids are retained for 30 days. `Pricing` is hidden 
 Redeploy: `npx vercel --prod --yes`. Push env from `.env.local`: `~/push-env.sh`.
 
 ## Status / changelog
+- **2026-07-13**: **M17.6 — production project-save contract repair.** A real signed-in
+  save exposed `PGRST204`: the production `projects` table predated M11 and its PostgREST
+  schema did not contain every field used by the browser upsert (most likely `meta`). Added
+  an idempotent, data-preserving migration that installs the full mutable save-column contract
+  and explicitly reloads the PostgREST schema cache; `schema.sql` now repairs every historical
+  project column instead of only the latest one. The production audit gains an eighth,
+  11-column save-contract check so valid RLS/FKs can no longer hide column drift. The UI now
+  names a safe missing column for `PGRST204` without echoing arbitrary database detail. Code is
+  ready; production remains pending until the operator runs the M17.6 migration and confirms
+  all eight audit rows PASS.
 - **2026-07-13**: **M17.5 — private-beta truth + save/export hardening.** Public
   Privacy/Private-beta-use/Data-vendors pages now describe only current behavior: removed
   company entity, paid-plan, governing-law and liability placeholders; dormant vendors and

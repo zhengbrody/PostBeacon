@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { projectSaveErrorMessage } from "@/lib/projectSaveError";
 import { saveDraft, clearDraft, DRAFT_SCHEMA_VERSION } from "@/lib/storage";
 import { syncWorkspaceTables } from "@/lib/workspace";
 import type {
@@ -121,9 +122,7 @@ export function useAutosave(
         );
         if (error) {
           setLastSaved("");
-          setSaveError(
-            `Project save failed${error.code ? ` (${error.code})` : ""}. Try Save now again.`
-          );
+          setSaveError(projectSaveErrorMessage(error));
           return false;
         }
         clearDraft(); // migrated to the account

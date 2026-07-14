@@ -15,9 +15,19 @@ create table if not exists public.projects (
   updated_at timestamptz default now()
 );
 
--- Migration for existing installs (safe to re-run):
+-- Migration for existing installs (safe to re-run). `create table if not
+-- exists` does not add columns to an older table, so keep the complete project
+-- save contract here rather than only the newest field.
 alter table public.projects
-  add column if not exists meta jsonb default '{}'::jsonb;
+  add column if not exists name text not null default 'Untitled',
+  add column if not exists url text,
+  add column if not exists profile jsonb,
+  add column if not exists strategy jsonb,
+  add column if not exists result jsonb,
+  add column if not exists posted jsonb default '{}'::jsonb,
+  add column if not exists meta jsonb default '{}'::jsonb,
+  add column if not exists created_at timestamptz default now(),
+  add column if not exists updated_at timestamptz default now();
 
 create index if not exists projects_user_idx on public.projects (user_id, updated_at desc);
 
