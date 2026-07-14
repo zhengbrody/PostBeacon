@@ -235,11 +235,10 @@ RLS on all four: `user_id = auth.uid()` for select/insert/update/delete
 safe to re-run.
 
 Production verification on 2026-07-13 found that these four mirror tables had
-not been installed: the app was correctly using `projects.meta.workspace`, so
-the user loop kept working, but normalized queries and database-level cascades
-were absent. Apply the atomic repair in
-`supabase/migrations/20260713_workspace_and_delete_rpc.sql`, then run the whole
-`supabase/audit.sql`; all seven report rows must say `PASS`.
+not been installed: the app had correctly degraded to
+`projects.meta.workspace`. The atomic repair migration was applied and the
+final production audit now reports all seven checks as `PASS`, including every
+RLS policy and parent/auth cascade.
 
 ## 12. Progressive disclosure rules
 
