@@ -11,6 +11,10 @@
 
 [**Live app**](https://postbeacon.app) · [**Full example plan**](https://postbeacon.app/app?demo=1) (no signup, no API key) · [Privacy](https://postbeacon.app/privacy)
 
+<img src="docs/assets/workspace.png" alt="The PostBeacon launch workspace: Today view with the activation path, three prioritized posting actions with time estimates, and the Ask-your-CMO copilot" width="920" />
+
+<sub>The launch workspace — every day is ≤3 concrete actions, every post becomes a measured experiment.</sub>
+
 </div>
 
 ---
@@ -61,28 +65,73 @@ At least one model key is required; everything else is optional and degrades gra
 
 ## Architecture
 
+### System overview
+
+```mermaid
+flowchart LR
+    subgraph client["Your browser"]
+        UI["React 19 UI<br/>(presentational components)"]
+        SM["launchFlowReducer<br/>pure state machine + invariants"]
+        LS[("localStorage draft<br/>anonymous users, versioned v1→v5")]
+        UI --> SM --> LS
+    end
+
+    subgraph server["Next.js App Router · API routes"]
+        direction TB
+        VAL["validate.ts — zod on every body"]
+        AN["analyze → facts.ts<br/>quote-verified fact ledger"]
+        ST["strategy → scoring.ts<br/>code-computed 0–100 totals"]
+        GE["generate → generate.ts<br/>per-channel partial success"]
+        CO["copilot → copilotActions.ts<br/>proposal validator (hard boundary)"]
+        LLM["llm.ts — one provider seam<br/>privacy-safe failover"]
+        SF["safeFetch.ts — SSRF policy<br/>DNS-pinned, redirect-revalidated"]
+        VAL --> AN & ST & GE & CO
+        AN & ST & GE & CO --> LLM
+        AN --> SF
+    end
+
+    subgraph vendors["External services (conditional, per run)"]
+        P["Claude / OpenAI / DeepSeek"]
+        FC["Firecrawl · SPA rendering"]
+        TV["Tavily · community discovery"]
+        SB[("Supabase<br/>owner-only RLS on every table")]
+    end
+
+    SM -->|"typed client (api.ts)"| VAL
+    LLM --> P
+    SF --> FC
+    ST -.-> TV
+    SM -.->|"signed-in autosave"| SB
 ```
-Browser (drafts live in localStorage until you sign in)
-   │
-   ▼
-Next.js App Router — /api/analyze → /api/strategy → /api/generate
-   │        │                                │
-   │        │  facts.ts   quote-verified fact ledger, ≤3 clarifying questions
-   │        │  scoring.ts model rates dimensions → CODE computes totals, 19-platform guarantee
-   │        │  generate.ts per-platform content + playbook, partial-success + per-channel retry
-   │        ▼
-   │     lib/llm.ts — Claude / OpenAI / DeepSeek behind one seam; privacy-safe
-   │                  failover (auth/rate-limit/5xx retries through clear-policy
-   │                  providers only; content rejections never fail over)
-   ▼
-Workspace (lib/today.ts) — Today ≤3 actions · experiments · 24h/72h check-ins ·
-rule-based verdicts · weekly review — pure derivations, fully unit-tested
-   │
-   ▼
-Launch Copilot (lib/copilot.ts + lib/copilotActions.ts) — {reply, actions}
-contract; strict per-tool schemas; ids and evidence re-verified server-side;
-human confirmation is the only bridge from proposal to state
+
+Every request body crosses the trust boundary through a zod schema; every user- or model-supplied URL goes through the SSRF policy; the model's output crosses back only after code-side verification (quotes, ids, score ranges). There is deliberately **no posting integration in any layer**.
+
+### The learning loop
+
+```mermaid
+flowchart LR
+    A["Plan<br/>ranked channels + drafts"] --> B["You publish<br/>(copy-paste — never automated)"]
+    B --> C["Experiment created<br/>platform · community · angle · hypothesis"]
+    C --> D["24h / 72h check-ins<br/>you type real results"]
+    D --> E["Verdict — computed by rules, not vibes<br/>supported / promising / weak / no-signal"]
+    E -->|"worked"| F["Follow-up variant<br/>(the loop's only LLM call)"]
+    E -->|"didn't"| G["Stop channel,<br/>reallocate time"]
+    F --> B
+    G --> A
 ```
+
+The north star metric is **completed learning loops per week** — published → measured → verdict — not how much content got generated.
+
+### Layers
+
+| Layer | Where | Responsibility |
+| --- | --- | --- |
+| UI | `components/` | Presentational only — no fetches, no business rules |
+| State | `hooks/launchFlowReducer.ts` | One pure reducer; `normalize()` makes contradictory plan states unrepresentable |
+| Engines | `lib/facts.ts` · `scoring.ts` · `today.ts` · `copilotActions.ts` | Deterministic, unit-tested logic: fact verification, score math, Today derivation, action validation |
+| Model seam | `lib/llm.ts` | Three providers behind one function; JSON repair; failover only through clear-policy providers |
+| Trust & safety | `lib/validate.ts` · `safeFetch.ts` · `urlPolicy.ts` · `log.ts` | zod on every body, SSRF policy, redacting log sink (`no-console` enforced) |
+| Persistence | `lib/storage.ts` · `useAutosave.ts` · `supabase/` | Versioned drafts with migrations; RLS-scoped rows; account-switch hard boundary |
 
 Design rules the codebase holds itself to:
 
