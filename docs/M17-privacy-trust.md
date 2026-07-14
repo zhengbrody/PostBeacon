@@ -136,10 +136,9 @@ numbers the user types, (A4) operator API keys, (A5) billing state.
 
 ## 7. Open questions for counsel
 
-1. **Entity + contact**: legal entity name, registered address, and a monitored
-   privacy contact email. Legal pages use `NEXT_PUBLIC_PRIVACY_EMAIL` when set
-   and otherwise fall back to the GitHub feedback link; set the env only after
-   inbound delivery has been tested.
+1. **Entity + contact**: legal entity name and registered address remain for
+   counsel. `privacy@postbeacon.app` is live on the legal pages; its Porkbun
+   forwarding path passed an external inbound delivery test on 2026-07-13.
 2. **Governing law / venue** for the Terms (placeholders marked `[COUNSEL]`).
 3. **GDPR posture**: are we targeting EU users (site is English, founder-tool)?
    If yes: confirm legal bases per inventory row, Art. 28 DPAs with every

@@ -191,7 +191,9 @@ Production-only secret; Preview has only the public Supabase URL/anon key. Schem
 audit is fully green in production: seven tables/RLS, six owner policies, six auth-user cascades,
 four workspace-parent cascades, closed webhook ledger and service-role-only transactional deletion
 RPC all PASS. Billing remains unverified/off unless all Polar variables are set.
-`DEFAULT_PROVIDER=claude`; DeepSeek remains an explicit choice. `Pricing` is hidden during beta.
+`NEXT_PUBLIC_PRIVACY_EMAIL=privacy@postbeacon.app` is live; Porkbun forwarding delivered an
+external inbound test to the monitored founder mailbox. `DEFAULT_PROVIDER=claude`; DeepSeek remains
+an explicit choice. `Pricing` is hidden during beta.
 Redeploy: `npx vercel --prod --yes`. Push env from `.env.local`: `~/push-env.sh`.
 
 ## Status / changelog
@@ -207,7 +209,8 @@ Redeploy: `npx vercel --prod --yes`. Push env from `.env.local`: `~/push-env.sh`
   `DEFAULT_PROVIDER` changed from DeepSeek to Claude; DeepSeek stays opt-in. Production migration +
   re-audit confirmed all user-data boundaries and found only the pre-M12 `webhook_events` ledger
   missing; a second minimal transactional migration repaired it, and the final seven-row production
-  audit is all PASS. Privacy email setup remains intentionally deferred.
+  audit is all PASS. `privacy@postbeacon.app` is published and its Porkbun forwarding path passed an
+  external inbound delivery test (replies use the founder mailbox address until hosted mail exists).
 - **2026-07-13**: **M17.1 privacy follow-up.** An unclear-policy provider can no longer
   outrank a configured clear-policy provider through `DEFAULT_PROVIDER`; DeepSeek remains an
   explicit per-run choice (or usable when it is the only configured provider). Legal pages now
@@ -254,10 +257,9 @@ Redeploy: `npx vercel --prod --yes`. Push env from `.env.local`: `~/push-env.sh`
   redaction, provider ordering + privacy-source consistency. Verified in browser:
   all 3 pages render (incl. dynamic retention copy), FAQ/footer fixed, auth-screen
   consent line, DeepSeek amber warning on feedback paste; curl: export/delete 401
-  unauthenticated, retention 503 unconfigured. Known limits for counsel: contact is
-  the GitHub feedback link (needs a real privacy email), governing law + liability
-  placeholders, provider-policy summaries need re-verification, production
-  DEFAULT_PROVIDER=deepseek flagged for decision.
+  unauthenticated, retention 503 unconfigured. Known limits for counsel at that milestone included
+  the contact and provider-default decisions; both were resolved on 2026-07-13. Governing law +
+  liability placeholders and provider-policy summaries still need counsel review.
 - **2026-07-12**: **M16 — Copilot as an auditable CMO action engine** (design contract first:
   docs/M16-copilot-actions.md; still ZERO auto-posting — no posting tool exists in the
   schema). (1) Nine structured tools (ask_clarifying_question, propose_next_actions,
