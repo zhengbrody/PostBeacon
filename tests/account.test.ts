@@ -154,6 +154,20 @@ describe("deletion cleanup coverage (the 'nothing survives' proof)", () => {
     expect(migration).toMatch(/grant execute on function[\s\S]*to service_role/i);
   });
 
+  it("the production repair includes the server-only webhook ledger", () => {
+    const migration = readFileSync(
+      join(__dirname, "../supabase/migrations/20260713_webhook_ledger.sql"),
+      "utf-8"
+    );
+    expect(migration).toMatch(/^--[\s\S]*\nbegin;/i);
+    expect(migration).toMatch(/create table if not exists public\.webhook_events/i);
+    expect(migration).toMatch(
+      /alter table public\.webhook_events enable row level security/i
+    );
+    expect(migration).not.toMatch(/create policy/i);
+    expect(migration.trimEnd()).toMatch(/commit;$/i);
+  });
+
   it("the production audit reports explicit PASS/FAIL rows for missing objects", () => {
     const audit = readFileSync(join(__dirname, "../supabase/audit.sql"), "utf-8");
     expect(audit).toContain("all tables installed");

@@ -218,9 +218,11 @@ production login gate is active. `SUPABASE_SERVICE_ROLE_KEY` is configured as a 
 Production-only secret; Preview has only the public Supabase URL/anon key. Schema/RLS/cascade
 audit on 2026-07-13 found only the projects/entitlements auth cascades: the M15 workspace mirror
 is not installed in production yet. Run `supabase/migrations/20260713_workspace_and_delete_rpc.sql`,
-then require all PASS rows from `supabase/audit.sql`. Billing remains unverified/off unless all
-Polar variables are set. `DEFAULT_PROVIDER=claude`; DeepSeek remains an explicit choice. `Pricing`
-is hidden during beta.
+then `supabase/migrations/20260713_webhook_ledger.sql`, then require all PASS rows from
+`supabase/audit.sql`. The first re-audit confirmed every user-data/RPC check and isolated the
+remaining missing object to the M12 webhook ledger. Billing remains unverified/off unless all Polar
+variables are set. `DEFAULT_PROVIDER=claude`; DeepSeek remains an explicit choice. `Pricing` is
+hidden during beta.
 Redeploy: `npx vercel --prod --yes`. Push env from `.env.local`: `~/push-env.sh`.
 
 ## Status / changelog
@@ -234,7 +236,9 @@ Redeploy: `npx vercel --prod --yes`. Push env from `.env.local`: `~/push-env.sh`
   pre-migration fallback. Today adds a locally derived Plan ready → First post → First learning
   activation path, making first value visible without collecting cross-user analytics. Production
   `DEFAULT_PROVIDER` changed from DeepSeek to Claude; DeepSeek stays opt-in. Production migration +
-  re-audit remain an operator step; privacy email setup remains intentionally deferred.
+  re-audit confirmed all user-data boundaries and found only the pre-M12 `webhook_events` ledger
+  missing; a second minimal transactional migration now repairs it. Privacy email setup remains
+  intentionally deferred.
 - **2026-07-13**: **M17.1 privacy follow-up.** An unclear-policy provider can no longer
   outrank a configured clear-policy provider through `DEFAULT_PROVIDER`; DeepSeek remains an
   explicit per-run choice (or usable when it is the only configured provider). Legal pages now
