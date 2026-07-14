@@ -65,24 +65,32 @@ export interface ActivationProgress {
   nextStep: string;
 }
 
+const hasScheduledResult = (experiment: Experiment) =>
+  experiment.outcomes.some(
+    (outcome) => outcome.checkpoint === "24h" || outcome.checkpoint === "72h"
+  );
+
+const hasCompletedRead = (experiment: Experiment) =>
+  Boolean(experiment.verdict) && hasScheduledResult(experiment);
+
 /** The first-value path, derived locally from the user's own workspace. No
  * cross-user event collection is needed to make the next success obvious. */
 export function activationProgress(workspace: WorkspaceState): ActivationProgress {
   const published = workspace.experiments.length > 0;
-  const loopsClosed = workspace.experiments.filter((e) => e.verdict).length;
+  const loopsClosed = workspace.experiments.filter(hasCompletedRead).length;
   const learned = loopsClosed > 0;
   const milestones: ActivationProgress["milestones"] = [
     { id: "plan", label: "Plan ready", done: true },
     { id: "publish", label: "First post", done: published },
-    { id: "learn", label: "First learning", done: learned },
+    { id: "learn", label: "First result", done: learned },
   ];
   const nextStep = !published
     ? "Publish one draft to start your first measured experiment."
     : !learned
       ? "Come back for the 24h result check — the verdict closes your first loop."
       : loopsClosed === 1
-        ? "First value reached. Close a second loop this week to make the workflow repeatable."
-        : `${loopsClosed} learning loops closed. Keep the weekly rhythm going.`;
+        ? "First result reached. Complete a second experiment this week to make the workflow repeatable."
+        : `${loopsClosed} experiments completed. Keep the weekly rhythm going.`;
 
   return {
     completed: milestones.filter((m) => m.done).length,
@@ -269,13 +277,17 @@ export function verdictFor(
   } else {
     call = "no-signal";
     reason =
-      outcome.checkpoint === "24h"
-        ? "Too little data to judge yet — small reach is normal at 24h."
-        : "Barely any reach by 72h — this looks like a distribution problem, not a copy problem.";
+      outcome.checkpoint === "manual"
+        ? "The early evidence is still too thin to judge — this is a note, not a final read."
+        : outcome.checkpoint === "24h"
+          ? "Too little data to judge yet — small reach is normal at 24h."
+          : "Barely any reach by 72h — this looks like a distribution problem, not a copy problem.";
     advice =
-      outcome.checkpoint === "24h"
-        ? "Hold — record the 72h check-in before changing anything."
-        : `Consider stopping this channel for now and moving the time to your next-ranked channel.`;
+      outcome.checkpoint === "manual"
+        ? "Keep the experiment live and return for the scheduled 24h check-in."
+        : outcome.checkpoint === "24h"
+          ? "Hold — record the 72h check-in before changing anything."
+          : `Consider stopping this channel for now and moving the time to your next-ranked channel.`;
   }
 
   return { call, reason, advice, decidedAt: new Date().toISOString() };
@@ -325,7 +337,9 @@ export function nextActionsAfter(
             `Post at the channel's best time window next attempt`,
           ]
         : [
-            `Wait for the 72h window before changing anything`,
+            exp.outcomes.some((o) => o.checkpoint === "24h")
+              ? `Wait for the 72h window before changing anything`
+              : `Wait for the 24h window before changing anything`,
             `Meanwhile, prep the next planned channel from Today`,
           ];
   }
@@ -418,9 +432,10 @@ export function weeklyReview(
   const { workspace, strategy } = plan;
   const weekAgo = now.getTime() - 7 * 24 * HOUR;
 
-  // A learning loop is COMPLETE when an outcome produced a verdict.
+  // A learning loop is COMPLETE only after a scheduled 24h/72h result produced
+  // a verdict. Manual early signals are useful reads, but never inflate retention.
   const loops = workspace.experiments
-    .filter((e) => e.verdict)
+    .filter(hasCompletedRead)
     .map((e) => ({ experiment: e, decidedAt: e.verdict!.decidedAt }));
   const loopsThisWeek = loops.filter(
     (l) => new Date(l.decidedAt).getTime() >= weekAgo
@@ -447,7 +462,7 @@ export function weeklyReview(
   }
 
   const best = [...workspace.experiments]
-    .filter((e) => e.verdict)
+    .filter(hasCompletedRead)
     .sort((a, b) => CALL_RANK[b.verdict!.call] - CALL_RANK[a.verdict!.call])[0];
 
   const suggestions: string[] = [];

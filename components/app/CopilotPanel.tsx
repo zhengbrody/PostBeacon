@@ -309,9 +309,10 @@ export function CopilotPanel({
     return (
       <button
         onClick={() => setOpen(true)}
-        className="no-print fixed bottom-6 right-6 z-40 inline-flex items-center gap-2 rounded-full bg-accent-600 px-4 py-2.5 text-sm font-medium text-white shadow-lg shadow-accent-600/25 transition-colors hover:bg-accent-500"
+        className="no-print fixed bottom-4 right-4 z-40 inline-flex items-center gap-2 rounded-full bg-accent-600 px-3 py-2.5 text-sm font-medium text-white shadow-lg shadow-accent-600/25 transition-colors hover:bg-accent-500 sm:bottom-6 sm:right-6 sm:px-4"
       >
-        ✦ Ask your CMO
+        ✦ <span className="hidden sm:inline">Ask your CMO</span>
+        <span className="sm:hidden">Copilot</span>
       </button>
     );
   }

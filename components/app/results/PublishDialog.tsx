@@ -4,7 +4,16 @@ import { useState } from "react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Field } from "@/components/ui/Field";
+import { ExecutionProgress } from "./ExecutionProgress";
+import type { ExecutionStep } from "@/lib/execution";
 import type { PlatformContent, PlatformRecommendation } from "@/lib/types";
+
+const PUBLISH_STEPS: ExecutionStep[] = [
+  { id: "prepare", label: "Prepare", done: true, active: false },
+  { id: "publish", label: "Publish", done: false, active: true },
+  { id: "measure", label: "Measure", done: false, active: false },
+  { id: "learn", label: "Learn", done: false, active: false },
+];
 
 export interface PublishDetails {
   community: string;
@@ -61,6 +70,13 @@ export function PublishDialog({
           This creates an experiment so the 24h and 72h check-ins know what to ask about.
           PostBeacon never posts for you.
         </p>
+        <div className="mb-5 rounded-lg border border-line bg-surface-2/50 p-3">
+          <ExecutionProgress steps={PUBLISH_STEPS} />
+          <p className="mt-3 text-xs text-neutral-500">
+            Confirm what you actually published. This click starts the 24h countdown and
+            updates Today, Progress and Weekly Review together.
+          </p>
+        </div>
 
         {content.posts.length > 1 && (
           <label className="mb-3 block text-xs text-neutral-400">

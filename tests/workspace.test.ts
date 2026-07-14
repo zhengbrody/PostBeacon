@@ -209,6 +209,13 @@ describe("activationProgress — first value without cross-user tracking", () =>
       ws({
         experiments: [
           experiment({
+            outcomes: [
+              {
+                id: "first-read",
+                checkpoint: "24h",
+                recordedAt: NOW.toISOString(),
+              },
+            ],
             verdict: {
               call: "promising",
               reason: "real engagement",
@@ -221,13 +228,48 @@ describe("activationProgress — first value without cross-user tracking", () =>
     );
     expect(learned.completed).toBe(3);
     expect(learned.activated).toBe(true);
-    expect(learned.nextStep).toMatch(/second loop/i);
+    expect(learned.nextStep).toMatch(/second experiment/i);
+  });
+
+  it("keeps an early manual read useful without calling the experiment complete", () => {
+    const early = activationProgress(
+      ws({
+        experiments: [
+          experiment({
+            outcomes: [
+              {
+                id: "early",
+                checkpoint: "manual",
+                recordedAt: NOW.toISOString(),
+                replies: 4,
+              },
+            ],
+            verdict: {
+              call: "promising",
+              reason: "early replies",
+              advice: "wait for 24h",
+              decidedAt: NOW.toISOString(),
+            },
+          }),
+        ],
+      })
+    );
+    expect(early.loopsClosed).toBe(0);
+    expect(early.completed).toBe(2);
+    expect(early.nextStep).toMatch(/24h/i);
   });
 
   it("turns repeated loops into the habit signal", () => {
     const decided = (id: string): Experiment =>
       experiment({
         id,
+        outcomes: [
+          {
+            id: `result-${id}`,
+            checkpoint: "24h",
+            recordedAt: NOW.toISOString(),
+          },
+        ],
         verdict: {
           call: "supported",
           reason: "converted",
@@ -269,6 +311,9 @@ describe("verdictFor (rule-based, absent ≠ 0)", () => {
     expect(v24.advice).toMatch(/72h/);
     const v72 = verdictFor(outcome({ checkpoint: "72h" }), ctx);
     expect(v72.advice).toMatch(/stopping/i);
+    const early = verdictFor(outcome({ checkpoint: "manual" }), ctx);
+    expect(early.reason).toMatch(/early/i);
+    expect(early.advice).toMatch(/24h/i);
   });
   it("every verdict explains the rule that fired", () => {
     const v = verdictFor(outcome({ signups: 1 }), ctx);

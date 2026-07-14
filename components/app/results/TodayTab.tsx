@@ -1,18 +1,25 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { ExecutionProgress } from "./ExecutionProgress";
+import { InlinePostWorkbench } from "./InlinePostWorkbench";
+import { experimentLifecycle } from "@/lib/execution";
 import type { TodayAction, TodayView } from "@/lib/today";
+import type { Experiment, PlatformContent, PlatformPost } from "@/lib/types";
 
 interface TodayActions {
   loading: boolean;
-  onPublish: (platformId: string) => void;
+  onPublish: (platformId: string, postIdx?: number) => void;
   onRecord: (action: TodayAction) => void;
   onSkip: (action: TodayAction) => void;
   onDoneCustom: (action: TodayAction) => void;
   onOpenContent: (platformId?: string) => void;
   onOpenReview: () => void;
-  onAskCopilot: (action: TodayAction) => void;
+  onAskCopilot: (action: TodayAction, direction?: string) => void;
+  onRegenerate: (platformId: string) => void;
+  onUpdatePost: (platformId: string, idx: number, patch: Partial<PlatformPost>) => void;
 }
 
 function ActionButtons({
@@ -100,6 +107,68 @@ function AlternativeMove({
   );
 }
 
+function ActiveExperimentCard({
+  experiment,
+  onAsk,
+  onRecordEarly,
+  onOpenProgress,
+}: {
+  experiment: Experiment;
+  onAsk: () => void;
+  onRecordEarly: () => void;
+  onOpenProgress: () => void;
+}) {
+  const lifecycle = experimentLifecycle(experiment, new Date());
+  return (
+    <Card className="border-emerald-900/70 bg-emerald-950/10 p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="text-xs font-semibold uppercase tracking-wide text-emerald-300">
+            Active experiment · {experiment.platformName}
+          </div>
+          <h3 className="mt-1 text-base font-semibold text-neutral-100">
+            {lifecycle.headline}
+          </h3>
+          <p className="mt-1 max-w-2xl text-xs leading-relaxed text-neutral-400">
+            {lifecycle.detail}
+          </p>
+        </div>
+        {experiment.trackedUrl && (
+          <a
+            href={experiment.trackedUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="text-xs font-medium text-accent-300 hover:underline"
+          >
+            Open live post →
+          </a>
+        )}
+      </div>
+      <div className="mt-4">
+        <ExecutionProgress steps={lifecycle.steps} />
+      </div>
+      <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-neutral-500">
+        <span>Angle: {experiment.angle || "Not recorded"}</span>
+        <span>Published {new Date(experiment.publishedAt).toLocaleString()}</span>
+        {experiment.community && <span>Venue: {experiment.community}</span>}
+      </div>
+      <div className="mt-4 flex flex-wrap gap-2">
+        {!lifecycle.complete && !lifecycle.due && (
+          <Button size="sm" onClick={onRecordEarly}>
+            Record an early result
+          </Button>
+        )}
+        <Button size="sm" variant="outline" onClick={onAsk}>
+          ✦ What should I measure?
+        </Button>
+        <Button size="sm" variant="ghost" onClick={onOpenProgress}>
+          View experiment progress →
+        </Button>
+      </div>
+    </Card>
+  );
+}
+
 /**
  * M18 command center: one dominant next move. Existing M15 actions stay
  * available, but alternatives no longer compete above the fold.
@@ -111,6 +180,16 @@ export function TodayTab({
   emailRemindersAvailable,
   emailRemindersEnabled,
   onToggleEmailReminders,
+  primaryContent,
+  posted,
+  activeExperiment,
+  primaryExperiment,
+  notice,
+  onDismissNotice,
+  recordEditor,
+  onAskExperiment,
+  onRecordEarly,
+  onOpenProgress,
   ...handlers
 }: TodayActions & {
   view: TodayView;
@@ -119,11 +198,42 @@ export function TodayTab({
   emailRemindersAvailable: boolean;
   emailRemindersEnabled: boolean;
   onToggleEmailReminders: (enabled: boolean) => void;
+  primaryContent?: PlatformContent;
+  posted: Record<string, boolean>;
+  activeExperiment?: Experiment;
+  primaryExperiment?: Experiment;
+  notice?: { title: string; detail: string } | null;
+  onDismissNotice: () => void;
+  recordEditor?: ReactNode;
+  onAskExperiment: (experiment: Experiment) => void;
+  onRecordEarly: (experiment: Experiment) => void;
+  onOpenProgress: () => void;
 }) {
   const primary = view.primaryAction;
+  const activeIsPrimaryRecord =
+    primary.kind === "record" && primary.experimentId === activeExperiment?.id;
 
   return (
     <section className="space-y-4">
+      {notice && (
+        <div
+          className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-emerald-800 bg-emerald-950/30 px-4 py-3"
+          role="status"
+        >
+          <div>
+            <div className="text-sm font-semibold text-emerald-200">✓ {notice.title}</div>
+            <div className="mt-0.5 text-xs text-emerald-300/70">{notice.detail}</div>
+          </div>
+          <button
+            type="button"
+            onClick={onDismissNotice}
+            className="text-xs text-emerald-300/60 hover:text-emerald-200"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <div className="flex flex-wrap items-center gap-2">
@@ -135,7 +245,7 @@ export function TodayTab({
           <h2 className="mt-2 text-2xl font-semibold tracking-tight text-neutral-100">
             {view.mode === "launch"
               ? "Get your first real signal"
-              : "Keep the learning loop moving"}
+              : "Keep the experiment moving"}
           </h2>
           <p className="mt-1 text-sm text-neutral-400">
             Primary goal:{" "}
@@ -143,7 +253,7 @@ export function TodayTab({
           </p>
         </div>
         <div className="text-right text-xs text-neutral-500">
-          <div>{view.loopsThisWeek} learning loops closed this week</div>
+          <div>{view.loopsThisWeek} completed experiments this week</div>
           <div className="mt-1">
             {view.plannedMinutes
               ? `~${view.plannedMinutes} min due now`
@@ -187,6 +297,15 @@ export function TodayTab({
         </Card>
       )}
 
+      {activeExperiment && !activeIsPrimaryRecord && !recordEditor && (
+        <ActiveExperimentCard
+          experiment={activeExperiment}
+          onAsk={() => onAskExperiment(activeExperiment)}
+          onRecordEarly={() => onRecordEarly(activeExperiment)}
+          onOpenProgress={onOpenProgress}
+        />
+      )}
+
       <Card className="overflow-hidden border-accent-700/60 bg-gradient-to-br from-accent-950/50 to-surface/80">
         <div className="p-6 sm:p-7">
           <div className="flex flex-wrap items-center justify-between gap-2">
@@ -197,17 +316,41 @@ export function TodayTab({
               ~{primary.estMinutes} min{primary.due ? " · due now" : " · up next"}
             </span>
           </div>
-          <h4 className="mt-3 text-xl font-semibold text-neutral-50">{primary.title}</h4>
+          <h4 className="mt-3 text-xl font-semibold text-neutral-50">
+            {recordEditor ? "Record results and get the read" : primary.title}
+          </h4>
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-neutral-300">
-            {primary.whyNow}
+            {recordEditor
+              ? "Enter only what you actually observed. The verdict and next action update here immediately."
+              : primary.whyNow}
           </p>
-          <div className="mt-5">
-            <ActionButtons action={primary} primary handlers={handlers} />
-          </div>
+          {recordEditor ? (
+            <div className="mt-5 border-t border-line pt-5">{recordEditor}</div>
+          ) : primary.kind === "post" && primaryContent ? (
+            <InlinePostWorkbench
+              content={primaryContent}
+              posted={posted}
+              loading={handlers.loading}
+              onUpdatePost={handlers.onUpdatePost}
+              onRegenerate={handlers.onRegenerate}
+              onPublish={(platformId, postIdx) => handlers.onPublish(platformId, postIdx)}
+              onAskCopilot={(direction) => handlers.onAskCopilot(primary, direction)}
+              onOpenLibrary={() => handlers.onOpenContent(primary.platformId)}
+            />
+          ) : (
+            <div className="mt-5 space-y-4">
+              {primary.kind === "record" && primaryExperiment && (
+                <ExecutionProgress
+                  steps={experimentLifecycle(primaryExperiment, new Date()).steps}
+                />
+              )}
+              <ActionButtons action={primary} primary handlers={handlers} />
+            </div>
+          )}
         </div>
       </Card>
 
-      {view.alternatives.length > 0 && (
+      {!recordEditor && view.alternatives.length > 0 && (
         <details className="group overflow-hidden rounded-xl border border-line bg-surface/40">
           <summary className="cursor-pointer list-none px-4 py-3 text-sm text-neutral-400 transition-colors hover:text-neutral-200">
             <span className="inline-flex w-full items-center justify-between gap-3">

@@ -97,6 +97,8 @@ lib/
                         check-in due logic, one primary move + collapsed alternatives,
                         rule-based verdicts, first-value path, timeline, weekly review
   growth.ts             M18 Launch/Growth mode boundary + stage-aware primary-goal helper
+  execution.ts          M19 Prepare→Publish→Measure→Learn lifecycle projection,
+                        countdowns and operator-controlled platform destinations
   workspace.ts          Write-through sync to the campaigns/experiments/outcomes/tasks
                         tables (feature-detected, best-effort; meta.workspace hydrates)
   coerce.ts             unknown-typed coercers for loose JSON (replaces per-file any helpers, M14)
@@ -134,8 +136,9 @@ components/
                         action-first Today + Strategy Library/Progress/Weekly Review),
                         PlanSummary, CopilotPanel, ProjectBar, SignIn, AuthScreen, Paywall,
                         UsageBadge, FeedbackCTA
-  app/results/          Workspace surfaces (M15): TodayTab, PublishDialog, OutcomePanel,
-                        TimelineTab, ReviewTab — plus the full report (PlanReport wrapping
+  app/results/          Interactive workbench (M19): TodayTab + InlinePostWorkbench,
+                        ExecutionProgress, PublishDialog, OutcomePanel, TimelineTab,
+                        ReviewTab — plus the full report (PlanReport wrapping
                         the M14 per-tab modules: OverviewTab, ContentTab + ChannelBlock +
                         PostCard, CalendarTab, ExecuteTab, FailuresCard, PrintHeading)
   landing/              Nav, Hero, HowItWorks, PlatformShowcase, Pricing, FAQ, Footer
@@ -145,10 +148,13 @@ docs/M15-workspace.md   PRD + state diagram + acceptance criteria for the launch
 docs/M16-copilot-actions.md  Design contract for the copilot action engine
 docs/M17-privacy-trust.md    Private-beta data-flow map, inventory, threat model and controls
 docs/M18-growth-workspace.md Product contract for lifecycle modes, next-best-move and reminders
+docs/M19-execution-workbench.md Interaction contract for visible click feedback and the
+                        Prepare→Publish→Measure→Learn loop
 tests/                  vitest suites: urlPolicy, safeFetch, billing, webhook route, validate,
                         golden (12-fixture offline evals), generateRoute, flowReducer
                         (state-machine invariants), storage (draft migrations), workspace
-                        (Today/verdicts/review), coerce (metric parsing), export (learning-loop
+                        (Today/verdicts/review), execution (lifecycle/countdowns),
+                        coerce (metric parsing), export (learning-loop
                         completeness), copilotActions (action boundary, injection,
                         destructive gates, memory), account (deletion coverage vs schema,
                         export), retention, log (redaction), privacy (source consistency,
@@ -245,6 +251,20 @@ configured and verified; in-app reminders remain active.
 Redeploy: `npx vercel --prod --yes`. Push env from `.env.local`: `~/push-env.sh`.
 
 ## Status / changelog
+- **2026-07-14**: **M19 — interactive execution workbench.** Today now keeps the
+  recommended post inside the dominant action card: switch hook/draft variants, edit,
+  copy, open the known platform destination, regenerate or ask the Copilot without
+  navigating through the report. Every click produces nearby status feedback. Confirming
+  a manual publish creates a visible receipt, an active-experiment card and a shared
+  **Prepare → Publish → Measure → Learn** lifecycle with a live 24h/72h countdown. Founders
+  may record a real early signal immediately; it returns an inline deterministic read and
+  next actions but cannot inflate the completed-experiment metric before a scheduled
+  checkpoint. Due results use the same inline card and replace the form with the verdict.
+  Progress projects the current lifecycle; Learn & next replaces empty scoreboards with
+  actionable record/prepare controls. No auto-posting, metric fabrication, new SQL or
+  parallel state. Desktop/mobile browser verification covered edit, copy failure feedback,
+  publish receipt, early-result verdict, Progress and Learn. 8 new tests; 309 offline tests,
+  typecheck, lint, format and production build green.
 - **2026-07-14**: **M18 — report → growth workspace.** Product contract first
   (`docs/M18-growth-workspace.md`). The same founder now moves automatically from **Launch
   mode** (no measured publish yet) to **Growth mode** (first experiment created). Today became

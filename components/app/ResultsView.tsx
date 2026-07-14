@@ -11,6 +11,7 @@ import { ReviewTab } from "@/components/app/results/ReviewTab";
 import { PublishDialog, type PublishDetails } from "@/components/app/results/PublishDialog";
 import { OutcomePanel } from "@/components/app/results/OutcomePanel";
 import { deriveToday, type TodayAction } from "@/lib/today";
+import { latestRelevantExperiment } from "@/lib/execution";
 import type {
   Experiment,
   Fact,
@@ -30,10 +31,8 @@ import type {
 type Surface = "today" | "plan" | "timeline" | "review";
 
 /**
- * The launch workspace (M15). Post-generation home is TODAY — at most three
- * actions; the full report, timeline, and weekly review each live one tap
- * away (progressive disclosure: nothing is inlined into Today). Publishing
- * and outcome dialogs are the only overlays, opened by their own actions.
+ * The M19 execution workspace. Today owns Prepare → Publish → Measure → Learn;
+ * Strategy, Progress and Learn & next are projections/reference surfaces.
  */
 export function ResultsView({
   result,
@@ -112,6 +111,7 @@ export function ResultsView({
     experimentId: string;
     checkpoint: OutcomeCheckpoint;
   } | null>(null);
+  const [notice, setNotice] = useState<{ title: string; detail: string } | null>(null);
 
   const today = useMemo(
     () => deriveToday({ launchDate, strategy, result, workspace }, new Date()),
@@ -139,7 +139,7 @@ export function ResultsView({
     },
     { id: "plan", label: "Strategy library", shortLabel: "Strategy" },
     { id: "timeline", label: "Progress" },
-    { id: "review", label: "Weekly review", shortLabel: "Review" },
+    { id: "review", label: "Learn & next", shortLabel: "Learn" },
   ];
 
   const publishContent = publishFor
@@ -147,6 +147,17 @@ export function ResultsView({
     : undefined;
   const outcomeExperiment = outcomeFor
     ? workspace.experiments.find((e) => e.id === outcomeFor.experimentId)
+    : undefined;
+  const activeExperiment = useMemo(() => latestRelevantExperiment(workspace), [workspace]);
+  const primaryExperiment = today.primaryAction.experimentId
+    ? workspace.experiments.find(
+        (experiment) => experiment.id === today.primaryAction.experimentId
+      )
+    : undefined;
+  const primaryContent = today.primaryAction.platformId
+    ? result.content.find(
+        (content) => content.platformId === today.primaryAction.platformId
+      )
     : undefined;
 
   function confirmPublish(details: PublishDetails) {
@@ -172,10 +183,18 @@ export function ResultsView({
       outcomes: [],
     };
     onPublishExperiment(experiment, `post:${publishContent.platformId}`);
+    setNotice({
+      title: `${publishContent.platformName} experiment started`,
+      detail: `Publish saved. The first useful result check opens ${new Date(
+        Date.now() + 24 * 60 * 60 * 1000
+      ).toLocaleString()}; Progress and Weekly Review now follow this experiment.`,
+    });
     setPublishFor(null);
+    setOutcomeFor(null);
+    setSurface("today");
   }
 
-  const skipTask = (a: TodayAction) =>
+  const skipTask = (a: TodayAction) => {
     onActTask({
       id: a.id,
       kind: a.kind === "record" ? "record" : a.kind === "post" ? "post" : "custom",
@@ -184,8 +203,13 @@ export function ResultsView({
       estMinutes: a.estMinutes,
       at: new Date().toISOString(),
     });
+    setNotice({
+      title: "Move skipped",
+      detail: "The workspace recalculated the next best available move.",
+    });
+  };
 
-  const doneCustom = (a: TodayAction) =>
+  const doneCustom = (a: TodayAction) => {
     onActTask({
       id: a.id,
       kind: "custom",
@@ -194,6 +218,26 @@ export function ResultsView({
       estMinutes: a.estMinutes,
       at: new Date().toISOString(),
     });
+    setNotice({
+      title: "Task completed",
+      detail: "Progress saved and the next move is ready.",
+    });
+  };
+
+  const recordEditor =
+    outcomeExperiment && outcomeFor ? (
+      <OutcomePanel
+        mode="inline"
+        experiment={outcomeExperiment}
+        checkpoint={outcomeFor.checkpoint}
+        strategy={strategy}
+        loading={loading}
+        onSave={(outcome) => onRecordOutcome(outcomeExperiment.id, outcome)}
+        onGenerateVariant={() => onGenerateVariant(outcomeExperiment)}
+        onStop={() => onStopExperiment(outcomeExperiment.id)}
+        onClose={() => setOutcomeFor(null)}
+      />
+    ) : undefined;
 
   return (
     <div className="space-y-6">
@@ -219,11 +263,14 @@ export function ResultsView({
           productName={profile?.name}
           primaryGoal={profile?.conversionGoal}
           loading={loading}
-          onPublish={(platformId) => {
+          onPublish={(platformId, requestedPostIdx) => {
             const content = result.content.find((c) => c.platformId === platformId);
             const firstUnposted =
               content?.posts.findIndex((_, i) => !posted[`${platformId}-${i}`]) ?? 0;
-            setPublishFor({ platformId, postIdx: Math.max(0, firstUnposted) });
+            setPublishFor({
+              platformId,
+              postIdx: requestedPostIdx ?? Math.max(0, firstUnposted),
+            });
           }}
           onRecord={(a) => {
             if (a.experimentId && a.checkpoint) {
@@ -234,11 +281,31 @@ export function ResultsView({
           onDoneCustom={doneCustom}
           onOpenContent={() => setSurface("plan")}
           onOpenReview={() => setSurface("review")}
-          onAskCopilot={(action) =>
+          onAskCopilot={(action, direction) =>
             onAskCopilot(
-              `Help me execute my current next best move: “${action.title}”. Explain the sharpest way to do it for this product, use evidence from my plan, and propose only changes I can review before applying.`
+              direction
+                ? `My current next best move is “${action.title}”. ${direction} Use evidence from my plan and propose only changes I can review before applying.`
+                : `Help me execute my current next best move: “${action.title}”. Explain the sharpest way to do it for this product, use evidence from my plan, and propose only changes I can review before applying.`
             )
           }
+          onRegenerate={onRegenerate}
+          onUpdatePost={onUpdatePost}
+          primaryContent={primaryContent}
+          posted={posted}
+          activeExperiment={activeExperiment}
+          primaryExperiment={primaryExperiment}
+          notice={notice}
+          onDismissNotice={() => setNotice(null)}
+          recordEditor={recordEditor}
+          onAskExperiment={(experiment) =>
+            onAskCopilot(
+              `For my active ${experiment.platformName} experiment, tell me exactly what to measure at the next check-in and how each signal changes the decision. Do not invent results.`
+            )
+          }
+          onRecordEarly={(experiment) =>
+            setOutcomeFor({ experimentId: experiment.id, checkpoint: "manual" })
+          }
+          onOpenProgress={() => setSurface("timeline")}
           emailRemindersAvailable={emailRemindersAvailable}
           emailRemindersEnabled={workspace.reminderPreferences?.email === true}
           onToggleEmailReminders={(enabled) =>
@@ -281,10 +348,31 @@ export function ResultsView({
         />
       )}
 
-      {surface === "timeline" && !printing && <TimelineTab workspace={workspace} />}
+      {surface === "timeline" && !printing && (
+        <TimelineTab workspace={workspace} activeExperiment={activeExperiment} />
+      )}
 
       {surface === "review" && !printing && (
-        <ReviewTab workspace={workspace} strategy={strategy} />
+        <ReviewTab
+          workspace={workspace}
+          strategy={strategy}
+          onGoToday={() => setSurface("today")}
+          onRecord={(experimentId, checkpoint) => {
+            setOutcomeFor({ experimentId, checkpoint });
+            setSurface("today");
+          }}
+          onSchedule={(platformId) => {
+            const content = result.content.find(
+              (candidate) => candidate.platformId === platformId
+            );
+            if (content?.posts.length) {
+              setPublishFor({ platformId, postIdx: 0 });
+            } else {
+              onAddChannel(platformId);
+              setSurface("plan");
+            }
+          }}
+        />
       )}
 
       {publishFor && publishContent && (
@@ -296,19 +384,6 @@ export function ResultsView({
           defaultPostIdx={publishFor.postIdx}
           onConfirm={confirmPublish}
           onClose={() => setPublishFor(null)}
-        />
-      )}
-
-      {outcomeFor && outcomeExperiment && (
-        <OutcomePanel
-          experiment={outcomeExperiment}
-          checkpoint={outcomeFor.checkpoint}
-          strategy={strategy}
-          loading={loading}
-          onSave={(outcome) => onRecordOutcome(outcomeExperiment.id, outcome)}
-          onGenerateVariant={() => onGenerateVariant(outcomeExperiment)}
-          onStop={() => onStopExperiment(outcomeExperiment.id)}
-          onClose={() => setOutcomeFor(null)}
         />
       )}
     </div>

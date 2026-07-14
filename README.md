@@ -129,7 +129,7 @@ The north star metric is **completed learning loops per week** — published →
 | --- | --- | --- |
 | UI | `components/` | Presentational only — no fetches, no business rules |
 | State | `hooks/launchFlowReducer.ts` | One pure reducer; `normalize()` makes contradictory plan states unrepresentable |
-| Engines | `lib/facts.ts` · `scoring.ts` · `growth.ts` · `today.ts` · `copilotActions.ts` | Deterministic logic: fact verification, score math, lifecycle/goal derivation, next-best-move ordering, action validation |
+| Engines | `lib/facts.ts` · `scoring.ts` · `growth.ts` · `today.ts` · `execution.ts` · `copilotActions.ts` | Deterministic logic: fact verification, score math, lifecycle/goal derivation, next-best-move ordering, visible execution state, action validation |
 | Model seam | `lib/llm.ts` | Three providers behind one function; JSON repair; failover only through clear-policy providers |
 | Trust & safety | `lib/validate.ts` · `safeFetch.ts` · `urlPolicy.ts` · `log.ts` | zod on every body, SSRF policy, redacting log sink (`no-console` enforced) |
 | Persistence | `lib/storage.ts` · `useAutosave.ts` · `supabase/` | Versioned drafts with migrations; RLS-scoped rows; account-switch hard boundary |
@@ -146,7 +146,7 @@ A full architecture map lives in [AGENTS.md](./AGENTS.md); design docs for the t
 
 ```bash
 npm run typecheck        # tsc --noEmit (strict)
-npm test                 # 301 offline tests — no API keys needed
+npm test                 # 309 offline tests — no API keys needed
 npm run lint             # eslint (flat config) incl. no-console
 npm run format:check     # prettier
 npm run build            # must stay green
