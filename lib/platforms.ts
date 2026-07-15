@@ -312,4 +312,25 @@ export function getPlatforms(ids: string[]): PlatformDef[] {
   return PLATFORMS.filter((p) => ids.includes(p.id));
 }
 
+/** Channels where an authored first comment/reply is a real native mechanic.
+ * Pitch emails, listings, READMEs and standalone articles deliberately return
+ * false so the generator cannot manufacture a fake "thread" playbook. */
+const THREAD_REPLY_PLATFORMS = new Set([
+  "producthunt",
+  "hackernews",
+  "devto",
+  "indiehackers",
+  "twitter",
+  "linkedin",
+  "reddit",
+  "threads",
+  "youtube",
+  "discord-slack",
+  "lobsters",
+]);
+
+export function platformSupportsThreadReplies(platformId: string): boolean {
+  return THREAD_REPLY_PLATFORMS.has(platformId);
+}
+
 // Compact view for the strategist prompt (keeps tokens down).

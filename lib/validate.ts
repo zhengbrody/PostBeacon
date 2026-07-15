@@ -111,6 +111,7 @@ const profileSchema = z.object({
   stage: s(500).optional(),
   conversionGoal: s(500).optional(),
   assets: s(1000).optional(),
+  publisherVoice: z.enum(["brand", "founder"]).optional(),
 });
 
 /** Fact Ledger entries as the wire accepts them (M13). The server re-derives

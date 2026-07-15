@@ -65,6 +65,24 @@ describe("fact faithfulness enforcement (verifyFacts)", () => {
     expect(f.evidence).toBe("$6 per seat per month");
   });
 
+  it("uses an exact on-page claim when the model paraphrases its evidence field", () => {
+    const facts = verifyFacts(
+      [
+        {
+          field: "pricing",
+          claim: "$6 per seat per month",
+          status: "observed",
+          evidence: "roughly six dollars for each teammate",
+          confidence: 0.9,
+        },
+      ],
+      page
+    );
+    const f = facts.find((item) => item.field === "pricing")!;
+    expect(f.status).toBe("observed");
+    expect(f.evidence).toBe("$6 per seat per month");
+  });
+
   it("demotes a fabricated 'observed' quote to inferred (the model cannot lie its way to observed)", () => {
     const facts = verifyFacts(
       [

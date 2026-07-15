@@ -1,17 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { PriorityBadge } from "@/components/ui/Badge";
 import { postsToMarkdown } from "@/lib/export";
+import { unsafeDraftCount } from "@/lib/contentSafety";
 import { PrintHeading } from "./PrintHeading";
 import { ChannelBlock } from "./ChannelBlock";
 import type {
   GenerateResult,
+  Fact,
   MarketingStrategy,
   PlatformContent,
   PlatformPost,
   PlatformRecommendation,
+  ProductProfile,
 } from "@/lib/types";
 
 /** Master-detail content library: pick a channel on the left, work its posts
@@ -20,6 +23,8 @@ export function ContentTab({
   orderedContent,
   result,
   strategy,
+  facts,
+  profile,
   posted,
   loading,
   demo,
@@ -35,6 +40,8 @@ export function ContentTab({
   orderedContent: PlatformContent[];
   result: GenerateResult;
   strategy: MarketingStrategy | null;
+  facts: Fact[];
+  profile: ProductProfile;
   posted: Record<string, boolean>;
   loading: boolean;
   demo: boolean;
@@ -53,6 +60,15 @@ export function ContentTab({
   const [activeId, setActiveId] = useState<string | null>(null);
   const [addPick, setAddPick] = useState("");
   const [copiedAll, setCopiedAll] = useState(false);
+  const unsafeCount = useMemo(
+    () =>
+      unsafeDraftCount(
+        result.content.flatMap((item) => item.posts),
+        facts,
+        profile
+      ),
+    [result.content, facts, profile]
+  );
 
   // Self-heals when the active channel is removed.
   const current =
@@ -67,6 +83,7 @@ export function ContentTab({
   );
 
   async function copyAllPosts() {
+    if (unsafeCount > 0) return;
     await navigator.clipboard.writeText(postsToMarkdown(result));
     setCopiedAll(true);
     setTimeout(() => setCopiedAll(false), 1500);
@@ -76,6 +93,8 @@ export function ContentTab({
     <ChannelBlock
       key={c.platformId}
       content={c}
+      facts={facts}
+      profile={profile}
       rec={recFor(c.platformId)}
       posted={posted}
       loading={loading}
@@ -96,10 +115,29 @@ export function ContentTab({
         <h2 className="text-sm font-semibold uppercase tracking-wide text-accent-300">
           Content library
         </h2>
-        <Button size="sm" variant="outline" className="no-print" onClick={copyAllPosts}>
+        <Button
+          size="sm"
+          variant="outline"
+          className="no-print"
+          disabled={unsafeCount > 0}
+          title={
+            unsafeCount > 0
+              ? `Fix ${unsafeCount} draft${unsafeCount === 1 ? "" : "s"} before copying all`
+              : undefined
+          }
+          onClick={copyAllPosts}
+        >
           {copiedAll ? "Copied!" : "⧉ Copy all posts"}
         </Button>
       </div>
+
+      {unsafeCount > 0 && (
+        <div className="no-print mb-4 rounded-lg border border-amber-800/70 bg-amber-950/20 px-3 py-2 text-xs text-amber-200">
+          {unsafeCount} generated {unsafeCount === 1 ? "draft needs" : "drafts need"} a
+          truth fix. Open each flagged draft to edit or regenerate it; bulk copy stays
+          locked until all pass.
+        </div>
+      )}
 
       {/* print:block — with the aside hidden on paper, the grid column would
           otherwise squeeze the content into the 16rem sidebar track */}

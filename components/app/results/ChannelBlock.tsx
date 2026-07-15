@@ -5,12 +5,21 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Field } from "@/components/ui/Field";
 import { PostCard } from "./PostCard";
-import type { PlatformContent, PlatformPost, PlatformRecommendation } from "@/lib/types";
+import { platformSupportsThreadReplies } from "@/lib/platforms";
+import type {
+  Fact,
+  PlatformContent,
+  PlatformPost,
+  PlatformRecommendation,
+  ProductProfile,
+} from "@/lib/types";
 
 /** One channel's working area: header (meta + regenerate/remove), editable
  *  angle/best-move, playbook, posts, seed replies. */
 export function ChannelBlock({
   content,
+  facts,
+  profile,
   rec,
   posted,
   loading,
@@ -23,6 +32,8 @@ export function ChannelBlock({
   onRequestPublish,
 }: {
   content: PlatformContent;
+  facts: Fact[];
+  profile: ProductProfile;
   rec?: PlatformRecommendation;
   posted: Record<string, boolean>;
   loading: boolean;
@@ -139,6 +150,8 @@ export function ChannelBlock({
             <PostCard
               key={id}
               post={post}
+              facts={facts}
+              profile={profile}
               posted={!!posted[id]}
               onTogglePosted={() => onTogglePosted(id)}
               onPublish={() => onRequestPublish(i)}
@@ -148,29 +161,36 @@ export function ChannelBlock({
         })}
       </div>
 
-      {pb && (pb.firstReplies.length > 0 || pb.postingWindow) && (
-        <Card className="mt-4 bg-surface-2/40 p-4 text-xs">
-          {pb.postingWindow && (
-            <p className="text-neutral-400">
-              <span className="text-neutral-500">⏰ Post during:</span> {pb.postingWindow}
-            </p>
-          )}
-          {pb.firstReplies.length > 0 && (
-            <div className={pb.postingWindow ? "mt-3" : ""}>
-              <div className="mb-1.5 font-medium text-neutral-300">
-                First replies to seed the thread
-              </div>
-              <ul className="space-y-1.5">
-                {pb.firstReplies.map((r, i) => (
-                  <li key={i} className="rounded-md bg-surface px-3 py-2 text-neutral-300">
-                    {r}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </Card>
-      )}
+      {pb &&
+        (pb.postingWindow ||
+          (platformSupportsThreadReplies(content.platformId) &&
+            pb.firstReplies.length > 0)) && (
+          <Card className="mt-4 bg-surface-2/40 p-4 text-xs">
+            {pb.postingWindow && (
+              <p className="text-neutral-400">
+                <span className="text-neutral-500">⏰ Post during:</span> {pb.postingWindow}
+              </p>
+            )}
+            {platformSupportsThreadReplies(content.platformId) &&
+              pb.firstReplies.length > 0 && (
+                <div className={pb.postingWindow ? "mt-3" : ""}>
+                  <div className="mb-1.5 font-medium text-neutral-300">
+                    Conversation starters for real replies
+                  </div>
+                  <ul className="space-y-1.5">
+                    {pb.firstReplies.map((r, i) => (
+                      <li
+                        key={i}
+                        className="rounded-md bg-surface px-3 py-2 text-neutral-300"
+                      >
+                        {r}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+          </Card>
+        )}
     </div>
   );
 }

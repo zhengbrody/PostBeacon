@@ -79,6 +79,9 @@ export interface ProductProfile {
   stage?: string; // where the product is right now (pre-launch / launched / growing)
   conversionGoal?: string; // the single conversion that matters most right now
   assets?: string; // existing audience / assets / constraints
+  /** Who the generated copy is allowed to speak as. Brand is the safe default:
+   * it cannot invent a founder biography in order to sound human. */
+  publisherVoice?: "brand" | "founder";
 }
 
 export interface PlatformPost {

@@ -112,9 +112,15 @@ export function auditFacts(
       status = "unknown";
       claim = "";
       confidence = 0;
-    } else if (proposed === "observed" && quoteAppearsOnPage(evidence, page)) {
+    } else if (
+      proposed === "observed" &&
+      (quoteAppearsOnPage(evidence, page) || quoteAppearsOnPage(claim, page))
+    ) {
       status = "observed";
-      keptEvidence = evidence;
+      // Models sometimes paraphrase the evidence field while copying the claim
+      // exactly from the page. The claim itself is safe evidence only when the
+      // same strict code check verifies it against the scraped corpus.
+      keptEvidence = quoteAppearsOnPage(evidence, page) ? evidence : claim;
       sourceUrl = page.url;
       confidence = Math.max(confidence, 0.8);
     } else {

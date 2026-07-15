@@ -93,9 +93,9 @@ function AppFlow({
     null
   );
   const copilotRequestId = useRef(0);
-  const openCopilot = (prompt: string) => {
+  const openCopilot = (prompt: string, targetPlatformId?: string) => {
     copilotRequestId.current += 1;
-    setCopilotOpenRequest({ id: copilotRequestId.current, prompt });
+    setCopilotOpenRequest({ id: copilotRequestId.current, prompt, targetPlatformId });
   };
   const reachable: Step[] = ["input"];
   if (f.profile) reachable.push("profile");
@@ -177,7 +177,9 @@ function AppFlow({
         <div className="space-y-6">
           <FactLedger
             facts={f.facts}
-            questions={f.questions}
+            // The growth goal has one home in LaunchSetup below. Keeping the
+            // same question in two adjacent cards made the intake feel broken.
+            questions={f.questions.filter((question) => question.id !== "conversionGoal")}
             onConfirm={f.confirmFact}
             onCorrect={f.correctFact}
             onDelete={f.deleteFact}
@@ -191,6 +193,11 @@ function AppFlow({
             primaryGoal={f.profile.conversionGoal}
             stage={f.profile.stage}
             setPrimaryGoal={(goal) => f.answerQuestion("conversionGoal", goal)}
+            publisherVoice={f.profile.publisherVoice}
+            setPublisherVoice={(publisherVoice) => {
+              const profile = f.profile;
+              if (profile) f.setProfile({ ...profile, publisherVoice });
+            }}
           />
           <ProfileForm
             profile={f.profile}

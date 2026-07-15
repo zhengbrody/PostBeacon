@@ -3,8 +3,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { ExecutionProgress } from "./ExecutionProgress";
+import { DraftSafetyNotice } from "./DraftSafetyNotice";
 import { publishDestination, type ExecutionStep } from "@/lib/execution";
-import type { PlatformContent, PlatformPost } from "@/lib/types";
+import { auditDraftSafety } from "@/lib/contentSafety";
+import type { Fact, PlatformContent, PlatformPost, ProductProfile } from "@/lib/types";
 
 const PREPARE_STEPS: ExecutionStep[] = [
   { id: "prepare", label: "Prepare", done: true, active: false },
@@ -15,6 +17,8 @@ const PREPARE_STEPS: ExecutionStep[] = [
 
 export function InlinePostWorkbench({
   content,
+  facts,
+  profile,
   posted,
   loading,
   onUpdatePost,
@@ -24,6 +28,8 @@ export function InlinePostWorkbench({
   onOpenLibrary,
 }: {
   content: PlatformContent;
+  facts: Fact[];
+  profile: ProductProfile;
   posted: Record<string, boolean>;
   loading: boolean;
   onUpdatePost: (platformId: string, idx: number, patch: Partial<PlatformPost>) => void;
@@ -63,10 +69,16 @@ export function InlinePostWorkbench({
 
   if (!post) return null;
 
+  const safety = auditDraftSafety(post, facts, profile);
+
   const update = (patch: Partial<PlatformPost>) =>
     onUpdatePost(content.platformId, postIdx, patch);
 
   async function copyDraft() {
+    if (!safety.ready) {
+      setFeedback("Truth check blocked copying — edit the highlighted claim first.");
+      return;
+    }
     setFeedback("Copying draft…");
     try {
       if (!navigator.clipboard?.writeText) throw new Error("Clipboard unavailable");
@@ -192,6 +204,8 @@ export function InlinePostWorkbench({
         </div>
       </div>
 
+      <DraftSafetyNotice report={safety} />
+
       <div
         className="rounded-lg border border-accent-800/60 bg-accent-950/30 px-3 py-2 text-xs text-accent-200"
         role="status"
@@ -201,7 +215,12 @@ export function InlinePostWorkbench({
       </div>
 
       <div className="flex flex-wrap gap-2">
-        <Button variant="outline" onClick={copyDraft}>
+        <Button
+          variant="outline"
+          disabled={!safety.ready}
+          title={!safety.ready ? "Fix the truth-check issues before copying" : undefined}
+          onClick={copyDraft}
+        >
           Copy draft
         </Button>
         <Button
@@ -220,7 +239,11 @@ export function InlinePostWorkbench({
         <Button variant="outline" onClick={openPlatform}>
           Open {content.platformName}
         </Button>
-        <Button disabled={loading} onClick={() => onPublish(content.platformId, postIdx)}>
+        <Button
+          disabled={loading || !safety.ready}
+          title={!safety.ready ? "Fix the truth-check issues before publishing" : undefined}
+          onClick={() => onPublish(content.platformId, postIdx)}
+        >
           I published it →
         </Button>
       </div>

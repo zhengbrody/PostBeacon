@@ -4,17 +4,23 @@ import { useMemo, useState } from "react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Field } from "@/components/ui/Field";
-import type { PlatformPost } from "@/lib/types";
+import { auditDraftSafety } from "@/lib/contentSafety";
+import { DraftSafetyNotice } from "./DraftSafetyNotice";
+import type { Fact, PlatformPost, ProductProfile } from "@/lib/types";
 
 /** One ready-to-post draft: copy, inline edit, A/B hook chips, posted mark. */
 export function PostCard({
   post,
+  facts,
+  profile,
   posted,
   onTogglePosted,
   onPublish,
   onUpdate,
 }: {
   post: PlatformPost;
+  facts: Fact[];
+  profile: ProductProfile;
   posted: boolean;
   onTogglePosted: () => void; // un-mark only (the experiment record stays)
   onPublish: () => void; // marking published goes through the experiment dialog
@@ -22,8 +28,13 @@ export function PostCard({
 }) {
   const [copied, setCopied] = useState(false);
   const [editing, setEditing] = useState(false);
+  const safety = useMemo(
+    () => auditDraftSafety(post, facts, profile),
+    [post, facts, profile]
+  );
 
   async function copy() {
+    if (!safety.ready) return;
     await navigator.clipboard.writeText(`${post.hook}\n\n${post.body}`);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
@@ -91,8 +102,17 @@ export function PostCard({
         </>
       )}
 
+      <div className="no-print mt-4">
+        <DraftSafetyNotice report={safety} />
+      </div>
+
       <div className="no-print mt-4 flex flex-wrap gap-2">
-        <Button size="sm" onClick={copy}>
+        <Button
+          size="sm"
+          disabled={!safety.ready}
+          title={!safety.ready ? "Fix the truth-check issues before copying" : undefined}
+          onClick={copy}
+        >
           {copied ? "Copied!" : "Copy"}
         </Button>
         <Button size="sm" variant="outline" onClick={() => setEditing((e) => !e)}>
@@ -101,6 +121,12 @@ export function PostCard({
         <Button
           size="sm"
           variant={posted ? "primary" : "outline"}
+          disabled={!posted && !safety.ready}
+          title={
+            !posted && !safety.ready
+              ? "Fix the truth-check issues before starting an experiment"
+              : undefined
+          }
           onClick={posted ? onTogglePosted : onPublish}
           className={posted ? "bg-emerald-700 hover:bg-emerald-600" : ""}
         >

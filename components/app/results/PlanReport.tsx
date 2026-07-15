@@ -131,11 +131,13 @@ export function PlanReport({
         />
       )}
 
-      {show("content") && (
+      {show("content") && profile && (
         <ContentTab
           orderedContent={orderedContent}
           result={result}
           strategy={strategy}
+          facts={facts}
+          profile={profile}
           posted={posted}
           loading={loading}
           demo={demo}

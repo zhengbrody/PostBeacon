@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/Button";
 import { Spinner } from "@/components/ui/Spinner";
 import { api, type ApiError } from "@/lib/api";
 import { PROVIDER_PRIVACY, providerFallbackNotice } from "@/lib/privacy";
+import { platformSupportsThreadReplies } from "@/lib/platforms";
 import { buildBriefing, type Briefing } from "@/lib/today";
 import {
   applyKindOf,
@@ -48,6 +49,7 @@ interface PanelMessage {
 export interface CopilotOpenRequest {
   id: number;
   prompt: string;
+  targetPlatformId?: string;
 }
 
 const QUICK_ACTIONS: { label: string; action: CopilotAction }[] = [
@@ -171,8 +173,14 @@ export function CopilotPanel({
     setOpen(true);
     setView("chat");
     setFeedbackMode(false);
+    if (
+      openRequest.targetPlatformId &&
+      result.content.some((content) => content.platformId === openRequest.targetPlatformId)
+    ) {
+      setTarget(openRequest.targetPlatformId);
+    }
     setInput(openRequest.prompt);
-  }, [openRequest]);
+  }, [openRequest, result.content]);
 
   // Proactive opener: a deterministic briefing computed from the plan —
   // instant, costless, and it can't hallucinate.
@@ -485,16 +493,18 @@ export function CopilotPanel({
                     >
                       Rewrite
                     </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={busy || !validTarget}
-                      onClick={() =>
-                        send("first-replies", `First replies for ${targetName}`)
-                      }
-                    >
-                      First replies
-                    </Button>
+                    {platformSupportsThreadReplies(validTarget) && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={busy || !validTarget}
+                        onClick={() =>
+                          send("first-replies", `Conversation starters for ${targetName}`)
+                        }
+                      >
+                        Conversation starters
+                      </Button>
+                    )}
                   </>
                 )}
               </div>
@@ -553,6 +563,8 @@ export function CopilotPanel({
       {publishFor && publishContent && (
         <PublishDialog
           content={publishContent}
+          facts={facts}
+          profile={profile}
           rec={strategy.recommendations.find((r) => r.platformId === publishFor.platformId)}
           defaultPostIdx={publishFor.postIdx}
           initialCommunity={publishFor.community}

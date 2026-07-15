@@ -23,6 +23,8 @@ export function LaunchSetup({
   primaryGoal,
   stage,
   setPrimaryGoal,
+  publisherVoice,
+  setPublisherVoice,
 }: {
   launchDate: string;
   setLaunchDate: (v: string) => void;
@@ -31,6 +33,8 @@ export function LaunchSetup({
   primaryGoal?: string;
   stage?: string;
   setPrimaryGoal: (goal: string) => void;
+  publisherVoice?: "brand" | "founder";
+  setPublisherVoice: (voice: "brand" | "founder") => void;
 }) {
   const recommended = recommendedPrimaryGoal(stage);
   const customGoal =
@@ -121,6 +125,51 @@ export function LaunchSetup({
           <span className="mt-1 block text-[11px] text-neutral-600">
             Today&apos;s action list budgets itself against this.
           </span>
+        </div>
+      </div>
+
+      <div className="mt-5 border-t border-line pt-5">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+          Publishing voice
+        </h3>
+        <p className="mt-1 text-xs text-neutral-500">
+          This controls who the drafts are allowed to speak as. It never invents a biography
+          to make a post sound personal.
+        </p>
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          {(
+            [
+              {
+                id: "brand",
+                label: "Brand voice · safe default",
+                detail: "Product/team language. No personal stories or credentials.",
+              },
+              {
+                id: "founder",
+                label: "Founder voice",
+                detail: "First person is allowed, but only with confirmed facts.",
+              },
+            ] as const
+          ).map((voice) => {
+            const selected = (publisherVoice ?? "brand") === voice.id;
+            return (
+              <button
+                type="button"
+                key={voice.id}
+                onClick={() => setPublisherVoice(voice.id)}
+                className={`rounded-lg border p-3 text-left transition-colors ${
+                  selected
+                    ? "border-accent-500 bg-accent-600/15"
+                    : "border-line bg-surface-2 hover:border-neutral-600"
+                }`}
+              >
+                <span className="block text-sm font-medium text-neutral-100">
+                  {voice.label}
+                </span>
+                <span className="mt-1 block text-xs text-neutral-500">{voice.detail}</span>
+              </button>
+            );
+          })}
         </div>
       </div>
     </Card>

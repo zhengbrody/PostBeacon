@@ -2,7 +2,7 @@ import { generateJsonMeta } from "./llm";
 import { asRecord, asRecordList, asStringList } from "./coerce";
 import { ANTI_AI_RULES } from "./voice";
 import { factsForPrompt } from "./facts";
-import type { PlatformDef } from "./platforms";
+import { platformSupportsThreadReplies, type PlatformDef } from "./platforms";
 import type {
   Fact,
   GenerationMeta,
@@ -13,7 +13,7 @@ import type {
 } from "./types";
 
 /** Bump when the content prompt changes (recorded on every output). */
-export const GENERATE_PROMPT_VERSION = "g2";
+export const GENERATE_PROMPT_VERSION = "g3";
 
 export interface PlatformGeneration {
   posts: PlatformPost[];
@@ -36,11 +36,19 @@ export async function generatePlatformPosts(
   facts: Fact[] = []
 ): Promise<PlatformGeneration> {
   const ledger = factsForPrompt(facts);
+  const publisherVoice = profile.publisherVoice ?? "brand";
+  const voiceInstruction =
+    publisherVoice === "founder"
+      ? "Write as the founder. First person may describe building this product, but never invent the founder's job, biography, past losses, conversations, credentials, users, or experiences."
+      : "Write in the product's brand voice. Do not use first-person singular (I/me/my) and do not impersonate a founder, customer, investor, analyst, or adviser.";
+  const supportsThreadReplies = platformSupportsThreadReplies(p.id);
   const { data, meta: callMeta } = await generateJsonMeta({
     provider,
     maxTokens: p.maxTokens ?? 2800,
-    system: `You are a founder who is genuinely good at writing for ${p.name} — not an agency, not a marketer. ${p.guidance}
+    system: `You write genuinely useful native content for ${p.name} — not agency copy. ${p.guidance}
 ${p.persona ? `\nWrite as: ${p.persona}` : ""}
+
+PUBLISHER VOICE: ${publisherVoice}. ${voiceInstruction}
 
 The product's own voice is: ${profile.tone || "clear, specific, human"}. Blend it with how people really write on ${p.name} — the platform's native format wins, the product's personality only colors word choice.
 
@@ -48,7 +56,7 @@ ${ANTI_AI_RULES}
 
 Competitor test: if a sentence could describe a competitor unchanged, add a product-specific fact or cut it.${
       ledger
-        ? "\n\nFact discipline: state ESTABLISHED facts freely; hedge INFERRED ones; never invent numbers, users, or claims — where a specific is missing, write a [fill in: …] placeholder instead."
+        ? "\n\nFact discipline: state ESTABLISHED facts freely; hedge INFERRED ones; never invent numbers, identities, quotes, experiences, users, limitations, or outcome claims. If a specific is missing, remove the unsupported sentence — NEVER leave a placeholder in ready-to-post copy."
         : ""
     }`,
     user: `PRODUCT PROFILE:
@@ -81,7 +89,7 @@ Field notes:
 - "whyThisPlatform": one or two plain sentences on why this channel fits THIS product
 - "howToPost": the concrete mechanics — where exactly to post, format, what to lead with
 - "whatToAvoid": the move that gets you flagged or ignored on ${p.name}
-- "firstReplies": 2-3 short replies the founder can drop in the comments to seed real discussion (in the founder's own voice, not salesy)
+- "firstReplies": ${supportsThreadReplies ? "2-3 short, truthful comments/replies that continue a real discussion without pretending another person spoke" : "MUST be [] because this channel has no native founder-seeded thread; put the real follow-up mechanic in howToPost instead"}
 - "postingWindow": the specific best window to post (default to "${p.bestTime}")`,
   });
 
@@ -99,7 +107,7 @@ Field notes:
     whyThisPlatform: String(pb.whyThisPlatform || ""),
     howToPost: String(pb.howToPost || ""),
     whatToAvoid: String(pb.whatToAvoid || ""),
-    firstReplies: asStringList(pb.firstReplies, 3),
+    firstReplies: supportsThreadReplies ? asStringList(pb.firstReplies, 3) : [],
     postingWindow: String(pb.postingWindow || p.bestTime),
   };
 

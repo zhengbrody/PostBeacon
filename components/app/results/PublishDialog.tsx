@@ -5,8 +5,15 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Field } from "@/components/ui/Field";
 import { ExecutionProgress } from "./ExecutionProgress";
+import { DraftSafetyNotice } from "./DraftSafetyNotice";
+import { auditDraftSafety } from "@/lib/contentSafety";
 import type { ExecutionStep } from "@/lib/execution";
-import type { PlatformContent, PlatformRecommendation } from "@/lib/types";
+import type {
+  Fact,
+  PlatformContent,
+  PlatformRecommendation,
+  ProductProfile,
+} from "@/lib/types";
 
 const PUBLISH_STEPS: ExecutionStep[] = [
   { id: "prepare", label: "Prepare", done: true, active: false },
@@ -29,6 +36,8 @@ export interface PublishDetails {
  */
 export function PublishDialog({
   content,
+  facts,
+  profile,
   rec,
   defaultPostIdx,
   initialCommunity,
@@ -37,6 +46,8 @@ export function PublishDialog({
   onClose,
 }: {
   content: PlatformContent;
+  facts: Fact[];
+  profile: ProductProfile;
   rec?: PlatformRecommendation;
   defaultPostIdx: number;
   /** Optional prefills (e.g. from a confirmed create_experiment proposal). */
@@ -53,6 +64,10 @@ export function PublishDialog({
     Math.min(defaultPostIdx, Math.max(0, content.posts.length - 1))
   );
   const [trackedUrl, setTrackedUrl] = useState("");
+  const selectedPost = content.posts[postIdx];
+  const safety = selectedPost
+    ? auditDraftSafety(selectedPost, facts, profile)
+    : { ready: false, issues: [] };
 
   return (
     <div
@@ -95,6 +110,12 @@ export function PublishDialog({
           </label>
         )}
 
+        {selectedPost && (
+          <div className="mb-4">
+            <DraftSafetyNotice report={safety} />
+          </div>
+        )}
+
         <div className="space-y-3">
           <Field
             label="Community / venue (where exactly)"
@@ -113,6 +134,8 @@ export function PublishDialog({
 
         <div className="mt-5 flex gap-2">
           <Button
+            disabled={!safety.ready}
+            title={!safety.ready ? "Fix the truth-check issues before tracking" : undefined}
             onClick={() =>
               onConfirm({
                 community: community.trim(),

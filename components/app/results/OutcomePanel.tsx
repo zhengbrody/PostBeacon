@@ -85,19 +85,22 @@ export function OutcomePanel({
     (v) => v.trim() !== ""
   );
 
-  function save() {
+  function save(preset?: "zero") {
+    const noResponse = preset === "zero";
     onSave({
       id: crypto.randomUUID(),
       checkpoint,
       recordedAt: new Date().toISOString(),
       // Absent means "not measured" — never coerced to 0 (parseMetric also
       // rejects NaN/Infinity from pasted values like "12,000" or "1e999").
-      impressions: parseMetric(impressions),
-      replies: parseMetric(replies),
-      clicks: parseMetric(clicks),
-      signups: parseMetric(signups),
-      revenue: parseMetric(revenue),
-      qualitativeFeedback: qualitative.trim() || undefined,
+      impressions: noResponse ? 0 : parseMetric(impressions),
+      replies: noResponse ? 0 : parseMetric(replies),
+      clicks: noResponse ? 0 : parseMetric(clicks),
+      signups: noResponse ? 0 : parseMetric(signups),
+      revenue: noResponse ? 0 : parseMetric(revenue),
+      qualitativeFeedback: noResponse
+        ? "Checked this checkpoint: no measurable response."
+        : qualitative.trim() || undefined,
     });
     setPhase("feedback");
   }
@@ -143,6 +146,24 @@ export function OutcomePanel({
               Open the live post →
             </a>
           )}
+          <div className="mb-4 rounded-lg border border-line bg-surface-2/40 p-3">
+            <div className="text-xs font-medium text-neutral-300">
+              Nothing happened? Record that honestly in one click.
+            </div>
+            <p className="mt-1 text-[11px] leading-relaxed text-neutral-500">
+              Use this only after checking the live post. It records observed zeros; it does
+              not invent reach or engagement.
+            </p>
+            <Button
+              size="sm"
+              variant="outline"
+              className="mt-2"
+              disabled={loading}
+              onClick={() => save("zero")}
+            >
+              No measurable response
+            </Button>
+          </div>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             <NumField label="Impressions" value={impressions} onChange={setImpressions} />
             <NumField label="Replies" value={replies} onChange={setReplies} />
@@ -160,7 +181,7 @@ export function OutcomePanel({
             />
           </label>
           <div className="mt-5 flex gap-2">
-            <Button disabled={!anyFilled} onClick={save}>
+            <Button disabled={!anyFilled} onClick={() => save()}>
               Save & get the read
             </Button>
             <Button variant="outline" onClick={onClose}>

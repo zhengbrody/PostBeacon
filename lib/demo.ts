@@ -45,6 +45,7 @@ const profile: ProductProfile = {
     "Your nightly Stripe reconciliation throws on a weekend. Cronwise texts you at 2am instead of you finding mismatched invoices on Monday.",
   confidence: "high",
   confidenceNote: "",
+  publisherVoice: "founder",
 };
 
 // The demo ledger shows every provenance state the real pipeline produces:

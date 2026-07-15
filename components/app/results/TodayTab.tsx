@@ -7,7 +7,13 @@ import { ExecutionProgress } from "./ExecutionProgress";
 import { InlinePostWorkbench } from "./InlinePostWorkbench";
 import { experimentLifecycle } from "@/lib/execution";
 import type { TodayAction, TodayView } from "@/lib/today";
-import type { Experiment, PlatformContent, PlatformPost } from "@/lib/types";
+import type {
+  Experiment,
+  Fact,
+  PlatformContent,
+  PlatformPost,
+  ProductProfile,
+} from "@/lib/types";
 
 interface TodayActions {
   loading: boolean;
@@ -177,6 +183,8 @@ export function TodayTab({
   view,
   productName,
   primaryGoal,
+  facts,
+  profile,
   emailRemindersAvailable,
   emailRemindersEnabled,
   onToggleEmailReminders,
@@ -195,6 +203,8 @@ export function TodayTab({
   view: TodayView;
   productName?: string;
   primaryGoal?: string;
+  facts: Fact[];
+  profile?: ProductProfile | null;
   emailRemindersAvailable: boolean;
   emailRemindersEnabled: boolean;
   onToggleEmailReminders: (enabled: boolean) => void;
@@ -326,9 +336,11 @@ export function TodayTab({
           </p>
           {recordEditor ? (
             <div className="mt-5 border-t border-line pt-5">{recordEditor}</div>
-          ) : primary.kind === "post" && primaryContent ? (
+          ) : primary.kind === "post" && primaryContent && profile ? (
             <InlinePostWorkbench
               content={primaryContent}
+              facts={facts}
+              profile={profile}
               posted={posted}
               loading={handlers.loading}
               onUpdatePost={handlers.onUpdatePost}

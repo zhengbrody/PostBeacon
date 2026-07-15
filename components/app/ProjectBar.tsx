@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import { downloadFile } from "@/lib/export";
 import { clearDraft } from "@/lib/storage";
 import { supabaseConfigured } from "@/lib/supabase/client";
+import { projectIdentity } from "@/lib/projectIdentity";
 import { Button } from "@/components/ui/Button";
 import { AccountName, SignIn, useSupabaseUser } from "./SignIn";
 import type { Fact, GenerateResult, MarketingStrategy, ProductProfile } from "@/lib/types";
@@ -225,44 +226,55 @@ export function ProjectBar({
       )}
 
       {projects.length > 0 && (
-        <div className="flex max-w-md flex-wrap justify-end gap-1.5">
-          {projects.map((p) => (
-            <span
-              key={p.id}
-              className="flex items-center gap-1 rounded-md border border-line bg-surface-2 px-2 py-1 text-xs"
-            >
-              <button
-                onClick={() => onLoad(p)}
-                className="text-neutral-300 hover:text-accent-300"
+        <div className="flex max-w-3xl flex-wrap justify-end gap-1.5">
+          {projects.map((p) => {
+            const identity = projectIdentity(p.name, p.url, p.updated_at);
+            return (
+              <span
+                key={p.id}
+                className="flex items-center gap-1.5 rounded-md border border-line bg-surface-2 px-2.5 py-1.5 text-xs"
               >
-                {p.name}
-              </button>
-              {confirmProject === p.id ? (
-                <>
-                  <button
-                    onClick={() => remove(p.id)}
-                    className="font-medium text-red-400 hover:text-red-300"
-                  >
-                    delete?
-                  </button>
-                  <button
-                    onClick={() => setConfirmProject(null)}
-                    className="text-neutral-500 hover:text-neutral-300"
-                  >
-                    ·no
-                  </button>
-                </>
-              ) : (
                 <button
-                  onClick={() => setConfirmProject(p.id)}
-                  title="Delete this project (and its experiments & outcomes)"
-                  className="text-neutral-600 hover:text-red-400"
+                  onClick={() => onLoad(p)}
+                  aria-label={`Load ${identity.label}`}
+                  title={identity.label}
+                  className="min-w-0 text-left hover:text-accent-300"
                 >
-                  ×
+                  <span className="block max-w-40 truncate text-neutral-200">
+                    {identity.name}
+                  </span>
+                  <span className="block max-w-40 truncate text-[10px] text-neutral-600">
+                    {identity.detail}
+                  </span>
                 </button>
-              )}
-            </span>
-          ))}
+                {confirmProject === p.id ? (
+                  <>
+                    <button
+                      onClick={() => remove(p.id)}
+                      className="font-medium text-red-400 hover:text-red-300"
+                    >
+                      delete?
+                    </button>
+                    <button
+                      onClick={() => setConfirmProject(null)}
+                      className="text-neutral-500 hover:text-neutral-300"
+                    >
+                      ·no
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    onClick={() => setConfirmProject(p.id)}
+                    aria-label={`Delete ${identity.label}`}
+                    title="Delete this project (and its experiments & outcomes)"
+                    className="text-neutral-600 hover:text-red-400"
+                  >
+                    ×
+                  </button>
+                )}
+              </span>
+            );
+          })}
         </div>
       )}
     </div>

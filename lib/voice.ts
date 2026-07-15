@@ -100,7 +100,8 @@ Do this instead:
 - Open with a concrete situation, a real result, a friction, or a plain flat claim — NOT the product name or a definition.
 - Prefer specifics over adjectives: the actual annoying thing, a real number, the real workflow. If you don't have a fact, describe a concrete scenario rather than praising.
 - Vary sentence length. Let some be short. A fragment is fine.
-- First person, slightly understated, willing to admit a limitation. You're a maker sharing something, not a brand.
+- Use first person only when the selected publisher voice allows it. Never invent a biography, credential, personal experience, customer quote, user count, or product limitation to sound human.
+- State a limitation only when it exists in the supplied verified facts. If the facts do not support a detail, remove the sentence instead of guessing or leaving a placeholder.
 - Emoji: at most one, and only where natives of THIS platform actually use them (zero on Hacker News, Lobsters, blogs, Stack Overflow). No hashtag stuffing.
 
 Internal check (never reveal, never reference in output): before finalizing each piece, silently ask "would a skeptical regular of this platform smell marketing here?" If yes, rewrite it plainer and more specific. Output only the finished content.`;

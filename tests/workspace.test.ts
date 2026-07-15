@@ -315,6 +315,28 @@ describe("verdictFor (rule-based, absent ≠ 0)", () => {
     expect(early.reason).toMatch(/early/i);
     expect(early.advice).toMatch(/24h/i);
   });
+  it("explicit observed zeros remain a truthful no-response signal", () => {
+    const v24 = verdictFor(
+      outcome({ impressions: 0, replies: 0, clicks: 0, signups: 0, revenue: 0 }),
+      ctx
+    );
+    expect(v24.call).toBe("no-signal");
+    expect(v24.advice).toMatch(/72h/i);
+
+    const v72 = verdictFor(
+      outcome({
+        checkpoint: "72h",
+        impressions: 0,
+        replies: 0,
+        clicks: 0,
+        signups: 0,
+        revenue: 0,
+      }),
+      ctx
+    );
+    expect(v72.call).toBe("no-signal");
+    expect(v72.advice).toMatch(/stopping/i);
+  });
   it("every verdict explains the rule that fired", () => {
     const v = verdictFor(outcome({ signups: 1 }), ctx);
     expect(v.reason.length).toBeGreaterThan(10);

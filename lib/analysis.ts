@@ -11,7 +11,7 @@ import type {
 } from "./types";
 
 /** Bump when the analyze prompt changes (recorded on every output). */
-export const ANALYZE_PROMPT_VERSION = "a2";
+export const ANALYZE_PROMPT_VERSION = "a3";
 
 export interface AnalysisOutcome {
   profile: ProductProfile;
@@ -96,6 +96,9 @@ Fact entries to produce, in this order:
       ? (s(data?.confidence) as ProductProfile["confidence"])
       : undefined,
     confidenceNote: s(data?.confidenceNote) || undefined,
+    // A landing page cannot tell us the human publisher's biography. Stay in
+    // brand voice until the operator explicitly opts into founder voice.
+    publisherVoice: "brand",
   };
 
   // Launch context enters the profile ONLY from a verified page observation —

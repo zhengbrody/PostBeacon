@@ -98,7 +98,7 @@ export function ResultsView({
   loading: boolean;
   demo: boolean;
   onReset: () => void;
-  onAskCopilot: (prompt: string) => void;
+  onAskCopilot: (prompt: string, targetPlatformId?: string) => void;
   emailRemindersAvailable: boolean;
   onToggleEmailReminders: (enabled: boolean, timezone?: string) => void;
 }) {
@@ -262,6 +262,8 @@ export function ResultsView({
           view={today}
           productName={profile?.name}
           primaryGoal={profile?.conversionGoal}
+          facts={facts}
+          profile={profile}
           loading={loading}
           onPublish={(platformId, requestedPostIdx) => {
             const content = result.content.find((c) => c.platformId === platformId);
@@ -285,7 +287,8 @@ export function ResultsView({
             onAskCopilot(
               direction
                 ? `My current next best move is “${action.title}”. ${direction} Use evidence from my plan and propose only changes I can review before applying.`
-                : `Help me execute my current next best move: “${action.title}”. Explain the sharpest way to do it for this product, use evidence from my plan, and propose only changes I can review before applying.`
+                : `Help me execute my current next best move: “${action.title}”. Explain the sharpest way to do it for this product, use evidence from my plan, and propose only changes I can review before applying.`,
+              action.platformId
             )
           }
           onRegenerate={onRegenerate}
@@ -299,7 +302,8 @@ export function ResultsView({
           recordEditor={recordEditor}
           onAskExperiment={(experiment) =>
             onAskCopilot(
-              `For my active ${experiment.platformName} experiment, tell me exactly what to measure at the next check-in and how each signal changes the decision. Do not invent results.`
+              `For my active ${experiment.platformName} experiment, tell me exactly what to measure at the next check-in and how each signal changes the decision. Do not invent results.`,
+              experiment.platformId
             )
           }
           onRecordEarly={(experiment) =>
@@ -375,9 +379,11 @@ export function ResultsView({
         />
       )}
 
-      {publishFor && publishContent && (
+      {publishFor && publishContent && profile && (
         <PublishDialog
           content={publishContent}
+          facts={facts}
+          profile={profile}
           rec={strategy?.recommendations.find(
             (r) => r.platformId === publishFor.platformId
           )}
