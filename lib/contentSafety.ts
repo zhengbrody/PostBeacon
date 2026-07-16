@@ -1,3 +1,4 @@
+import { PLATFORMS } from "./platforms";
 import type { Fact, PlatformPost, ProductProfile } from "./types";
 
 export type DraftSafetyCode =
@@ -8,7 +9,8 @@ export type DraftSafetyCode =
   | "invented-testimonial"
   | "unsupported-limitation"
   | "unsupported-metric"
-  | "regulated-outcome";
+  | "regulated-outcome"
+  | "over-limit";
 
 export interface DraftSafetyIssue {
   code: DraftSafetyCode;
@@ -33,8 +35,11 @@ const TESTIMONIAL =
   /\b(?:(?:a|one|our)\s+(?:user|customer|investor|founder|client)|people)\s+(?:said|told|asked|wrote)\b/i;
 const LIMITATION =
   /\b(?:we|i|it|the product|this product)\s+(?:can(?:not|'t)(?:\s+yet)?|does(?:\s+not|n't)(?:\s+yet)?|is(?:\s+not|n't)(?:\s+yet)?|only supports?|currently supports? only)\b/i;
+// Digits with separators, magnitude suffixes (10k, 1M), optional $/%/+, and an
+// optional "of" link — the abbreviation styles models actually use for
+// invented traction ("10k users", "$50k in revenue", "40% of teams").
 const UNSUPPORTED_METRIC =
-  /\b\d[\d,.]*%?\s*(?:users?|customers?|signups?|downloads?|installs?|revenue|hours? saved|countries|teams?)\b/i;
+  /(?:\$\s*)?\b\d[\d,.]*\s*(?:[kmb]\b)?\+?\s*%?\s*(?:of\s+|in\s+)?(?:users?|customers?|signups?|downloads?|installs?|revenue|mrr|arr|hours? saved|countries|teams?)\b/i;
 const REGULATED_PROMISE =
   /\b(?:guarantee(?:d|s)?|ensure(?:s|d)?|avoid(?:ing)? losses|prevent(?:s|ing)? losses|sidestep(?:s|ping)? (?:a )?(?:fall|drop|loss)|beat(?:s|ing)? the market|get rich|predict(?:s|ing)? (?:the )?market|protect(?:s|ing)?[^.\n]{0,35}(?:loss|drop|fall))\b/i;
 
@@ -143,6 +148,51 @@ function issue(
   return { code, title, excerpt, fix };
 }
 
+export interface CharBudget {
+  limit: number;
+  /** hook + blank line + body — exactly what Copy puts on the clipboard. */
+  total: number;
+  /** Longest single segment (hook or a blank-line-separated body block). */
+  longestSegment: number;
+  /** The whole draft fits one post. */
+  fitsSingle: boolean;
+  /** Every segment fits, so it can be published as a thread even if total > limit. */
+  fitsThread: boolean;
+}
+
+/**
+ * Character budget against a platform's hard per-post limit. A draft whose
+ * blank-line segments each fit is still EXECUTABLE (as a thread), so only a
+ * segment that can never be posted is a safety failure; the single-vs-thread
+ * distinction is surfaced in the workbench counter.
+ */
+export function charBudget(
+  post: Pick<PlatformPost, "hook" | "body">,
+  limit: number
+): CharBudget {
+  const total = `${post.hook}\n\n${post.body}`.trim().length;
+  const segments = [post.hook, ...post.body.split(/\n{2,}/)]
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+  const longestSegment = segments.reduce(
+    (max, segment) => Math.max(max, segment.length),
+    0
+  );
+  return {
+    limit,
+    total,
+    longestSegment,
+    fitsSingle: total <= limit,
+    fitsThread: longestSegment <= limit,
+  };
+}
+
+/** The platform's hard character cap, if it has one (lib/platforms catalog). */
+export function platformCharLimit(platformId?: string): number | undefined {
+  if (!platformId) return undefined;
+  return PLATFORMS.find((platform) => platform.id === platformId)?.charLimit;
+}
+
 /**
  * A deterministic last-mile gate for generated drafts. It deliberately checks
  * only high-confidence failure classes; it is not a vague AI "quality score".
@@ -152,7 +202,8 @@ function issue(
 export function auditDraftSafety(
   post: Pick<PlatformPost, "hook" | "body">,
   facts: Fact[],
-  profile: ProductProfile
+  profile: ProductProfile,
+  platformId?: string
 ): DraftSafetyReport {
   const text = `${post.hook}\n${post.body}`.trim();
   const corpus = supportCorpus(facts);
@@ -160,6 +211,23 @@ export function auditDraftSafety(
   const add = (next: DraftSafetyIssue) => {
     if (!issues.some((current) => current.code === next.code)) issues.push(next);
   };
+
+  // Executability is part of truth: a segment no post on this platform can
+  // ever hold makes the draft impossible to publish as written.
+  const limit = platformCharLimit(platformId);
+  if (limit) {
+    const budget = charBudget(post, limit);
+    if (!budget.fitsThread) {
+      add(
+        issue(
+          "over-limit",
+          `Too long to post on this platform`,
+          `Longest segment is ${budget.longestSegment} of ${limit} characters.`,
+          `Shorten it, or split the body into blank-line thread segments of ≤${limit} characters each.`
+        )
+      );
+    }
+  }
 
   if (PLACEHOLDER.test(text)) {
     add(
@@ -262,7 +330,9 @@ export function auditDraftSafety(
 export function unsafeDraftCount(
   posts: Pick<PlatformPost, "hook" | "body">[],
   facts: Fact[],
-  profile: ProductProfile
+  profile: ProductProfile,
+  platformId?: string
 ): number {
-  return posts.filter((post) => !auditDraftSafety(post, facts, profile).ready).length;
+  return posts.filter((post) => !auditDraftSafety(post, facts, profile, platformId).ready)
+    .length;
 }

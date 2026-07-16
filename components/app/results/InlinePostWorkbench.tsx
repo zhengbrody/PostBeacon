@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/Button";
 import { ExecutionProgress } from "./ExecutionProgress";
 import { DraftSafetyNotice } from "./DraftSafetyNotice";
 import { publishDestination, type ExecutionStep } from "@/lib/execution";
-import { auditDraftSafety } from "@/lib/contentSafety";
+import { auditDraftSafety, charBudget, platformCharLimit } from "@/lib/contentSafety";
 import type { Fact, PlatformContent, PlatformPost, ProductProfile } from "@/lib/types";
 
 const PREPARE_STEPS: ExecutionStep[] = [
@@ -69,7 +69,9 @@ export function InlinePostWorkbench({
 
   if (!post) return null;
 
-  const safety = auditDraftSafety(post, facts, profile);
+  const safety = auditDraftSafety(post, facts, profile, content.platformId);
+  const limit = platformCharLimit(content.platformId);
+  const budget = limit ? charBudget(post, limit) : undefined;
 
   const update = (patch: Partial<PlatformPost>) =>
     onUpdatePost(content.platformId, postIdx, patch);
@@ -101,8 +103,12 @@ export function InlinePostWorkbench({
       );
       return;
     }
-    window.open(destination, "_blank", "noopener,noreferrer");
-    setFeedback(`${content.platformName} opened in a new tab ✓`);
+    const opened = window.open(destination, "_blank", "noopener,noreferrer");
+    setFeedback(
+      opened
+        ? `${content.platformName} opened in a new tab ✓`
+        : `Popup blocked — copy the draft and open ${content.platformName} manually.`
+    );
   }
 
   function switchHook(hook: string) {
@@ -120,8 +126,27 @@ export function InlinePostWorkbench({
             <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
               Recommended draft · {content.platformName}
             </div>
-            <div className="mt-0.5 text-[11px] text-neutral-600">
-              Variant {postIdx + 1} of {content.posts.length}
+            <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[11px] text-neutral-600">
+              <span>
+                Variant {postIdx + 1} of {content.posts.length}
+              </span>
+              {budget && (
+                <span
+                  className={
+                    budget.fitsSingle
+                      ? "text-neutral-500"
+                      : budget.fitsThread
+                        ? "text-amber-400/90"
+                        : "text-red-400"
+                  }
+                >
+                  {budget.fitsSingle
+                    ? `${budget.total}/${budget.limit} chars`
+                    : budget.fitsThread
+                      ? `${budget.total} chars — post it as a thread (every segment fits ${budget.limit})`
+                      : `Longest segment ${budget.longestSegment}/${budget.limit} chars — too long to post`}
+                </span>
+              )}
             </div>
           </div>
           {content.posts.length > 1 && (

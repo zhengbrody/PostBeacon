@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { auditDraftSafety, unsafeDraftCount } from "@/lib/contentSafety";
+import {
+  auditDraftSafety,
+  charBudget,
+  platformCharLimit,
+  unsafeDraftCount,
+} from "@/lib/contentSafety";
 import { DEMO_PROJECT } from "@/lib/demo";
 import { platformSupportsThreadReplies } from "@/lib/platforms";
 import type { Fact, PlatformPost, ProductProfile } from "@/lib/types";
@@ -115,5 +120,99 @@ describe("platform reply mechanics", () => {
     expect(platformSupportsThreadReplies("newsletters")).toBe(false);
     expect(platformSupportsThreadReplies("github")).toBe(false);
     expect(platformSupportsThreadReplies("medium")).toBe(false);
+  });
+});
+
+describe("unsupported metrics — abbreviation formats models actually use (M21)", () => {
+  const shapes = [
+    "Already trusted by 10k users",
+    "1M downloads in the first year",
+    "$50k in revenue so far",
+    "2k+ signups this month",
+    "40% of teams switched to us",
+    "3.2k customers rely on it",
+  ];
+
+  it.each(shapes)("flags %j without ledger support", (claim) => {
+    const report = auditDraftSafety(post(claim), [], profile);
+    expect(report.issues.map((issue) => issue.code)).toContain("unsupported-metric");
+  });
+
+  it("a ledger-confirmed abbreviated number still passes", () => {
+    const report = auditDraftSafety(
+      post("Already trusted by 10k users"),
+      [fact("Already trusted by 10k users")],
+      profile
+    );
+    expect(report.issues.map((issue) => issue.code)).not.toContain("unsupported-metric");
+  });
+
+  it("ordinary numbers that are not traction claims stay clean", () => {
+    const report = auditDraftSafety(
+      post("Paste one line at step 2 of the guide and record a 6-second setup GIF."),
+      [],
+      profile
+    );
+    expect(report.issues.map((issue) => issue.code)).not.toContain("unsupported-metric");
+  });
+});
+
+describe("platform character contract (M21 over-limit gate)", () => {
+  const longSingle = post("x".repeat(300), "A hook");
+  const thread = post(
+    `${"a".repeat(200)}\n\n${"b".repeat(200)}\n\n${"c".repeat(200)}`,
+    "A thread opener"
+  );
+
+  it("charBudget mirrors exactly what Copy places on the clipboard", () => {
+    const budget = charBudget(post("body", "hook"), 280);
+    expect(budget.total).toBe("hook\n\nbody".length);
+    expect(budget.fitsSingle).toBe(true);
+    expect(budget.fitsThread).toBe(true);
+  });
+
+  it("blocks an X draft whose longest segment can never be posted", () => {
+    const report = auditDraftSafety(longSingle, [], profile, "twitter");
+    const overLimit = report.issues.find((issue) => issue.code === "over-limit");
+    expect(overLimit).toBeDefined();
+    expect(overLimit!.excerpt).toContain("of 280 characters");
+    expect(report.ready).toBe(false);
+  });
+
+  it("a thread whose every segment fits is executable and passes", () => {
+    const report = auditDraftSafety(thread, [], profile, "twitter");
+    expect(report.issues.map((issue) => issue.code)).not.toContain("over-limit");
+    const budget = charBudget(thread, 280);
+    expect(budget.fitsSingle).toBe(false); // counter shows the thread hint instead
+    expect(budget.fitsThread).toBe(true);
+  });
+
+  it("platforms without a hard limit never emit over-limit", () => {
+    const report = auditDraftSafety(post("y".repeat(5000)), [], profile, "reddit");
+    expect(report.issues.map((issue) => issue.code)).not.toContain("over-limit");
+    expect(platformCharLimit("reddit")).toBeUndefined();
+    expect(platformCharLimit("twitter")).toBe(280);
+  });
+
+  it("unsafeDraftCount applies the platform limit per channel", () => {
+    expect(unsafeDraftCount([longSingle], [], profile, "twitter")).toBe(1);
+    expect(unsafeDraftCount([longSingle], [], profile, "reddit")).toBe(0);
+  });
+});
+
+describe("the demo passes its own bar (showcase must be executable)", () => {
+  it("every demo X/Twitter draft passes the truth gate incl. the 280 contract", () => {
+    const twitter = DEMO_PROJECT.result!.content.find(
+      (channel) => channel.platformId === "twitter"
+    )!;
+    for (const demoPost of twitter.posts) {
+      const report = auditDraftSafety(
+        demoPost,
+        DEMO_PROJECT.facts ?? [],
+        DEMO_PROJECT.profile!,
+        "twitter"
+      );
+      expect(report.issues).toEqual([]);
+    }
   });
 });

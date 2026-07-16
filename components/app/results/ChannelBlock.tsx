@@ -150,6 +150,7 @@ export function ChannelBlock({
             <PostCard
               key={id}
               post={post}
+              platformId={content.platformId}
               facts={facts}
               profile={profile}
               posted={!!posted[id]}

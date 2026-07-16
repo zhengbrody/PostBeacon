@@ -66,7 +66,7 @@ export function PublishDialog({
   const [trackedUrl, setTrackedUrl] = useState("");
   const selectedPost = content.posts[postIdx];
   const safety = selectedPost
-    ? auditDraftSafety(selectedPost, facts, profile)
+    ? auditDraftSafety(selectedPost, facts, profile, content.platformId)
     : { ready: false, issues: [] };
 
   return (

@@ -11,6 +11,7 @@ import type { Fact, PlatformPost, ProductProfile } from "@/lib/types";
 /** One ready-to-post draft: copy, inline edit, A/B hook chips, posted mark. */
 export function PostCard({
   post,
+  platformId,
   facts,
   profile,
   posted,
@@ -19,6 +20,7 @@ export function PostCard({
   onUpdate,
 }: {
   post: PlatformPost;
+  platformId: string;
   facts: Fact[];
   profile: ProductProfile;
   posted: boolean;
@@ -29,8 +31,8 @@ export function PostCard({
   const [copied, setCopied] = useState(false);
   const [editing, setEditing] = useState(false);
   const safety = useMemo(
-    () => auditDraftSafety(post, facts, profile),
-    [post, facts, profile]
+    () => auditDraftSafety(post, facts, profile, platformId),
+    [post, facts, profile, platformId]
   );
 
   async function copy() {

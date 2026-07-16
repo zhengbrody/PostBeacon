@@ -62,10 +62,10 @@ export function ContentTab({
   const [copiedAll, setCopiedAll] = useState(false);
   const unsafeCount = useMemo(
     () =>
-      unsafeDraftCount(
-        result.content.flatMap((item) => item.posts),
-        facts,
-        profile
+      result.content.reduce(
+        (count, item) =>
+          count + unsafeDraftCount(item.posts, facts, profile, item.platformId),
+        0
       ),
     [result.content, facts, profile]
   );

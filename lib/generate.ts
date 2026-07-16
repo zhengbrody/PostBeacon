@@ -42,10 +42,13 @@ export async function generatePlatformPosts(
       ? "Write as the founder. First person may describe building this product, but never invent the founder's job, biography, past losses, conversations, credentials, users, or experiences."
       : "Write in the product's brand voice. Do not use first-person singular (I/me/my) and do not impersonate a founder, customer, investor, analyst, or adviser.";
   const supportsThreadReplies = platformSupportsThreadReplies(p.id);
+  const charContract = p.charLimit
+    ? `\n\nHARD PLATFORM LIMIT: a single ${p.name} post (hook and body combined) must fit ${p.charLimit} characters. If the idea needs more room, structure the body as thread segments separated by blank lines — EVERY segment must fit ${p.charLimit} characters on its own. Count before you answer.`
+    : "";
   const { data, meta: callMeta } = await generateJsonMeta({
     provider,
     maxTokens: p.maxTokens ?? 2800,
-    system: `You write genuinely useful native content for ${p.name} — not agency copy. ${p.guidance}
+    system: `You write genuinely useful native content for ${p.name} — not agency copy. ${p.guidance}${charContract}
 ${p.persona ? `\nWrite as: ${p.persona}` : ""}
 
 PUBLISHER VOICE: ${publisherVoice}. ${voiceInstruction}

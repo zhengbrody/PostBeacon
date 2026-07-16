@@ -22,6 +22,7 @@ export interface PlatformDef {
   persona?: string; // "who you are writing as" — grounds the anti-AI voice
   longForm?: boolean; // ask the model for a full draft, not an outline
   maxTokens?: number; // per-platform generation budget (defaults to 2500)
+  charLimit?: number; // hard per-post/segment character cap the platform enforces
 }
 
 // English-first platform universe. The strategist scores ALL of these for a
@@ -139,8 +140,9 @@ export const PLATFORMS: PlatformDef[] = [
     postCount: 2,
     defaultDay: 1,
     bestTime: "Tue–Thu 9–11am ET",
+    charLimit: 280,
     guidance:
-      "One punchy build-in-public post AND one thread (3-5 tweets). First line is everything — lead with a result, surprising claim, or pain. 0-1 hashtags. Soft CTA + link. Suggest a demo GIF.",
+      "One punchy build-in-public post AND one thread (3-5 tweets). A single post (hook + body together) must fit 280 characters; a thread separates tweets with blank lines and every tweet must fit 280. First line is everything — lead with a result, surprising claim, or pain. 0-1 hashtags. Soft CTA + link. Suggest a demo GIF.",
     persona:
       "someone building in public who's good at a tight hook but allergic to motivational-speaker energy. Strong first line, concrete, a little dry. No 'hustle' tone, no thread-bro 'a 🧵' theatrics, no engagement-bait.",
   },
@@ -184,8 +186,9 @@ export const PLATFORMS: PlatformDef[] = [
     postCount: 1,
     defaultDay: 8,
     bestTime: "Weekday late morning",
+    charLimit: 500,
     guidance:
-      "A conversational, slightly more earnest version of the X post. Less hashtag, more community-native and authentic. One clear idea + link.",
+      "A conversational, slightly more earnest version of the X post, fitting one 500-character post. Less hashtag, more community-native and authentic. One clear idea + link.",
   },
 
   // ---- Content ----

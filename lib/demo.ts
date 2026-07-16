@@ -649,7 +649,7 @@ const result: GenerateResult = {
             "Your cron jobs fail silently. Here's the one-line fix I built.",
             "The backup had been failing for three months. Nothing told me.",
           ],
-          body: "Nothing alerted me. The cron just stopped, and everything downstream kept working — until the day it didn't.\n\nSo I built the thing I wanted: each job pings a URL when it finishes. If the ping doesn't show up on time, I get a text.\n\nSetup is one line at the end of the job:\n\ncurl -fsS https://cronwise.dev/p/your-id\n\ncronwise.dev",
+          body: "Nothing told me — the job just stopped. So I built the fix: every cron pings a URL when it finishes, and a missed ping becomes a text to my phone.\n\nOne line: curl -fsS cronwise.dev/p/your-id",
           imageSuggestion:
             "A 6-second screen recording: paste the curl line at the end of a crontab, then a phone buzzing with a 'job is late' text.",
           bestTime: "Tue–Thu 9–11am ET",
