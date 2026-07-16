@@ -156,6 +156,8 @@ docs/M19-execution-workbench.md Interaction contract for visible click feedback 
                         Prepare→Publish→Measure→Learn loop
 docs/M20-truthful-execution.md Product contract for explicit publisher voice, deterministic
                         draft truth gates, channel-consistent Copilot and honest zero results
+docs/M21-product-system-audit.md Pre-launch audit: journey/state maps, evidenced P0–P3
+                        findings, fix scope and acceptance criteria
 tests/                  vitest suites: urlPolicy, safeFetch, billing, webhook route, validate,
                         golden (12-fixture offline evals), generateRoute, flowReducer
                         (state-machine invariants), storage (draft migrations), workspace
@@ -257,6 +259,26 @@ configured and verified; in-app reminders remain active.
 Redeploy: `npx vercel --prod --yes`. Push env from `.env.local`: `~/push-env.sh`.
 
 ## Status / changelog
+- **2026-07-15**: **M21 — executable platform contract + tighter truth gate.** Pre-launch
+  audit first (docs/M21-product-system-audit.md: journey map, state flow, P0–P3 findings
+  with file/repro evidence, confirmed-vs-hypothesis split). Two P1s fixed: (1) the
+  unsupported-metric gate missed the abbreviation formats models actually fabricate —
+  "10k users", "1M downloads", "$50k in revenue", "2k+ signups", "40% of teams" all
+  passed; the matcher now handles magnitude suffixes, currency prefixes and "% of"
+  linkage while ledger-confirmed numbers still pass. (2) X posts had no character
+  contract anywhere (prompt, code or UI) — the demo's own single post was 389 chars and
+  unpublishable. PlatformDef gains charLimit (twitter 280, threads 500), the generate
+  prompt states the hard limit, and contentSafety adds an over-limit gate that blocks
+  only truly unpostable drafts (a blank-line thread whose every segment fits stays
+  executable); the workbench shows a live three-state counter (fits single / post as a
+  thread / too long) and the demo post was rewritten to 273 chars. Also fixed: "Open
+  platform" no longer claims success when the popup was blocked, and CLAUDE.md regained
+  the M20 sections it had lost (contentSafety/projectIdentity map rows, M20 doc line and
+  changelog). 14 new tests incl. a demo-passes-its-own-bar suite; 333 offline tests,
+  typecheck, lint, format and production build green. Browser-verified on desktop and
+  375px mobile: counter states, over-limit blocking with exact excerpt, "10k users"
+  flagged, thread hint with Copy enabled, zero console errors. Deferred with evidence:
+  sub-32px secondary touch targets (P3, needs a design pass).
 - **2026-07-15**: **M20 — truthful execution.** A real MindMarket run exposed fluent but
   invented founder identity, anecdotes, testimonials, traction, limitations and a demo-link
   placeholder. Publisher voice is now explicit (brand-safe default or founder); analyze/generate
