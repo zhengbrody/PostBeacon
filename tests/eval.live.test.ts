@@ -42,6 +42,7 @@ const lib = async () => ({
   llm: await import("@/lib/llm"),
   voice: await import("@/lib/voice"),
   platforms: await import("@/lib/platforms"),
+  safety: await import("@/lib/contentSafety"),
 });
 
 type Provider = "deepseek" | "claude" | "openai";
@@ -51,7 +52,7 @@ type Provider = "deepseek" | "claude" | "openai";
 const PLAN: Record<Provider, { analyze: number; scoring: number; content: number }> = {
   deepseek: { analyze: 12, scoring: 6, content: 6 },
   claude: { analyze: 4, scoring: 3, content: 2 },
-  openai: { analyze: 4, scoring: 3, content: 2 },
+  openai: { analyze: 4, scoring: 3, content: 4 },
 };
 
 interface AnalyzeRow {
@@ -94,6 +95,13 @@ interface ContentRow {
   bannedHits: number;
   bannedPhrases: string[];
   foreignUrls: number; // URLs pointing anywhere but the product's own domain
+  // M22 generation-quality metrics: the M20/M21 truth gate applied to live output.
+  unsafeDrafts: number; // drafts the gate would block as generated
+  safetyIssueCodes: string[]; // unique issue codes across this channel's drafts
+  limitedPosts: number; // posts on a charLimit platform
+  singleFitDrafts: number; // fit one post outright
+  threadOnlyDrafts: number; // exceed the single limit but every segment fits
+  unpostableDrafts: number; // a segment exceeds the platform limit (over-limit gate)
   ms: number;
   error?: string;
 }
@@ -126,7 +134,7 @@ describe.runIf(LIVE)("live golden eval", () => {
     "runs the fixture suite against every configured provider",
     { timeout: 1_800_000 },
     async () => {
-      const { analysis, scoring, generate, llm, voice, platforms } = await lib();
+      const { analysis, scoring, generate, llm, voice, platforms, safety } = await lib();
       const wanted = (process.env.EVAL_PROVIDERS || "deepseek,claude,openai")
         .split(",")
         .map((s) => s.trim()) as Provider[];
@@ -285,12 +293,27 @@ describe.runIf(LIVE)("live golden eval", () => {
             let banned = 0;
             const phrases: string[] = [];
             let foreign = 0;
+            let unsafe = 0;
+            const codes = new Set<string>();
+            const limit = safety.platformCharLimit(platform);
+            let singleFit = 0;
+            let threadOnly = 0;
+            let unpostable = 0;
             for (const post of posts) {
               const text = [post.hook, ...(post.hookVariants ?? []), post.body].join("\n");
               const hits = voice.lintVoice(text);
               banned += hits.length;
               phrases.push(...hits.map((h) => h.phrase));
               foreign += foreignUrlCount(text, own);
+              const report = safety.auditDraftSafety(post, a.facts, a.profile, platform);
+              if (!report.ready) unsafe += 1;
+              for (const issue of report.issues) codes.add(issue.code);
+              if (limit) {
+                const budget = safety.charBudget(post, limit);
+                if (budget.fitsSingle) singleFit += 1;
+                else if (budget.fitsThread) threadOnly += 1;
+                else unpostable += 1;
+              }
             }
             cRows.push({
               fixture: f.id,
@@ -300,6 +323,12 @@ describe.runIf(LIVE)("live golden eval", () => {
               bannedHits: banned,
               bannedPhrases: [...new Set(phrases)],
               foreignUrls: foreign,
+              unsafeDrafts: unsafe,
+              safetyIssueCodes: [...codes],
+              limitedPosts: limit ? posts.length : 0,
+              singleFitDrafts: singleFit,
+              threadOnlyDrafts: threadOnly,
+              unpostableDrafts: unpostable,
               ms: Date.now() - t0,
             });
           } catch (e) {
@@ -311,6 +340,12 @@ describe.runIf(LIVE)("live golden eval", () => {
               bannedHits: 0,
               bannedPhrases: [],
               foreignUrls: 0,
+              unsafeDrafts: 0,
+              safetyIssueCodes: [],
+              limitedPosts: 0,
+              singleFitDrafts: 0,
+              threadOnlyDrafts: 0,
+              unpostableDrafts: 0,
               ms: Date.now() - t0,
               error: errLabel(e),
             });
@@ -432,6 +467,19 @@ function writeReport(
         allPhrases.length ? ` (${allPhrases.join(", ")})` : ""
       }`,
       `- drafts containing non-product URLs: ${c.filter((x) => x.foreignUrls > 0).length}`,
+      `- truth-gate clean as generated: ${pct(
+        cOk.reduce((n, x) => n + (x.posts - x.unsafeDrafts), 0),
+        cOk.reduce((n, x) => n + x.posts, 0)
+      )} · issue codes seen: ${
+        [...new Set(cOk.flatMap((x) => x.safetyIssueCodes))].join(", ") || "none"
+      }`,
+      `- char contract on limited platforms (${cOk.reduce(
+        (n, x) => n + x.limitedPosts,
+        0
+      )} posts): single-fit ${cOk.reduce((n, x) => n + x.singleFitDrafts, 0)} · thread-only ${cOk.reduce(
+        (n, x) => n + x.threadOnlyDrafts,
+        0
+      )} · UNPOSTABLE ${cOk.reduce((n, x) => n + x.unpostableDrafts, 0)}`,
       ""
     );
   }

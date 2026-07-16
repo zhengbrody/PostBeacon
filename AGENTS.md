@@ -259,6 +259,20 @@ configured and verified; in-app reminders remain active.
 Redeploy: `npx vercel --prod --yes`. Push env from `.env.local`: `~/push-env.sh`.
 
 ## Status / changelog
+- **2026-07-15**: **M22 — generation quality quantified.** The live golden eval now runs
+  the M20/M21 truth gate and character budget over every generated draft and reports
+  truth-gate clean rate, issue-code distribution and the single-fit / thread-only /
+  UNPOSTABLE split per provider (openai content sample widened to 4 fixtures). Live run
+  (openai + deepseek, 20 drafts): **zero unpostable X drafts** on either provider — the
+  M21 prompt contract holds, so no generation-side retry was added (decision recorded:
+  a retry would hide gate failures the product intentionally surfaces as editable,
+  regeneratable drafts). deepseek writes long (10/12 X drafts need the thread path —
+  the workbench's amber hint covers exactly this); the tightened metric gate catches
+  real fabrication in the wild (unsupported-metric/brand-impersonation/
+  unsupported-limitation seen on 61% of deepseek drafts, 25% of openai drafts, all
+  blocked from Copy/publish until repaired). Voice lint (seamless/leverage/unlock)
+  remains the weakest content metric — noted for a future voice.ts pass, no code
+  change. eval-results/report.{md,json} carry the new sections.
 - **2026-07-15**: **M21 — executable platform contract + tighter truth gate.** Pre-launch
   audit first (docs/M21-product-system-audit.md: journey map, state flow, P0–P3 findings
   with file/repro evidence, confirmed-vs-hypothesis split). Two P1s fixed: (1) the
