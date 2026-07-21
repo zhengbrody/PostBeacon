@@ -23,7 +23,7 @@ import type {
 
 type TabId = "overview" | "content" | "calendar" | "execute";
 
-/** The full launch report — the M11 four-tab dashboard, unchanged, now one
+/** The full strategy library — the M11 four-tab dashboard, unchanged, now one
  *  level down under the workspace's "Full plan" surface. `printing` is driven
  *  by the workspace so Cmd+P still prints the whole plan. */
 export function PlanReport({

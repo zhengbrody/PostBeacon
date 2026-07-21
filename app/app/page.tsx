@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useLaunchFlow, type Step } from "@/hooks/useLaunchFlow";
 import { useAutosave } from "@/hooks/useAutosave";
@@ -22,6 +22,12 @@ import { supabaseConfigured } from "@/lib/supabase/client";
 import { Spinner } from "@/components/ui/Spinner";
 import { Button } from "@/components/ui/Button";
 import { shouldResetForAccountBoundary } from "@/lib/accountBoundary";
+import {
+  clearPreviewHandoff,
+  consumePreviewHandoffForAuthReturn,
+  shouldClearPreviewHandoff,
+  type PreviewHandoff,
+} from "@/lib/previewHandoff";
 
 export default function AppPage() {
   const f = useLaunchFlow();
@@ -32,21 +38,68 @@ export default function AppPage() {
     supabase,
   });
   const previousUserId = useRef<string | null | undefined>(undefined);
+  const [previewHandoff, setPreviewHandoff] = useState<PreviewHandoff | null>(null);
+  const [handoffAccepted, setHandoffAccepted] = useState(false);
+  const [handoffReadyToSave, setHandoffReadyToSave] = useState(false);
+
+  const clearHandoffState = useCallback(() => {
+    clearPreviewHandoff();
+    setPreviewHandoff(null);
+    setHandoffAccepted(false);
+    setHandoffReadyToSave(false);
+  }, []);
 
   useEffect(() => {
     if (authLoading) return;
-    if (shouldResetForAccountBoundary(previousUserId.current, userId)) {
+    const previous = previousUserId.current;
+    if (shouldResetForAccountBoundary(previous, userId)) {
       resetAccountBoundary();
+      // A guest handoff may cross the initial signed-out → signed-in redirect,
+      // but it must never survive a real account switch or sign-out.
+      if (shouldClearPreviewHandoff(previous, userId)) {
+        clearHandoffState();
+      }
     }
     previousUserId.current = userId;
-  }, [authLoading, userId, resetAccountBoundary]);
+  }, [authLoading, userId, resetAccountBoundary, clearHandoffState]);
+
+  useEffect(() => {
+    if (authLoading || !userId) return;
+    const current = new URL(window.location.href);
+    const nonce = current.searchParams.get("preview_handoff");
+    if (!nonce) return;
+    setPreviewHandoff(consumePreviewHandoffForAuthReturn(nonce));
+    current.searchParams.delete("preview_handoff");
+    window.history.replaceState(
+      {},
+      "",
+      `${current.pathname}${current.search}${current.hash}`
+    );
+  }, [authLoading, userId]);
+
+  useEffect(() => {
+    if (!handoffReadyToSave || !handoffAccepted || !previewHandoff || !f.profile) return;
+    setHandoffReadyToSave(false);
+    void saveNow().then((saved) => {
+      // Clear only after the authenticated project write succeeds. A failed
+      // save keeps the browser handoff available for retry/recovery.
+      if (saved) clearHandoffState();
+    });
+  }, [
+    handoffReadyToSave,
+    handoffAccepted,
+    previewHandoff,
+    f.profile,
+    saveNow,
+    clearHandoffState,
+  ]);
 
   // Login gate: required only when Supabase is configured. The demo bypasses it
   // so anyone can explore the example; with no Supabase keys the app stays open.
   const gateOn = supabaseConfigured() && !f.demo;
   const checkingAuth = gateOn && authLoading;
   const needsAuth = gateOn && !authLoading && !userEmail;
-  const showHeaderTools = !checkingAuth && !needsAuth;
+  const showHeaderTools = !checkingAuth && !needsAuth && !f.demo;
 
   return (
     <main className="mx-auto max-w-4xl px-5 py-8">
@@ -64,7 +117,13 @@ export default function AppPage() {
             lastSaved={lastSaved}
             saveError={saveError}
             saving={saving}
-            onSaveNow={saveNow}
+            onSaveNow={async () => {
+              const saved = await saveNow();
+              if (saved && handoffAccepted && previewHandoff && f.profile) {
+                clearHandoffState();
+              }
+              return saved;
+            }}
           />
         )}
       </header>
@@ -76,7 +135,20 @@ export default function AppPage() {
       ) : needsAuth ? (
         <AuthScreen onDemo={f.loadDemo} />
       ) : (
-        <AppFlow f={f} canReceiveEmail={Boolean(userEmail)} />
+        <AppFlow
+          f={f}
+          canReceiveEmail={Boolean(userEmail)}
+          previewHandoff={previewHandoff}
+          handoffAccepted={handoffAccepted}
+          onAcceptHandoff={() => {
+            if (!previewHandoff) return;
+            f.reset();
+            f.setUrl(previewHandoff.url);
+            setHandoffAccepted(true);
+          }}
+          onHandoffAnalyzed={() => setHandoffReadyToSave(true)}
+          onClearHandoff={clearHandoffState}
+        />
       )}
     </main>
   );
@@ -85,9 +157,19 @@ export default function AppPage() {
 function AppFlow({
   f,
   canReceiveEmail,
+  previewHandoff,
+  handoffAccepted,
+  onAcceptHandoff,
+  onHandoffAnalyzed,
+  onClearHandoff,
 }: {
   f: ReturnType<typeof useLaunchFlow>;
   canReceiveEmail: boolean;
+  previewHandoff: PreviewHandoff | null;
+  handoffAccepted: boolean;
+  onAcceptHandoff: () => void;
+  onHandoffAnalyzed: () => void;
+  onClearHandoff: () => void;
 }) {
   const [copilotOpenRequest, setCopilotOpenRequest] = useState<CopilotOpenRequest | null>(
     null
@@ -105,6 +187,37 @@ function AppFlow({
   return (
     <>
       <Stepper step={f.step} enabled={reachable} onNavigate={f.setStep} />
+
+      {previewHandoff && f.step === "input" && !f.demo && (
+        <div className="no-print mb-6 rounded-xl border border-accent-700/50 bg-accent-950/20 p-4 sm:p-5">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="min-w-0 flex-1">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-accent-300">
+                Guest preview ready
+              </p>
+              <h2 className="mt-1 font-semibold text-neutral-100">
+                {previewHandoff.preview.product.name} ·{" "}
+                {previewHandoff.preview.channel.platformName}
+              </h2>
+              <p className="mt-1 text-xs leading-relaxed text-neutral-400">
+                {handoffAccepted
+                  ? "The URL is restored below. Run the signed-in analysis to verify the full fact ledger and build a saved project."
+                  : "This browser kept the one-channel result for the sign-in handoff. Nothing is imported or assigned to this account until you choose to continue."}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {!handoffAccepted && (
+                <Button size="sm" onClick={onAcceptHandoff}>
+                  Continue with this URL
+                </Button>
+              )}
+              <Button size="sm" variant="outline" onClick={onClearHandoff}>
+                Discard preview
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {f.step === "input" && f.pendingDraft && !f.demo && (
         <div className="no-print mb-6 flex flex-wrap items-center justify-between gap-3 rounded-md border border-line bg-surface-2 px-4 py-3 text-xs">
@@ -126,8 +239,8 @@ function AppFlow({
       {f.demo && (
         <div className="no-print mb-6 flex flex-wrap items-center justify-between gap-3 rounded-md border border-accent-700/50 bg-accent-600/10 px-4 py-3 text-xs text-accent-200">
           <span>
-            <span className="font-semibold">Example plan.</span> This is a ready-made launch
-            plan for a fictional product, so you can see the output without an API key.
+            <span className="font-semibold">Fictional example · never saved.</span> This
+            walkthrough makes no model calls and never posts anything.
           </span>
           <Button size="sm" variant="outline" onClick={f.reset}>
             Try your own URL →
@@ -168,7 +281,11 @@ function AppFlow({
           setProvider={f.setProvider}
           availProviders={f.availProviders}
           loading={f.loading}
-          onAnalyze={f.analyze}
+          onAnalyze={() => {
+            void f.analyze().then((succeeded) => {
+              if (succeeded && handoffAccepted) onHandoffAnalyzed();
+            });
+          }}
           onDemo={f.loadDemo}
         />
       )}
@@ -264,7 +381,7 @@ function AppFlow({
         </div>
       )}
 
-      {f.step === "results" && f.result && f.profile && f.strategy && (
+      {f.step === "results" && f.result && f.profile && f.strategy && !f.demo && (
         <CopilotPanel
           profile={f.profile}
           strategy={f.strategy}

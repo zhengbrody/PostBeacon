@@ -71,7 +71,7 @@ export function UrlStep({
           disabled={loading}
           className="text-xs text-neutral-400 underline-offset-4 transition-colors hover:text-accent-300 hover:underline disabled:opacity-40"
         >
-          or see a full example plan
+          or try the fictional 3-minute walkthrough
         </button>
       </div>
 

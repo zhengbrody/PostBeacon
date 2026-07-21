@@ -2,8 +2,10 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { LegalShell, LegalSection, LegalTable } from "@/components/legal/LegalShell";
 import {
+  accountsConfigured,
   configuredProviderPrivacy,
   deepseekAutomaticFallbackEnabled,
+  guestPreviewConfigured,
   providerFallbackNotice,
   retentionDays,
   visibleDataCategories,
@@ -20,6 +22,8 @@ export default function PrivacyPage() {
   const deepseekFallback = deepseekAutomaticFallbackEnabled();
   const dataCategories = visibleDataCategories();
   const providerPrivacy = configuredProviderPrivacy();
+  const guestPreview = guestPreviewConfigured();
+  const accounts = accountsConfigured();
   return (
     <LegalShell
       title="Privacy"
@@ -27,10 +31,24 @@ export default function PrivacyPage() {
     >
       <LegalSection title="The short version">
         <ul className="list-disc space-y-1.5 pl-5">
-          <li>
-            Not signed in? Your draft lives in <strong>your browser’s localStorage</strong>,
-            not on our servers. Clear it any time with “Clear local draft”.
-          </li>
+          {guestPreview ? (
+            <li>
+              Not signed in? The one-channel preview is processed by the server and AI
+              provider, but is <strong>not written to the projects database</strong>. Its
+              result stays in this browser for up to one hour so you can explicitly continue
+              after signing in.
+            </li>
+          ) : !accounts ? (
+            <li>
+              In local-only mode, your draft lives in{" "}
+              <strong>your browser’s localStorage</strong>, not on our servers.
+            </li>
+          ) : (
+            <li>
+              The fictional walkthrough is never saved. Sign in before analyzing your own
+              URL or saving a project.
+            </li>
+          )}
           <li>
             Signed in? Projects are saved to our database (Supabase) in rows{" "}
             <strong>only your account can read</strong>.
@@ -137,8 +155,8 @@ export default function PrivacyPage() {
       <LegalSection title="Your controls">
         <ul className="list-disc space-y-1.5 pl-5">
           <li>
-            <strong>Clear local draft</strong> — on the start step, removes the anonymous
-            draft from your browser.
+            <strong>Clear browser preview or draft</strong> — removes the temporary guest
+            preview or local-only draft from this device.
           </li>
           <li>
             <strong>Export my data</strong> — in the app’s “Data &amp; privacy” menu:
@@ -166,13 +184,13 @@ export default function PrivacyPage() {
           <p>
             This deployment automatically deletes signed-in projects untouched for{" "}
             <strong>{retention} days</strong> (and internal webhook receipts of the same
-            age). Anonymous drafts are on your device and are never touched by us.
+            age). Browser-only preview and draft retention is listed in the inventory above.
           </p>
         ) : (
           <p>
             This deployment runs no automatic deletion: your saved projects are kept until
-            you delete them. Anonymous drafts are on your device and are never touched by
-            us.
+            you delete them. Browser-only preview and draft retention is listed in the
+            inventory above.
           </p>
         )}
       </LegalSection>

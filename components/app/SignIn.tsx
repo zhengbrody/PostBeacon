@@ -135,13 +135,15 @@ async function signInWithGoogle(redirectTo = "/app") {
 export function GoogleButton({
   redirectTo = "/app",
   className = "",
+  onBeforeSignIn,
 }: {
   redirectTo?: string;
   className?: string;
+  onBeforeSignIn?: () => string | undefined;
 }) {
   return (
     <button
-      onClick={() => signInWithGoogle(redirectTo)}
+      onClick={() => signInWithGoogle(onBeforeSignIn?.() ?? redirectTo)}
       className={`inline-flex items-center justify-center gap-2.5 rounded-lg bg-white px-4 py-2.5 text-sm font-medium text-neutral-800 transition-colors hover:bg-neutral-100 ${className}`}
     >
       <GoogleMark />

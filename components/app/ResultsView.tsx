@@ -8,6 +8,7 @@ import { TodayTab } from "@/components/app/results/TodayTab";
 import { PlanReport } from "@/components/app/results/PlanReport";
 import { TimelineTab } from "@/components/app/results/TimelineTab";
 import { ReviewTab } from "@/components/app/results/ReviewTab";
+import { DemoGuide, type DemoGuideStep } from "@/components/app/DemoGuide";
 import { PublishDialog, type PublishDetails } from "@/components/app/results/PublishDialog";
 import { OutcomePanel } from "@/components/app/results/OutcomePanel";
 import { deriveToday, type TodayAction } from "@/lib/today";
@@ -112,6 +113,8 @@ export function ResultsView({
     checkpoint: OutcomeCheckpoint;
   } | null>(null);
   const [notice, setNotice] = useState<{ title: string; detail: string } | null>(null);
+  const [demoGuideOpen, setDemoGuideOpen] = useState(demo);
+  const [demoPrepared, setDemoPrepared] = useState(false);
 
   const today = useMemo(
     () => deriveToday({ launchDate, strategy, result, workspace }, new Date()),
@@ -149,6 +152,14 @@ export function ResultsView({
     ? workspace.experiments.find((e) => e.id === outcomeFor.experimentId)
     : undefined;
   const activeExperiment = useMemo(() => latestRelevantExperiment(workspace), [workspace]);
+  const demoStep: DemoGuideStep =
+    !demoPrepared && !activeExperiment
+      ? "prepare"
+      : !activeExperiment
+        ? "publish"
+        : activeExperiment.outcomes.length === 0
+          ? "measure"
+          : "learn";
   const primaryExperiment = today.primaryAction.experimentId
     ? workspace.experiments.find(
         (experiment) => experiment.id === today.primaryAction.experimentId
@@ -184,15 +195,69 @@ export function ResultsView({
     };
     onPublishExperiment(experiment, `post:${publishContent.platformId}`);
     setNotice({
-      title: `${publishContent.platformName} experiment started`,
-      detail: `Publish saved. The first useful result check opens ${new Date(
-        Date.now() + 24 * 60 * 60 * 1000
-      ).toLocaleString()}; Progress and Weekly Review now follow this experiment.`,
+      title: demo
+        ? `${publishContent.platformName} example experiment started`
+        : `${publishContent.platformName} experiment started`,
+      detail: demo
+        ? "Simulated publish only. The temporary workspace is now ready for an example result."
+        : `Publish saved. The first useful result check opens ${new Date(
+            Date.now() + 24 * 60 * 60 * 1000
+          ).toLocaleString()}; Progress and Weekly Review now follow this experiment.`,
     });
     setPublishFor(null);
     setOutcomeFor(null);
     setSurface("today");
   }
+
+  function demoGuideAction(step: DemoGuideStep) {
+    if (!demo) return;
+    if (step === "prepare") {
+      setSurface("today");
+      setDemoPrepared(true);
+      setNotice({
+        title: "Example draft ready",
+        detail:
+          "Review the evidence-backed draft below, then try the publish confirmation.",
+      });
+      return;
+    }
+    if (step === "publish") {
+      const platformId = today.primaryAction.platformId ?? result.content[0]?.platformId;
+      if (platformId) setPublishFor({ platformId, postIdx: 0 });
+      return;
+    }
+    if (step === "measure" && activeExperiment) {
+      onRecordOutcome(activeExperiment.id, {
+        id: crypto.randomUUID(),
+        checkpoint: "24h",
+        recordedAt: new Date().toISOString(),
+        impressions: 640,
+        replies: 5,
+        clicks: 24,
+        signups: 4,
+        qualitativeFeedback:
+          "Example result: replies focused on the one-line setup and self-host option.",
+      });
+      setSurface("review");
+      setNotice({
+        title: "Example result recorded",
+        detail:
+          "The verdict and next experiment now come from the same temporary workspace state.",
+      });
+      return;
+    }
+    if (step === "learn") {
+      setSurface("review");
+      setDemoGuideOpen(false);
+    }
+  }
+
+  const demoOnlyNotice = (action: string) =>
+    setNotice({
+      title: `${action} is paused in the example`,
+      detail:
+        "The walkthrough never calls a model or saves data. Sign in and use your own project for live generation.",
+    });
 
   const skipTask = (a: TodayAction) => {
     onActTask({
@@ -233,7 +298,9 @@ export function ResultsView({
         strategy={strategy}
         loading={loading}
         onSave={(outcome) => onRecordOutcome(outcomeExperiment.id, outcome)}
-        onGenerateVariant={() => onGenerateVariant(outcomeExperiment)}
+        onGenerateVariant={() =>
+          demo ? demoOnlyNotice("Variant generation") : onGenerateVariant(outcomeExperiment)
+        }
         onStop={() => onStopExperiment(outcomeExperiment.id)}
         onClose={() => setOutcomeFor(null)}
       />
@@ -241,11 +308,21 @@ export function ResultsView({
 
   return (
     <div className="space-y-6">
+      {demo && demoGuideOpen && (
+        <DemoGuide
+          currentStep={demoStep}
+          onPrimaryAction={demoGuideAction}
+          onSkip={() => setDemoGuideOpen(false)}
+          onClose={() => setDemoGuideOpen(false)}
+          busy={loading}
+        />
+      )}
+
       {result.failures && result.failures.length > 0 && (
         <FailuresCard
           failures={result.failures}
           loading={loading}
-          onRetry={onRetryFailed}
+          onRetry={demo ? () => demoOnlyNotice("Live generation") : onRetryFailed}
         />
       )}
 
@@ -283,15 +360,16 @@ export function ResultsView({
           onDoneCustom={doneCustom}
           onOpenContent={() => setSurface("plan")}
           onOpenReview={() => setSurface("review")}
-          onAskCopilot={(action, direction) =>
+          onAskCopilot={(action, direction) => {
+            if (demo) return demoOnlyNotice("Copilot");
             onAskCopilot(
               direction
                 ? `My current next best move is “${action.title}”. ${direction} Use evidence from my plan and propose only changes I can review before applying.`
                 : `Help me execute my current next best move: “${action.title}”. Explain the sharpest way to do it for this product, use evidence from my plan, and propose only changes I can review before applying.`,
               action.platformId
-            )
-          }
-          onRegenerate={onRegenerate}
+            );
+          }}
+          onRegenerate={demo ? () => demoOnlyNotice("Regeneration") : onRegenerate}
           onUpdatePost={onUpdatePost}
           primaryContent={primaryContent}
           posted={posted}
@@ -300,12 +378,13 @@ export function ResultsView({
           notice={notice}
           onDismissNotice={() => setNotice(null)}
           recordEditor={recordEditor}
-          onAskExperiment={(experiment) =>
+          onAskExperiment={(experiment) => {
+            if (demo) return demoOnlyNotice("Copilot");
             onAskCopilot(
               `For my active ${experiment.platformName} experiment, tell me exactly what to measure at the next check-in and how each signal changes the decision. Do not invent results.`,
               experiment.platformId
-            )
-          }
+            );
+          }}
           onRecordEarly={(experiment) =>
             setOutcomeFor({ experimentId: experiment.id, checkpoint: "manual" })
           }
@@ -333,7 +412,7 @@ export function ResultsView({
           memory={memory}
           posted={posted}
           onTogglePosted={onTogglePosted}
-          onRegenerate={onRegenerate}
+          onRegenerate={demo ? () => demoOnlyNotice("Regeneration") : onRegenerate}
           onUpdatePost={onUpdatePost}
           onUpdateStrategy={onUpdateStrategy}
           onUpdateRecommendation={onUpdateRecommendation}
@@ -341,7 +420,7 @@ export function ResultsView({
           onRemoveScheduleItem={onRemoveScheduleItem}
           onAddScheduleItem={onAddScheduleItem}
           onRemoveChannel={onRemoveChannel}
-          onAddChannel={onAddChannel}
+          onAddChannel={demo ? () => demoOnlyNotice("Live generation") : onAddChannel}
           onRequestPublish={(platformId, postIdx) => setPublishFor({ platformId, postIdx })}
           printing={printing}
           launchDate={launchDate}
@@ -388,6 +467,7 @@ export function ResultsView({
             (r) => r.platformId === publishFor.platformId
           )}
           defaultPostIdx={publishFor.postIdx}
+          demo={demo}
           onConfirm={confirmPublish}
           onClose={() => setPublishFor(null)}
         />

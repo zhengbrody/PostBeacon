@@ -6,13 +6,14 @@ export function Footer() {
     <footer className="border-t border-line/60">
       <div className="mx-auto max-w-5xl px-5 py-16 text-center">
         <h2 className="text-2xl font-bold tracking-tight">
-          Stop guessing where to launch.
+          Turn the next post into a learning.
         </h2>
         <p className="mx-auto mt-3 max-w-md text-sm text-neutral-400">
-          Get your full multi-platform plan in under a minute.
+          Start with verified product facts, publish one focused experiment, and let the
+          result shape what you do next.
         </p>
         <ButtonLink href="/app" className="mt-6">
-          Launch app →
+          Find my next move →
         </ButtonLink>
         <div className="mt-10 flex justify-center gap-4 text-xs text-neutral-500">
           <Link href="/privacy" className="hover:text-neutral-300">

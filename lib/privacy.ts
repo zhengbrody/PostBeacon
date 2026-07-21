@@ -6,9 +6,10 @@
 // notice, not a claim about a future company, paid service, or jurisdiction.
 
 import type { Provider } from "./types";
+import { guestPreviewQuotaConfigured } from "./guestPreviewQuota";
 
 /** Bump when the published policy text meaningfully changes. */
-export const PRIVACY_LAST_UPDATED = "2026-07-14";
+export const PRIVACY_LAST_UPDATED = "2026-07-21";
 
 /**
  * How each LLM provider handles API data, per its PUBLIC policy as of
@@ -190,6 +191,14 @@ export const SUBPROCESSORS: Subprocessor[] = [
     when: "Only when email reminders are configured and you explicitly turn them on",
     policyUrl: "https://resend.com/legal/privacy-policy",
   },
+  {
+    name: "Upstash",
+    role: "Anonymous preview abuse limits",
+    data: "A keyed digest of a random visitor token and aggregate request counts — never the submitted URL, page text, IP, user agent, or draft",
+    region: "Operator-chosen database region",
+    when: "Only when the signed-out one-channel preview is enabled",
+    policyUrl: "https://upstash.com/trust/privacy.pdf",
+  },
 ];
 
 /** Whether paid billing is actually live in this deployment. */
@@ -209,6 +218,30 @@ export function emailRemindersConfigured(): boolean {
     process.env.REMINDER_FROM_EMAIL &&
     process.env.CRON_SECRET &&
     process.env.SUPABASE_SERVICE_ROLE_KEY
+  );
+}
+
+export function accountsConfigured(): boolean {
+  return Boolean(
+    process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  );
+}
+
+/** Public only when the model path and persistent, fail-closed quota boundary
+ * are both configured. */
+export function guestPreviewConfigured(): boolean {
+  const clearProviderConfigured =
+    providerConfigured("claude") || providerConfigured("openai");
+  const deepseekConfigured = providerConfigured("deepseek");
+  const providerAvailable = clearProviderConfigured || deepseekConfigured;
+  const couldSendToDeepSeek =
+    deepseekConfigured && (!clearProviderConfigured || deepseekAutomaticFallbackEnabled());
+  return Boolean(
+    providerAvailable &&
+    process.env.GUEST_PREVIEW_ENABLED === "true" &&
+    (process.env.GUEST_PREVIEW_SIGNING_SECRET?.length ?? 0) >= 32 &&
+    guestPreviewQuotaConfigured() &&
+    (!couldSendToDeepSeek || process.env.GUEST_PREVIEW_ALLOW_DEEPSEEK === "true")
   );
 }
 
@@ -238,6 +271,8 @@ export function activeSubprocessors(): Subprocessor[] {
         return billingConfigured();
       case "Resend":
         return emailRemindersConfigured();
+      case "Upstash":
+        return guestPreviewConfigured();
       default:
         return true;
     }
@@ -252,16 +287,38 @@ export interface DataCategory {
   retention: string;
   deletion: string;
   /** Hide dormant product surfaces from the current public beta notice. */
-  requires?: "billing" | "reminders";
+  requires?: "billing" | "reminders" | "guestPreview" | "localDraft";
 }
 
 export const DATA_CATEGORIES: DataCategory[] = [
   {
-    what: "Anonymous draft (URL, profile, strategy, drafts, experiments, product memory)",
+    what: "Anonymous full draft (URL, profile, strategy, drafts, experiments, product memory)",
     where: "Your browser's localStorage — never our servers",
-    why: "So you can close the tab and resume",
+    why: "Local-only mode when accounts are not configured",
     retention: "Until you clear it",
     deletion: "“Clear local draft” on the start step, or clear browser data",
+    requires: "localDraft",
+  },
+  {
+    what: "Signed-out one-channel preview (URL and returned product/channel/draft summary)",
+    where:
+      "Processed by the server and AI provider; the result is kept in this browser's localStorage only for the sign-in handoff",
+    why: "Give one useful result before sign-in and preserve it across a same-browser sign-in",
+    retention:
+      "Up to 1 hour in this browser; PostBeacon does not write it to the projects database",
+    deletion: "“Clear this preview” or clear browser data",
+    requires: "guestPreview",
+  },
+  {
+    what: "Signed-out preview quota identity",
+    where:
+      "A signed random browser cookie; Upstash receives only a keyed digest and per-window counters",
+    why: "Enforce one visitor limit and a shared hard spend cap without IP or device fingerprinting",
+    retention:
+      "Cookie up to 30 days; quota counters expire after the configured window (24h by default)",
+    deletion:
+      "Clear site cookies; server counters expire automatically and contain no submitted content",
+    requires: "guestPreview",
   },
   {
     what: "Account identity (email, optional Google sign-in, display name)",
@@ -339,6 +396,8 @@ export function visibleDataCategories(): DataCategory[] {
   return DATA_CATEGORIES.filter((category) => {
     if (category.requires === "billing") return billingConfigured();
     if (category.requires === "reminders") return emailRemindersConfigured();
+    if (category.requires === "guestPreview") return guestPreviewConfigured();
+    if (category.requires === "localDraft") return !accountsConfigured();
     return true;
   });
 }

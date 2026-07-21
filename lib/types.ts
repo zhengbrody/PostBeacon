@@ -9,6 +9,62 @@ export interface ProviderRunMeta {
   fallbackFrom?: Provider;
 }
 
+/** Server-authored capability contract for the signed-out preview. The browser
+ * must not reconstruct provider routing or privacy warnings from public env. */
+export interface GuestPreviewProviderCapability {
+  enabled: boolean;
+  primaryProvider: Provider | null;
+  eligibleFallbackProviders: Provider[];
+  deepseek: {
+    eligible: boolean;
+    guestDataOptIn: boolean;
+    mayReceivePreviewData: boolean;
+    priorWarningRequired: boolean;
+    region: string;
+    policyUrl: string;
+    notice: string;
+  };
+}
+
+/** Minimal, non-persistent response for the signed-out URL preview. It is
+ * deliberately not a partial saved project: no fact ledger, strategy corpus,
+ * playbook, schedule, or provider prompt leaves the server. */
+export interface GuestPreviewResult {
+  source: {
+    url: string;
+    hostname: string;
+  };
+  product: {
+    name: string;
+    tagline: string;
+    valueProp: string;
+    audience: string;
+    confidence?: Confidence;
+  };
+  channel: {
+    platformId: string;
+    platformName: string;
+    score: number;
+    rationale: string;
+    angle: string;
+    venue?: string;
+    provenance?: "grounded" | "inferred";
+  };
+  draft: {
+    hook: string;
+    body: string;
+    imageSuggestion: string;
+    bestTime: string;
+    caveats: string;
+    truthCheck: "passed";
+  };
+  provenance: {
+    analysis: ProviderRunMeta;
+    scoring: ProviderRunMeta[];
+    content: ProviderRunMeta;
+  };
+}
+
 /** How grounded a model's conclusion is vs. inferred from a thin page. */
 export type Confidence = "high" | "medium" | "low";
 

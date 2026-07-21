@@ -22,6 +22,7 @@ Claude/OpenAI/DeepSeek (switchable) · Supabase (optional accounts) · cheerio +
 
 ## Data flow
 ```
+guest URL ──► /api/preview ──► one safe channel + one truth-checked draft
 URL ──► /api/analyze  ──► ProductProfile        (scrape + LLM extract)
         /api/strategy ──► MarketingStrategy      (score & rank ALL platforms + positioning)
         /api/generate ──► GenerateResult         (per-platform content + launch calendar)
@@ -44,6 +45,7 @@ app/
   app/page.tsx          The tool — thin; wires useLaunchFlow to components/app/*
   api/
     analyze|strategy|generate|regenerate|providers|usage/route.ts   server endpoints
+    preview/route.ts           signed-out one-channel first value; persistent atomic quota
     account/{export,delete}/route.ts   data rights (bearer; delete = typed confirm +
                                        service role, fails closed 503 without it)
     retention|reminders/route.ts       CRON_SECRET-gated daily operator jobs; reminders
@@ -73,6 +75,12 @@ lib/
                         — the ONLY proposal→state bridge, used on explicit confirm
   voice.ts              ANTI_AI_RULES — house rules injected into content prompts to kill AI tells
   demo.ts               DEMO_PROJECT — a hand-authored full example plan (the no-API-key showcase)
+  guestPreview.ts       Minimal scrape→analyze→rank→one draft orchestration; same Truth Gate
+  guestPreviewConfig.ts Fail-closed feature/provider/privacy/limit configuration
+  guestPreviewQuota.ts  Atomic per-visitor + global Upstash quota (no submitted content)
+  guestPreviewToken.ts  Signed random visitor identity + keyed quota digest (no IP/fingerprint)
+  previewHandoff.ts     1h browser-only guest result + 30m one-time auth nonce handoff;
+                        explicit account continuation, consumed only by matching callback
   site.ts               Public config (feedback + monitored privacy contact) —
                         NEXT_PUBLIC_* overridable with safe fallbacks
   privacy.ts            M17 single source for public privacy claims: data inventory,
@@ -155,6 +163,7 @@ docs/M20-truthful-execution.md Product contract for explicit publisher voice, de
                         draft truth gates, channel-consistent Copilot and honest zero results
 docs/M21-product-system-audit.md Pre-launch audit: journey/state maps, evidenced P0–P3
                         findings, fix scope and acceptance criteria
+docs/M23-first-value.md Landing/guest preview/demo/handoff contract and activation boundary
 tests/                  vitest suites: urlPolicy, safeFetch, billing, webhook route, validate,
                         golden (12-fixture offline evals), generateRoute, flowReducer
                         (state-machine invariants), storage (draft migrations), workspace
@@ -213,6 +222,10 @@ post-checkout redirect; defaults to https://postbeacon.app),
 `NEXT_PUBLIC_PRIVACY_EMAIL` (shown on legal pages only after inbound mail is working), and for metering/billing
 `SUPABASE_SERVICE_ROLE_KEY` + `POLAR_ACCESS_TOKEN` + `POLAR_PRODUCT_ID` + `POLAR_WEBHOOK_SECRET`
 (point the Polar webhook at `/api/billing/webhook`; without the secret the webhook fails closed).
+The signed-out preview additionally needs the complete fail-closed set documented in
+`.env.example`: `GUEST_PREVIEW_ENABLED`, a ≥32-byte signing secret, and Upstash REST
+  URL/token; DeepSeek needs its separate guest-preview opt-in and the visitor's
+  server-enforced pre-submit acknowledgement.
 
 **Live (verified 2026-07-13):** Vercel project `zhengbrodys-projects/postbeacon` → **https://postbeacon.app** + www.
 Porkbun DNS: apex `A 76.76.21.21`, www `CNAME cname.vercel-dns.com` (nameservers stay on Porkbun).
@@ -228,10 +241,29 @@ external inbound test to the monitored founder mailbox. `DEFAULT_PROVIDER=openai
 `NEXT_PUBLIC_DEEPSEEK_FALLBACK=true` allows a visibly disclosed DeepSeek retry during beta.
 Inactive projects and webhook ids are retained for 30 days. `Pricing` is hidden during beta.
 Event email code is deployed fail-closed but remains off until Resend/sender/public flag are
-configured and verified; in-app reminders remain active.
+configured and verified; in-app reminders remain active. Signed-out preview code is present
+but remains hidden/off until its persistent quota configuration is added and verified.
 Redeploy: `npx vercel --prod --yes`. Push env from `.env.local`: `~/push-env.sh`.
 
 ## Status / changelog
+- **2026-07-21**: **M23 — first value before the full report.** Public positioning now
+  leads with verified facts → one experiment → manual publish → measured result → next move,
+  including metadata and OG. Signed-out users can receive one best channel and one
+  truth-checked draft through a new fail-closed preview route: same-origin + SSRF policy,
+  signed random visitor token, atomic persistent visitor/global quota before any scrape or
+  model call, provider provenance, no project write and no URL/content/IP/UA/fingerprint in
+  the quota store. Provider routing and any DeepSeek risk appear before submit, with the
+  acknowledgement enforced server-side. A canonical source receipt prevents stale results;
+  browser waiting can be stopped after 90s with honest quota copy. A separate one-hour
+  browser handoff uses a 30-minute, one-time callback nonce, then requires an explicit
+  continue action and clears on account switches. The fictional demo
+  now walks through the real Prepare→Publish→Measure→Learn projections without model calls,
+  publishing or autosave; live generation controls explain the boundary instead. Privacy,
+  vendor inventory, FAQ and operator env contract were synchronized in
+  `docs/M23-first-value.md`. 368 offline tests, typecheck, lint, format and production build
+  are green. Browser-verified on desktop and 375 px: no horizontal overflow, ≥44 px primary
+  onboarding controls, the complete four-step state transition, reload-to-canonical demo,
+  SSRF rejection before work, deployment-aware privacy copy and zero console errors.
 - **2026-07-15**: **M22 — generation quality quantified.** The live golden eval now runs
   the M20/M21 truth gate and character budget over every generated draft and reports
   truth-gate clean rate, issue-code distribution and the single-fit / thread-only /

@@ -72,8 +72,10 @@ export function useLaunchFlow() {
     setLoadingMsg(msg);
     try {
       await fn();
+      return true;
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong");
+      return false;
     } finally {
       setLoading(false);
       setLoadingMsg("");

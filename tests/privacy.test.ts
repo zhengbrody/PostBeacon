@@ -8,6 +8,7 @@ import {
   configuredProviderPrivacy,
   DATA_CATEGORIES,
   emailRemindersConfigured,
+  guestPreviewConfigured,
   providerFallbackNotice,
   PROVIDER_PRIVACY,
   SUBPROCESSORS,
@@ -30,6 +31,11 @@ const KEY_ENVS = [
   "REMINDER_FROM_EMAIL",
   "CRON_SECRET",
   "SUPABASE_SERVICE_ROLE_KEY",
+  "GUEST_PREVIEW_ENABLED",
+  "GUEST_PREVIEW_SIGNING_SECRET",
+  "GUEST_PREVIEW_ALLOW_DEEPSEEK",
+  "UPSTASH_REDIS_REST_URL",
+  "UPSTASH_REDIS_REST_TOKEN",
 ] as const;
 const saved = KEY_ENVS.map((k) => [k, process.env[k]] as const);
 afterEach(() => {
@@ -121,6 +127,29 @@ describe("privacy single source stays complete", () => {
     expect(
       visibleDataCategories().some((category) =>
         category.what.includes("reminder delivery")
+      )
+    ).toBe(true);
+  });
+
+  it("publishes guest-preview storage only with the complete fail-closed path", () => {
+    delete process.env.GUEST_PREVIEW_ENABLED;
+    delete process.env.GUEST_PREVIEW_SIGNING_SECRET;
+    delete process.env.UPSTASH_REDIS_REST_URL;
+    delete process.env.UPSTASH_REDIS_REST_TOKEN;
+    expect(guestPreviewConfigured()).toBe(false);
+    expect(activeSubprocessors().some((vendor) => vendor.name === "Upstash")).toBe(false);
+
+    process.env.GUEST_PREVIEW_ENABLED = "true";
+    process.env.GUEST_PREVIEW_SIGNING_SECRET = "x".repeat(32);
+    process.env.UPSTASH_REDIS_REST_URL = "https://example.upstash.io";
+    process.env.UPSTASH_REDIS_REST_TOKEN = "test";
+    process.env.OPENAI_API_KEY = "test";
+    delete process.env.NEXT_PUBLIC_DEEPSEEK_FALLBACK;
+    expect(guestPreviewConfigured()).toBe(true);
+    expect(activeSubprocessors().some((vendor) => vendor.name === "Upstash")).toBe(true);
+    expect(
+      visibleDataCategories().some((category) =>
+        category.what.includes("Signed-out one-channel preview")
       )
     ).toBe(true);
   });

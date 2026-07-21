@@ -21,12 +21,12 @@ export function PlatformShowcase() {
     <section id="platforms" className="border-y border-line/60 bg-surface/30">
       <div className="mx-auto max-w-5xl px-5 py-20">
         <h2 className="text-center text-3xl font-bold tracking-tight">
-          One scan. Every channel that matters.
+          Score every channel. Act on one.
         </h2>
         <p className="mx-auto mt-3 max-w-xl text-center text-sm text-neutral-400">
           PostBeacon evaluates {PLATFORMS.length}+ platforms across{" "}
-          {Object.keys(grouped).length} categories and tells you which deserve your limited
-          time.
+          {Object.keys(grouped).length} categories, then brings one evidence-backed next
+          move to the front. The full ranking stays available when you need it.
         </p>
         <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {Object.entries(grouped).map(([cat, names]) => (
