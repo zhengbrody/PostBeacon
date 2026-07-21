@@ -3,7 +3,7 @@ import { ImageResponse } from "next/og";
 // Generated share card — no static asset to maintain; renders the brand in code.
 // Node runtime, consistent with the rest of the app.
 export const runtime = "nodejs";
-export const alt = "PostBeacon — your AI CMO. URL in, launch plan out.";
+export const alt = "PostBeacon — know the next growth move, then learn from it.";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -39,11 +39,10 @@ export default function OpengraphImage() {
           color: "transparent",
         }}
       >
-        Your AI CMO. URL in, launch plan out.
+        Know what to do next. Learn from what happens.
       </div>
       <div style={{ marginTop: 34, fontSize: 30, color: "#a1a1aa", maxWidth: 840 }}>
-        Scans 19+ platforms, ranks where to go all-in, and writes ready-to-post content + a
-        launch calendar. Built for vibecoders.
+        Verified facts → one focused experiment → a real result → the next move.
       </div>
     </div>,
     { ...size }

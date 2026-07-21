@@ -304,6 +304,14 @@ export const analyzeBodySchema = z.object({
   provider: providerSchema.optional(),
 });
 
+/** A signed-out visitor cannot select a provider. The consent bit is accepted
+ * only so the server can enforce its current provider disclosure before any
+ * quota or model work; it never changes provider routing. */
+export const guestPreviewBodySchema = z.object({
+  url: z.string().min(4).max(2048),
+  deepseekConsent: z.boolean().optional(),
+});
+
 export const strategyBodySchema = z.object({
   profile: profileSchema,
   provider: providerSchema.optional(),

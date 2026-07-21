@@ -2,7 +2,7 @@
   "name": "postbeacon",
   "version": "0.1.0",
   "private": true,
-  "description": "PostBeacon \u2014 paste a URL, get a scored multi-platform launch plan + ready-to-post content. For vibecoders.",
+  "description": "PostBeacon \u2014 turn verified product facts into one focused growth experiment, a measured result, and the next move.",
   "scripts": {
     "dev": "next dev",
     "build": "next build",

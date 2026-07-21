@@ -9,30 +9,30 @@ const TIERS = [
     name: "Free",
     price: "$0",
     period: "",
-    tagline: "Try your first launches",
+    tagline: "Close your first learning loops",
     cta: "Start free",
     highlight: false,
     features: [
-      "3 full launches",
-      "All 19+ platforms scored & ranked",
-      "Ready-to-post content + launch calendar",
-      "Copy-paste — no auto-posting",
-      "Export to Markdown / PDF",
+      "3 full launch workspaces",
+      "All 19+ platforms evaluated",
+      "One evidence-backed next move",
+      "Truth-checked, ready-to-post draft",
+      "24h/72h result and verdict",
     ],
   },
   {
     name: "Pro",
     price: PRO_PRICE,
     period: PRO_PERIOD,
-    tagline: "Launch as much as you ship",
+    tagline: "Keep learning as you ship",
     cta: "Go Pro",
     highlight: true,
     features: [
       "Everything in Free",
-      "Unlimited launches",
+      "Unlimited launch workspaces",
       "Regenerate & A/B hooks",
       "Grounded niche-channel discovery",
-      "Autosave every project",
+      "Project memory and weekly review",
     ],
   },
 ];
@@ -42,7 +42,7 @@ export function Pricing() {
     <section id="pricing" className="mx-auto max-w-4xl px-5 py-20">
       <h2 className="text-center text-3xl font-bold tracking-tight">Simple pricing</h2>
       <p className="mt-3 text-center text-sm text-neutral-400">
-        Start free. Upgrade when you&apos;re launching more.
+        Start free. Upgrade when your learning loop becomes a habit.
       </p>
       <div className="mt-10 grid gap-5 sm:grid-cols-2">
         {TIERS.map((t) => (

@@ -42,6 +42,7 @@ export function PublishDialog({
   defaultPostIdx,
   initialCommunity,
   initialAngle,
+  demo = false,
   onConfirm,
   onClose,
 }: {
@@ -53,6 +54,7 @@ export function PublishDialog({
   /** Optional prefills (e.g. from a confirmed create_experiment proposal). */
   initialCommunity?: string;
   initialAngle?: string;
+  demo?: boolean;
   onConfirm: (details: PublishDetails) => void;
   onClose: () => void;
 }) {
@@ -79,17 +81,21 @@ export function PublishDialog({
         onClick={(e) => e.stopPropagation()}
       >
         <h2 className="text-lg font-semibold">
-          Published on {content.platformName} — start tracking it
+          {demo
+            ? `Simulate a manual ${content.platformName} publish`
+            : `Published on ${content.platformName} — start tracking it`}
         </h2>
         <p className="mb-4 mt-1 text-xs text-neutral-500">
-          This creates an experiment so the 24h and 72h check-ins know what to ask about.
-          PostBeacon never posts for you.
+          {demo
+            ? "This is fictional example data. Nothing is posted, sent to a model, or saved."
+            : "This creates an experiment so the 24h and 72h check-ins know what to ask about. PostBeacon never posts for you."}
         </p>
         <div className="mb-5 rounded-lg border border-line bg-surface-2/50 p-3">
           <ExecutionProgress steps={PUBLISH_STEPS} />
           <p className="mt-3 text-xs text-neutral-500">
-            Confirm what you actually published. This click starts the 24h countdown and
-            updates Today, Progress and Weekly Review together.
+            {demo
+              ? "Try the same confirmation a real project uses. It updates only this temporary example workspace."
+              : "Confirm what you actually published. This click starts the 24h countdown and updates Today, Progress and Weekly Review together."}
           </p>
         </div>
 
@@ -146,7 +152,7 @@ export function PublishDialog({
               })
             }
           >
-            Start tracking
+            {demo ? "Simulate publish" : "Start tracking"}
           </Button>
           <Button variant="outline" onClick={onClose}>
             Cancel

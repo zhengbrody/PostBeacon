@@ -12,6 +12,8 @@ import type {
   CopilotReplyV2,
   CopilotRequest,
   Fact,
+  GuestPreviewProviderCapability,
+  GuestPreviewResult,
 } from "./types";
 
 export interface UsageInfo {
@@ -55,13 +57,39 @@ async function post<T>(path: string, body: unknown): Promise<T> {
   return data as T;
 }
 
+/** Same response contract as post(), but intentionally carries no account
+ * bearer. Only the separately quota-gated guest preview may use this seam. */
+async function postGuest<T>(path: string, body: unknown, signal?: AbortSignal): Promise<T> {
+  const res = await fetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    signal,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const response = data as { error?: string; code?: ApiErrorCode };
+    const err = new Error(response.error || `${path} failed`) as ApiError;
+    err.code = response.code;
+    err.status = res.status;
+    throw err;
+  }
+  return data as T;
+}
+
 // Single typed surface for the browser → server calls. Keeps fetch boilerplate
 // out of components and the hook.
 export const api = {
   providers: () =>
     fetch("/api/providers").then((r) => r.json()) as Promise<{
       providers: Provider[];
+      guestPreviewEnabled?: boolean;
+      guestPreview?: GuestPreviewProviderCapability;
     }>,
+  /** Signed-out, strictly quota-limited preview. Deliberately does not attach
+   * an account bearer token or persist the returned data. */
+  guestPreview: (url: string, deepseekConsent: boolean, signal?: AbortSignal) =>
+    postGuest<GuestPreviewResult>("/api/preview", { url, deepseekConsent }, signal),
   analyze: (url: string, provider: Provider) =>
     post<{
       profile: ProductProfile;

@@ -1,13 +1,27 @@
-import { providerFallbackNotice } from "@/lib/privacy";
+import {
+  accountsConfigured,
+  guestPreviewConfigured,
+  providerFallbackNotice,
+} from "@/lib/privacy";
+
+const dataLocationAnswer = guestPreviewConfigured()
+  ? "Before sign-in, the one-channel preview is processed by the server and AI provider but is not written to the project database. Its result stays in this browser for up to one hour for an explicit sign-in handoff. Signed-in projects use owner-only Supabase rows. You can export or delete your account data in the app."
+  : accountsConfigured()
+    ? "The fictional walkthrough is never saved. Your own plans are saved only after sign-in, in owner-only Supabase rows. You can export or delete your account data in the app."
+    : "In local-only mode, the current draft stays in your browser's localStorage. Clear it from the start step or clear browser data.";
 
 const FAQS = [
   {
     q: "Does PostBeacon post for me automatically?",
-    a: "No — and that's deliberate. Auto-posting gets accounts flagged and banned. PostBeacon writes native, ready-to-post content and a calendar; you copy and post, staying fully in control.",
+    a: "No — and that's deliberate. PostBeacon prepares and truth-checks the draft, but you review every change and publish it yourself. Confirming the publish starts the 24h/72h result loop.",
   },
   {
     q: "How does it know which platforms are right for my product?",
-    a: "It builds a profile from your URL, then scores every platform in its universe for fit to your specific product and audience — so a fintech tool and a dev library get very different plans.",
+    a: "It builds a fact ledger from your URL, then scores every platform for audience, intent, native-content fit, founder access, and risk. You get one next best experiment first; the full ranking remains in the Strategy library.",
+  },
+  {
+    q: "Is this another marketing report I use once?",
+    a: "No. The initial analysis opens into a workspace: prepare one experiment, publish manually, record the 24h and 72h signals, receive an explainable verdict, then act on the next experiment. The product becomes more useful as your project accumulates real evidence.",
   },
   {
     q: "Which AI model does it use?",
@@ -15,11 +29,11 @@ const FAQS = [
   },
   {
     q: "Where does my data live?",
-    a: "Not signed in: your current draft is saved in your browser's localStorage only (clear it any time with “Clear local draft”). Signed in: projects are stored to your account (Supabase) with row-level security so only you can read them. You can export everything as JSON or delete a project or your whole account from the app.",
+    a: dataLocationAnswer,
   },
   {
     q: "Who is it for?",
-    a: "Vibecoders and indie makers shipping to the English developer/startup community who want a real go-to-market without hiring a marketer.",
+    a: "Vibecoders and indie makers with a live product who need their first users, but don't want a generic content machine or another plan they still have to translate into action.",
   },
 ];
 
