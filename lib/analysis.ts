@@ -11,7 +11,7 @@ import type {
 } from "./types";
 
 /** Bump when the analyze prompt changes (recorded on every output). */
-export const ANALYZE_PROMPT_VERSION = "a3";
+export const ANALYZE_PROMPT_VERSION = "a4";
 
 export interface AnalysisOutcome {
   profile: ProductProfile;
@@ -35,7 +35,7 @@ export async function analyzeScrapedPage(
     provider,
     maxTokens: 3000,
     system:
-      "You are a sharp product strategist doing a first-pass diagnosis of a product from its landing page. Don't just lift the marketing copy — form a real point of view on what this is, who would actually pay attention, and why. Be concrete and specific, no fluff. Landing pages oversell; translate hype into the plain underlying truth.\n\nProvenance discipline (non-negotiable): for every fact you must decide honestly whether the PAGE STATES IT ('observed' — and you must copy a short verbatim quote as evidence) or whether YOU are concluding it ('inferred'). If the page simply doesn't say, mark it 'unknown' and leave the claim EMPTY — an honest unknown is worth more than a plausible guess. Your evidence quotes are machine-checked against the page text; a quote that isn't really there gets your fact demoted.",
+      "You are a sharp product strategist doing a first-pass diagnosis of a product from its landing page. Don't just lift the marketing copy — form a real point of view on what this is, who would actually pay attention, and why. Be concrete and specific, no fluff. Landing pages oversell; translate hype into the plain underlying truth. The diagnosis fields must do different jobs: whatItIs explains the mechanism in plain language; whyCare names the specific failure, cost, or desire that creates urgency; useCase names one trigger moment and the action taken. Do not fill them with generic category truths, and never introduce a capability the page does not support.\n\nProvenance discipline (non-negotiable): for every fact you must decide honestly whether the PAGE STATES IT ('observed' — and you must copy a short verbatim quote as evidence) or whether YOU are concluding it ('inferred'). If the page simply doesn't say, mark it 'unknown' and leave the claim EMPTY — an honest unknown is worth more than a plausible guess. Your evidence quotes are machine-checked against the page text; a quote that isn't really there gets your fact demoted.",
     user: `Here is the scraped landing page.
 
 URL: ${page.url}

@@ -132,6 +132,21 @@ export function auditFacts(
       confidence = Math.min(confidence, 0.6);
     }
 
+    // A model cannot know founder state, the outcome that matters now, or
+    // owned launch assets merely by interpreting landing-page copy. Keep an
+    // exact page observation, but turn every model inference for these three
+    // fields into an honest unknown so the operator is asked directly. This
+    // is deliberately enforced in code because models sometimes ignore the
+    // same instruction in the prompt (for example, inventing "start free
+    // trial" from generic product copy).
+    if (field && CONTEXT_FIELDS.includes(field as ContextField) && status !== "observed") {
+      status = "unknown";
+      claim = "";
+      keptEvidence = undefined;
+      sourceUrl = undefined;
+      confidence = 0;
+    }
+
     const id = field && !seen.has(field) ? field : `fact-${out.length + 1}`;
     seen.add(id);
     out.push({

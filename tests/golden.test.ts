@@ -121,6 +121,33 @@ describe("fact faithfulness enforcement (verifyFacts)", () => {
     expect(f.confidence).toBe(0);
   });
 
+  it("turns inferred launch context into honest unknowns", () => {
+    const facts = verifyFacts(
+      [
+        {
+          field: "conversionGoal",
+          claim: "start free trial",
+          status: "inferred",
+          confidence: 0.95,
+        },
+        {
+          field: "stage",
+          claim: "growing quickly",
+          status: "inferred",
+          confidence: 0.9,
+        },
+      ],
+      page
+    );
+
+    for (const field of ["conversionGoal", "stage"]) {
+      const fact = facts.find((item) => item.field === field)!;
+      expect(fact.status).toBe("unknown");
+      expect(fact.claim).toBe("");
+      expect(fact.confidence).toBe(0);
+    }
+  });
+
   it("synthesizes honest unknowns for missing context fields and caps the ledger", () => {
     const facts = verifyFacts([], page);
     for (const field of ["stage", "conversionGoal", "assets"]) {
