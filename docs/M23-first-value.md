@@ -98,6 +98,29 @@ The walkthrough never calls a model, never posts, and never autosaves. Regenerat
 and live generation paths show a local explanation instead of making a request. Reloading
 `?demo=1` restores the canonical empty example workspace.
 
+## Signed-in first review
+
+A real MindMarket run showed that the signed-in path still exposed the old report-shaped
+intake even after the guest path was shortened: page-verified claims, model interpretations,
+launch questions, plan preferences, diagnosis and the full profile editor were all expanded
+at once. The first review now keeps the same data and control while changing its hierarchy:
+
+- model interpretations appear first as **AI suggestions to review**, with explicit Confirm,
+  Edit and Remove actions;
+- page-verified and founder-confirmed claims move behind a collapsed evidence disclosure;
+- internal field identifiers render as human labels;
+- the primary growth goal is the only visibly required plan choice, and the deterministic
+  recommendation says **Use recommended** rather than looking pre-selected;
+- dates, weekly budget, publishing voice and the full profile editor remain available behind
+  optional disclosures;
+- the diagnosis is labelled as a working interpretation rather than quoted evidence;
+- inferred stage, conversion goal and owned assets are discarded in code and asked directly,
+  even when a model ignores the prompt and returns a confident guess.
+
+The collapsed review state has no mobile horizontal overflow; the main review actions use
+44 px touch targets. Confirming an AI suggestion immediately removes the review card and
+moves the claim into the verified disclosure.
+
 ## Public copy and privacy
 
 Landing metadata, OG copy, Hero, How it works, platform section, FAQ, Footer, and hidden

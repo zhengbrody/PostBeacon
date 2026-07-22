@@ -280,6 +280,17 @@ but remains hidden/off until its persistent quota configuration is added and ver
 Redeploy: `npx vercel --prod --yes`. Push env from `.env.local`: `~/push-env.sh`.
 
 ## Status / changelog
+- **2026-07-21**: **M23.1 — signed-in first review matches the first-value promise.** A
+  production MindMarket run showed the authenticated Diagnose step still expanded every
+  fact, question, preference, diagnosis and profile field at once. It now leads with only
+  unresolved AI suggestions and one required growth-goal choice; verified evidence, plan
+  preferences and the full editor use explicit disclosures. Internal fact keys are replaced
+  by human labels, observed claims no longer ask for redundant confirmation, and all review
+  actions have 44 px mobile targets. `Help me decide` became an unambiguous `Use recommended`
+  action with visible selected state. Working diagnosis copy is separated from evidence.
+  Code now turns every inferred stage/conversion/assets claim into an honest unknown before
+  question selection, preventing guesses such as `start free trial` from appearing as launch
+  context. Analyze prompt `a4` also requires distinct, product-specific diagnosis fields.
 - **2026-07-21**: **M23 — first value before the full report.** Public positioning now
   leads with verified facts → one experiment → manual publish → measured result → next move,
   including metadata and OG. Signed-out users can receive one best channel and one
