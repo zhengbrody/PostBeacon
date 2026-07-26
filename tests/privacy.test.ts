@@ -82,6 +82,17 @@ describe("privacy single source stays complete", () => {
     expect(all).toMatch(/never long-term memory/);
   });
 
+  it("discloses aggregate lifecycle measurement without claiming content collection", () => {
+    const analytics = DATA_CATEGORIES.find(
+      (category) => category.what === "Server logs & analytics"
+    );
+    const vercel = SUBPROCESSORS.find((vendor) => vendor.name === "Vercel");
+    expect(analytics?.why).toContain("weekly retention");
+    expect(analytics?.why).toContain("no submitted URL/content");
+    expect(vercel?.data).toContain("allowlisted lifecycle event names");
+    expect(vercel?.data).toContain("never submitted URLs");
+  });
+
   it("hides dormant billing from the current private-beta pages", () => {
     delete process.env.POLAR_ACCESS_TOKEN;
     delete process.env.POLAR_PRODUCT_ID;

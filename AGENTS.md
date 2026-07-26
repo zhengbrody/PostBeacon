@@ -52,6 +52,8 @@ app/
                                        service role, fails closed 503 without it)
     retention|reminders/route.ts       CRON_SECRET-gated daily operator jobs; reminders
                                        are explicit opt-in and fail closed without Resend
+    metrics/route.ts                   CRON_SECRET-gated aggregate funnel/weekly-retention
+                                       report; no identities, content, or outcome values
     copilot/route.ts                                                 Launch Copilot (plan-scoped CMO chat)
     billing/{checkout,webhook}/route.ts                              Polar checkout + webhook
 lib/
@@ -82,6 +84,9 @@ lib/
   guestPreviewToken.ts  Signed random visitor identity + keyed quota digest (no IP/fingerprint)
   previewHandoff.ts     1h browser-only guest result + 30m one-time auth nonce handoff;
                         explicit account continuation, consumed only by matching callback
+  productAnalytics.ts  Allowlisted cookieless funnel events; drops content/identity fields
+  productMetrics.ts    Pure aggregate funnel + two-window weekly-retention engine and
+                       paginated, content-free normalized-table reader
   site.ts               Public config (feedback + monitored privacy contact) —
                         NEXT_PUBLIC_* overridable with safe fallbacks
   privacy.ts            M17 single source for public privacy claims: data inventory,
@@ -168,6 +173,8 @@ docs/M20-truthful-execution.md Product contract for explicit publisher voice, de
 docs/M21-product-system-audit.md Pre-launch audit: journey/state maps, evidenced P0–P3
                         findings, fix scope and acceptance criteria
 docs/M23-first-value.md Landing/guest preview/demo/handoff contract and activation boundary
+docs/M24-product-measurement.md Guest-preview production acceptance, aggregate funnel,
+                               retention definitions and privacy/operator contract
 tests/                  vitest suites: urlPolicy, safeFetch, billing, webhook route, validate,
                         golden (12-fixture offline evals), generateRoute, flowReducer
                         (state-machine invariants), storage (draft migrations), workspace
@@ -261,7 +268,7 @@ The signed-out preview additionally needs the complete fail-closed set documente
   URL/token; DeepSeek needs its separate guest-preview opt-in and the visitor's
   server-enforced pre-submit acknowledgement.
 
-**Live (verified 2026-07-13):** Vercel project `zhengbrodys-projects/postbeacon` → **https://postbeacon.app** + www.
+**Live (verified 2026-07-25):** Vercel project `zhengbrodys-projects/postbeacon` → **https://postbeacon.app** + www.
 Porkbun DNS: apex `A 76.76.21.21`, www `CNAME cname.vercel-dns.com` (nameservers stay on Porkbun).
 Set in Vercel: OPENAI/DEEPSEEK keys; Claude is intentionally disabled. Supabase public configuration is enabled and the
 production login gate is active. `SUPABASE_SERVICE_ROLE_KEY` is configured as a Sensitive,
@@ -275,11 +282,26 @@ external inbound test to the monitored founder mailbox. `DEFAULT_PROVIDER=openai
 `NEXT_PUBLIC_DEEPSEEK_FALLBACK=true` allows a visibly disclosed DeepSeek retry during beta.
 Inactive projects and webhook ids are retained for 30 days. `Pricing` is hidden during beta.
 Event email code is deployed fail-closed but remains off until Resend/sender/public flag are
-configured and verified; in-app reminders remain active. Signed-out preview code is present
-but remains hidden/off until its persistent quota configuration is added and verified.
+configured and verified; in-app reminders remain active. Signed-out preview is live with its
+Upstash persistent visitor/global quota, signing secret and DeepSeek pre-submit consent gate;
+the 2026-07-25 production acceptance passed first success, repeat 429, consent 400 and
+cross-origin 403. Aggregate product-health reporting is operator-only at `/api/metrics`.
 Redeploy: `npx vercel --prod --yes`. Push env from `.env.local`: `~/push-env.sh`.
 
 ## Status / changelog
+- **2026-07-25**: **M24 — guest-preview acceptance + privacy-safe product metrics.** The
+  live guest route passed a fresh production run (one truth-checked channel/draft with real
+  provider provenance), same-visitor repeat limit with `Retry-After`, DeepSeek acknowledgement
+  rejection and cross-origin rejection. The core first-value and execution stages now emit a
+  fixed cookieless Vercel funnel; one central guard permits only provider/checkpoint/mode/source
+  enums and structurally drops URLs, content, identities and outcome values. A new
+  `CRON_SECRET`-gated `/api/metrics` reads only keys/timestamps from the existing normalized
+  workspace mirrors, returns aggregate saved→plan→publish→measure→learning-loop conversion,
+  current/prior 7-day activity, returned users and completed loops, labels sub-10 baselines as
+  directional, and fails instead of truncating. Manual early reads never inflate completed
+  loops. No SQL, new behavior table, cross-user content dataset, or public dashboard was added;
+  privacy/terms and `docs/M24-product-measurement.md` describe the exact boundary. 378
+  offline tests, typecheck, lint, format and production build are green.
 - **2026-07-21**: **M23.1 — signed-in first review matches the first-value promise.** A
   production MindMarket run showed the authenticated Diagnose step still expanded every
   fact, question, preference, diagnosis and profile field at once. It now leads with only

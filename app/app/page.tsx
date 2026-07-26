@@ -28,6 +28,7 @@ import {
   shouldClearPreviewHandoff,
   type PreviewHandoff,
 } from "@/lib/previewHandoff";
+import { PRODUCT_EVENTS, trackProductEvent } from "@/lib/productAnalytics";
 
 export default function AppPage() {
   const f = useLaunchFlow();
@@ -145,6 +146,10 @@ export default function AppPage() {
             f.reset();
             f.setUrl(previewHandoff.url);
             setHandoffAccepted(true);
+            trackProductEvent(PRODUCT_EVENTS.guestHandoffAccepted, {
+              mode: "signed-in",
+              source: "guest-handoff",
+            });
           }}
           onHandoffAnalyzed={() => setHandoffReadyToSave(true)}
           onClearHandoff={clearHandoffState}

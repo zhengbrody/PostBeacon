@@ -60,7 +60,7 @@ At least one model key is required; everything else is optional and degrades gra
 | `NEXT_PUBLIC_SUPABASE_URL` + `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Accounts, autosave, saved projects (run `supabase/schema.sql` once; owner-only RLS on every table) |
 | `SUPABASE_SERVICE_ROLE_KEY` | Server-side metering + full account deletion (deletion fails closed without it) |
 | `POLAR_ACCESS_TOKEN` + `POLAR_PRODUCT_ID` + `POLAR_WEBHOOK_SECRET` | Billing via Polar (merchant of record); webhook fails closed without the secret |
-| `CRON_SECRET` + `RETENTION_DAYS` | Operator data-retention sweep (off by default; the privacy page renders whatever is configured) |
+| `CRON_SECRET` + `RETENTION_DAYS` | Operator data-retention sweep plus the aggregate-only `/api/metrics` product-health report (off/fail-closed without the secret; the privacy page renders configured retention) |
 | `NEXT_PUBLIC_EMAIL_REMINDERS_ENABLED` + `RESEND_API_KEY` + `REMINDER_FROM_EMAIL` | Optional 24h/72h/weekly event emails; explicit opt-in and off until the complete path is configured |
 | `NEXT_PUBLIC_FEEDBACK_URL` / `NEXT_PUBLIC_PRIVACY_EMAIL` | Feedback link + monitored privacy contact |
 | `GUEST_PREVIEW_ENABLED` + `GUEST_PREVIEW_SIGNING_SECRET` + Upstash REST URL/token | Optional signed-out one-channel preview; unavailable unless its atomic visitor/global quota boundary is complete. DeepSeek additionally needs its guest opt-in and a user acknowledgement before each preview |
@@ -143,7 +143,7 @@ Design rules the codebase holds itself to:
 
 - **One state machine.** All plan state flows through a pure reducer (`hooks/launchFlowReducer.ts`) whose `normalize()` makes contradictory states unrepresentable — no result without its strategy, selections always ⊆ channels, versioned drafts (v1→v6 migrations) for every historical save.
 - **Security invariants** (see `AGENTS.md`): every user/model-supplied URL goes through `lib/safeFetch.ts` (SSRF policy: IP-range allowlists, DNS pinned at connect time, per-hop redirect revalidation); every API body is parsed with a zod schema; routes return only public error messages; `no-console` is enforced repo-wide with one redacting log sink.
-- **Privacy by design**: no training on your content, no cross-user aggregation, no auto-posting; public privacy/terms/subprocessor pages render from the same source file the code uses (`lib/privacy.ts`), so published claims can't drift from behavior. Export everything as JSON or delete your account from inside the app.
+- **Privacy by design**: no training on your content, no cross-user content/outcome benchmarking, no auto-posting; product-health analytics are restricted to content-free aggregate lifecycle stages. Public privacy/terms/subprocessor pages render from the same source file the code uses (`lib/privacy.ts`), so published claims can't drift from behavior. Export everything as JSON or delete your account from inside the app.
 
 A full architecture map lives in [AGENTS.md](./AGENTS.md); design docs for the trust layer, workspace, copilot action engine, and privacy foundation are in [docs/](./docs).
 
@@ -162,7 +162,7 @@ The offline suite includes 12 golden product fixtures asserting completeness (al
 
 ## Deployment
 
-Import the repo in [Vercel](https://vercel.com), set the env vars above, point your domain. Accounts need `supabase/schema.sql` run once in the Supabase SQL editor (production repair migrations and a single-query PASS/FAIL audit live in [supabase/](./supabase)). Daily crons (`vercel.json`) drive the optional retention sweep and fail-closed event reminders.
+Import the repo in [Vercel](https://vercel.com), set the env vars above, point your domain. Accounts need `supabase/schema.sql` run once in the Supabase SQL editor (production repair migrations and a single-query PASS/FAIL audit live in [supabase/](./supabase)). Daily crons (`vercel.json`) drive the optional retention sweep and fail-closed event reminders. The same cron secret protects the content-free aggregate product-health report at `/api/metrics`; it is not a public dashboard.
 
 ## Roadmap
 

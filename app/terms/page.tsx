@@ -58,7 +58,10 @@ export default function TermsPage() {
           {providerFallbackNotice()}
         </p>
         <p>
-          We do not use your content to train models or build a cross-user dataset. The{" "}
+          We do not use your content to train models or build cross-user content or outcome
+          benchmark datasets. We may count content-free lifecycle stages to understand
+          whether the product works; those aggregate reports do not contain account
+          identifiers, submitted content, or outcome values. The{" "}
           <Link href="/privacy" className="text-accent-300 hover:underline">
             privacy page
           </Link>{" "}

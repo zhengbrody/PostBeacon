@@ -60,11 +60,8 @@ export default function PrivacyPage() {
           </li>
           <li>
             We <strong>never post to any platform for you</strong>, set no advertising
-            cookies, and{" "}
-            <strong>
-              don’t use your content to train models or build cross-user datasets
-            </strong>
-            .
+            cookies, and don’t use your content to train models or build cross-user content
+            or outcome-benchmark datasets.
           </li>
           <li>
             You can export everything as JSON and delete a project or your whole account
@@ -139,15 +136,20 @@ export default function PrivacyPage() {
             credentials and never publishes on your behalf — you copy and post.
           </li>
           <li>
-            <strong>No training on your content, no cross-user aggregation.</strong> Your
-            plans and outcomes are used only to serve you. If we ever want to learn from
-            anonymized outcome data in aggregate, that will be a separate, explicit,
-            revocable opt-in — de-identified and only computed over large cohorts — and off
-            by default.
+            <strong>No training or cross-user content/outcome benchmarking.</strong> Your
+            plan text, drafts, qualitative feedback and outcome values are used only to
+            serve you. We count aggregate lifecycle stages (for example: plan created,
+            manual publish confirmed, scheduled result recorded) to validate the product;
+            those reports contain no submitted content, outcome values or account
+            identifiers. Any future learning from anonymized outcome data would be a
+            separate, explicit, revocable opt-in — de-identified and computed only over
+            large cohorts — and off by default.
           </li>
           <li>
-            <strong>No ad tech.</strong> Analytics are cookieless and aggregated (Vercel Web
-            Analytics). We don’t sell or share personal information for advertising.
+            <strong>No ad tech.</strong> Analytics are cookieless and aggregate (Vercel Web
+            Analytics), with an allowlist that excludes URLs you submit, content, emails,
+            account IDs and outcome values. We don’t sell or share personal information for
+            advertising.
           </li>
         </ul>
       </LegalSection>

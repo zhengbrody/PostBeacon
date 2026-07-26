@@ -19,6 +19,7 @@ import type {
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Spinner } from "@/components/ui/Spinner";
+import { PRODUCT_EVENTS, trackProductEvent } from "@/lib/productAnalytics";
 import { GoogleButton } from "./SignIn";
 
 const PROVIDER_LABEL: Record<Provider, string> = {
@@ -175,6 +176,7 @@ export function AuthScreen({ onDemo }: { onDemo?: () => void }) {
     setPreviewError("");
     const controller = new AbortController();
     previewAbort.current = controller;
+    trackProductEvent(PRODUCT_EVENTS.guestPreviewStarted, { mode: "guest" });
     let timedOut = false;
     const timeout = window.setTimeout(() => {
       timedOut = true;
@@ -185,7 +187,12 @@ export function AuthScreen({ onDemo }: { onDemo?: () => void }) {
       setPreview(result);
       setUrl(result.source.url);
       setPreviewStored(savePreviewHandoff(createPreviewHandoff(result.source.url, result)));
+      trackProductEvent(PRODUCT_EVENTS.guestPreviewCompleted, {
+        mode: "guest",
+        provider: result.provenance.content.provider,
+      });
     } catch (error) {
+      trackProductEvent(PRODUCT_EVENTS.guestPreviewFailed, { mode: "guest" });
       if (controller.signal.aborted) {
         setPreviewError(
           timedOut

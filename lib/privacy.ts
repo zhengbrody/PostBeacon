@@ -9,7 +9,7 @@ import type { Provider } from "./types";
 import { guestPreviewQuotaConfigured } from "./guestPreviewQuota";
 
 /** Bump when the published policy text meaningfully changes. */
-export const PRIVACY_LAST_UPDATED = "2026-07-21";
+export const PRIVACY_LAST_UPDATED = "2026-07-25";
 
 /**
  * How each LLM provider handles API data, per its PUBLIC policy as of
@@ -111,8 +111,8 @@ export interface Subprocessor {
 export const SUBPROCESSORS: Subprocessor[] = [
   {
     name: "Vercel",
-    role: "Hosting, serverless functions, cookieless web analytics",
-    data: "All request traffic (platform logs: IP, user agent, path); aggregated page views",
+    role: "Hosting, serverless functions, cookieless aggregate product analytics",
+    data: "All request traffic (platform logs: IP, user agent, path); aggregated page views and allowlisted lifecycle event names with low-cardinality stage/provider/checkpoint labels — never submitted URLs, content, email, account ids, or outcome values",
     region: "US",
     when: "Always",
     policyUrl: "https://vercel.com/legal/privacy-policy",
@@ -384,8 +384,9 @@ export const DATA_CATEGORIES: DataCategory[] = [
   },
   {
     what: "Server logs & analytics",
-    where: "Vercel platform logs (IP, path); Vercel Web Analytics (cookieless, aggregated)",
-    why: "Operations, security, aggregate traffic",
+    where:
+      "Vercel platform logs (IP, path); Vercel Web Analytics (cookieless, aggregate page and lifecycle events). Internal product-health calculations return only counts derived from existing owner-scoped lifecycle rows",
+    why: "Operations, security, first-value funnel and weekly retention. Analytics receives no submitted URL/content, email, account id, draft, or outcome value; internal reports expose no raw identities or content",
     retention: "Vercel platform defaults",
     deletion: "Ages out automatically",
   },

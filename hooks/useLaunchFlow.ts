@@ -7,6 +7,7 @@ import { DEMO_PROJECT } from "@/lib/demo";
 import { PLATFORMS } from "@/lib/platforms";
 import type { ContextField } from "@/lib/facts";
 import { variantDirection } from "@/lib/today";
+import { PRODUCT_EVENTS, trackProductEvent } from "@/lib/productAnalytics";
 import {
   applyActionPlan,
   applyKindOf,
@@ -100,6 +101,10 @@ export function useLaunchFlow() {
         facts: facts ?? [],
         questions: questions ?? [],
       });
+      trackProductEvent(PRODUCT_EVENTS.analysisCompleted, {
+        mode: "signed-in",
+        provider: meta.provider,
+      });
     }, "Reading your landing page…");
 
   const buildStrategy = () =>
@@ -111,6 +116,10 @@ export function useLaunchFlow() {
       const strategy = await api.strategy(profile, provider, facts);
       adoptFallback(strategy.meta);
       dispatch({ type: "STRATEGY_BUILT", strategy });
+      trackProductEvent(PRODUCT_EVENTS.strategyCompleted, {
+        mode: "signed-in",
+        provider: strategy.meta?.provider ?? provider,
+      });
     }, "Scanning every platform & ranking your channels…");
 
   const generate = () =>
@@ -122,6 +131,12 @@ export function useLaunchFlow() {
         adoptFallback(result.content.find((c) => c.meta?.fallbackFrom)?.meta);
         dispatch({ type: "GENERATED", result });
         setGenerations((n) => n + 1);
+        trackProductEvent(PRODUCT_EVENTS.planGenerated, {
+          mode: "signed-in",
+          provider:
+            result.content.find((channel) => channel.meta?.provider)?.meta?.provider ??
+            provider,
+        });
       } catch (e) {
         if (isGateError(e, "auth")) return setPaywall("auth");
         if (isGateError(e, "paywall")) return setPaywall("limit");
@@ -487,10 +502,29 @@ export function useLaunchFlow() {
         at: new Date().toISOString(),
       }),
     actTask: (record: TaskRecord) => dispatch({ type: "TASK_ACTED", record }),
-    publishExperiment: (experiment: Experiment, taskId?: string) =>
-      dispatch({ type: "EXPERIMENT_CREATED", experiment, taskId }),
-    recordOutcome: (experimentId: string, outcome: Outcome) =>
-      dispatch({ type: "OUTCOME_RECORDED", experimentId, outcome }),
+    publishExperiment: (experiment: Experiment, taskId?: string) => {
+      dispatch({ type: "EXPERIMENT_CREATED", experiment, taskId });
+      if (!state.demo) {
+        trackProductEvent(PRODUCT_EVENTS.publishConfirmed, { mode: "signed-in" });
+      }
+    },
+    recordOutcome: (experimentId: string, outcome: Outcome) => {
+      dispatch({ type: "OUTCOME_RECORDED", experimentId, outcome });
+      if (!state.demo) {
+        trackProductEvent(PRODUCT_EVENTS.outcomeRecorded, {
+          mode: "signed-in",
+          checkpoint: outcome.checkpoint,
+        });
+        // Manual early reads are useful, but the retention north star counts
+        // only a scheduled 24h/72h learning loop.
+        if (outcome.checkpoint !== "manual") {
+          trackProductEvent(PRODUCT_EVENTS.learningLoopCompleted, {
+            mode: "signed-in",
+            checkpoint: outcome.checkpoint,
+          });
+        }
+      }
+    },
     stopExperiment: (experimentId: string) =>
       dispatch({ type: "EXPERIMENT_STOPPED", experimentId }),
     generateVariant,
