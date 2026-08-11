@@ -187,9 +187,70 @@ describe("flowReducer invariants", () => {
     expect(s.step).toBe("strategy");
   });
 
+  it("migrates an unfinished multi-channel selection into one focused decision", () => {
+    const s = flowReducer(initialFlowState, {
+      type: "PROJECT_LOADED",
+      project: { profile, strategy, selected: [P1, P0] },
+      demo: false,
+    });
+    expect(s.result).toBeNull();
+    expect(s.selected).toEqual([P0]);
+  });
+
+  it("preserves an already-generated historical multi-channel plan", () => {
+    const s = flowReducer(initialFlowState, {
+      type: "PROJECT_LOADED",
+      project: { profile, strategy, result, selected: [P0, P1] },
+      demo: false,
+    });
+    expect(s.selected).toEqual([P0, P1]);
+    expect(s.result?.content.map((channel) => channel.platformId)).toEqual([P0, P1]);
+  });
+
+  it("sets one explicit Strategy choice without toggling it off", () => {
+    const s = seq(analyzed, built, { type: "SELECTION_SET", platformId: P1 });
+    expect(s.selected).toEqual([P1]);
+    expect(
+      flowReducer(s, { type: "SELECTION_SET", platformId: "not-a-channel" }).selected
+    ).toEqual([P1]);
+  });
+
+  it("opens one baked demo channel without a provider call", () => {
+    const loaded = flowReducer(initialFlowState, {
+      type: "PROJECT_LOADED",
+      project: DEMO_PROJECT,
+      demo: true,
+    });
+    const selectedPlatform = loaded.selected[0];
+    const opened = flowReducer(loaded, { type: "FOCUSED_RESULT_OPENED" });
+    expect(opened.step).toBe("results");
+    expect(opened.result?.content.map((channel) => channel.platformId)).toEqual([
+      selectedPlatform,
+    ]);
+    expect(
+      opened.result?.schedule.every((item) => item.platformId === selectedPlatform)
+    ).toBe(true);
+  });
+
+  it("does not invent a missing baked demo channel", () => {
+    const loaded = flowReducer(initialFlowState, {
+      type: "PROJECT_LOADED",
+      project: DEMO_PROJECT,
+      demo: true,
+    });
+    const atStrategy = flowReducer(loaded, { type: "STEP_SET", step: "strategy" });
+    const missing = flowReducer(atStrategy, {
+      type: "SELECTION_SET",
+      platformId: "github",
+    });
+    const opened = flowReducer(missing, { type: "FOCUSED_RESULT_OPENED" });
+    expect(opened.step).toBe("strategy");
+    expect(opened.result).toBe(missing.result);
+  });
+
   it("selection can never reference channels the strategy doesn't have", () => {
     const s = seq(analyzed, built, {
-      type: "SELECTION_TOGGLED",
+      type: "SELECTION_SET",
       platformId: "not-a-channel",
     });
     expect(s.selected).not.toContain("not-a-channel");
@@ -207,8 +268,6 @@ describe("flowReducer invariants", () => {
       analyzed,
       built,
       generated,
-      { type: "SELECTION_TOGGLED", platformId: P0 }, // ensure P0 not selected... toggle twice to end selected
-      { type: "SELECTION_TOGGLED", platformId: P0 },
       { type: "POSTED_TOGGLED", id: `${P0}-0` },
       { type: "CHANNEL_REMOVED", platformId: P0 }
     );

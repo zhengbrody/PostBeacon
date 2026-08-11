@@ -12,6 +12,7 @@ import { migrateWorkspaceHistory } from "@/lib/experimentHistory";
 import { draftExecutionKey } from "@/lib/experimentIdentity";
 import { normalizeAnalysisReceipt } from "@/lib/sourceCoverage";
 import { defaultSuccessContract, normalizeSuccessContract } from "@/lib/successContract";
+import { rankRecommendations, recommendedPlatformId } from "@/lib/strategyDecision";
 import type {
   AuditEntry,
   AnalysisReceipt,
@@ -159,8 +160,9 @@ export type FlowAction =
       patch: Partial<PlatformRecommendation>;
       origin?: "user" | "copilot";
     }
-  | { type: "SELECTION_TOGGLED"; platformId: string }
+  | { type: "SELECTION_SET"; platformId: string }
   | { type: "GENERATED"; result: GenerateResult }
+  | { type: "FOCUSED_RESULT_OPENED" }
   | { type: "CHANNEL_CONTENT_REPLACED"; channel: ChannelPayload }
   | { type: "CHANNEL_UPSERTED"; channel: ChannelPayload } // add-channel + retry-failed
   | { type: "CHANNEL_REMOVED"; platformId: string }
@@ -193,15 +195,11 @@ export type FlowAction =
   | { type: "MEMORY_REWRITE_FEEDBACK"; feedback: RewriteFeedback }
   | { type: "AUDIT_LOGGED"; entry: AuditEntry };
 
-// Default channel set: the 4 best-scoring recommendations. A tight default —
-// content is only written for checked channels, and a focused plan beats a
-// sprawling one. Sorted explicitly; the model's array order isn't trusted.
+// New strategies start with exactly one decision. The full 19-channel ranking
+// remains available for comparison and later on-demand generation.
 export function defaultSelection(recs?: PlatformRecommendation[]): string[] {
-  if (!recs?.length) return [];
-  return [...recs]
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 4)
-    .map((r) => r.platformId);
+  const platformId = recommendedPlatformId(recs);
+  return platformId ? [platformId] : [];
 }
 
 /** The deepest step the state has data for. */
@@ -244,6 +242,12 @@ export function normalize(s: FlowState): FlowState {
     const known = new Set(next.strategy.recommendations.map((r) => r.platformId));
     const kept = next.selected.filter((id) => known.has(id));
     if (kept.length !== next.selected.length) next = { ...next, selected: kept };
+  }
+  if (next.strategy && !next.result && next.selected.length !== 1) {
+    const ranked = rankRecommendations(next.strategy.recommendations);
+    const focused =
+      ranked.find((rec) => next.selected.includes(rec.platformId)) ?? ranked[0];
+    next = { ...next, selected: focused ? [focused.platformId] : [] };
   }
   if (!next.result && Object.keys(next.posted).length) {
     next = { ...next, posted: {} };
@@ -473,20 +477,42 @@ function transition(s: FlowState, a: FlowAction): FlowState {
       return edited.length ? withUserEdits(next, edited) : next;
     }
 
-    case "SELECTION_TOGGLED": {
+    case "SELECTION_SET":
       if (!s.strategy?.recommendations.some((r) => r.platformId === a.platformId)) {
-        return s; // can't select a channel the strategy doesn't know
+        return s;
       }
-      return {
-        ...s,
-        selected: s.selected.includes(a.platformId)
-          ? s.selected.filter((x) => x !== a.platformId)
-          : [...s.selected, a.platformId],
-      };
-    }
+      return { ...s, selected: [a.platformId] };
 
     case "GENERATED":
       return { ...s, result: a.result, step: "results" };
+
+    case "FOCUSED_RESULT_OPENED": {
+      // Fictional walkthrough only: project one already-baked channel into the
+      // workspace without calling a provider or pretending an absent draft exists.
+      if (!s.demo || !s.result || s.selected.length !== 1) return s;
+      const platformId = s.selected[0];
+      if (!s.result.content.some((channel) => channel.platformId === platformId)) {
+        return s;
+      }
+      return {
+        ...s,
+        result: {
+          ...s.result,
+          content: s.result.content.filter((channel) => channel.platformId === platformId),
+          schedule: s.result.schedule.filter((item) => item.platformId === platformId),
+          failures: (s.result.failures ?? []).filter(
+            (failure) => failure.platformId === platformId
+          ),
+        },
+        posted: {},
+        workspace: {
+          ...s.workspace,
+          experiments: [],
+          taskLog: [],
+        },
+        step: "results",
+      };
+    }
 
     case "CHANNEL_CONTENT_REPLACED":
       return s.result

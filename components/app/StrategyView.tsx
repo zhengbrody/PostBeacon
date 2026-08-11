@@ -9,12 +9,19 @@ import {
 } from "@/components/app/PlanSummary";
 import { PLATFORMS } from "@/lib/platforms";
 import { SCORE_WEIGHTS } from "@/lib/scoring";
+import {
+  effortEstimate,
+  observableSignal,
+  rankComparison,
+  rankRecommendations,
+} from "@/lib/strategyDecision";
 import { isSafeExternalHref } from "@/lib/urlPolicy";
 import type {
   MarketingStrategy,
   PlatformRecommendation,
   ScoreBreakdown,
   ScoreDimensionKey,
+  SuccessContract,
 } from "@/lib/types";
 
 const effortLabel: Record<NonNullable<PlatformRecommendation["effort"]>, string> = {
@@ -26,102 +33,313 @@ const effortLabel: Record<NonNullable<PlatformRecommendation["effort"]>, string>
 export function StrategyView({
   strategy,
   selected,
-  onToggle,
+  successContract,
+  preparablePlatformIds,
+  onSelect,
   loading,
   onBack,
   onGenerate,
 }: {
   strategy: MarketingStrategy;
   selected: string[];
-  onToggle: (id: string) => void;
+  successContract?: SuccessContract;
+  preparablePlatformIds?: string[];
+  onSelect: (id: string) => void;
   loading: boolean;
   onBack: () => void;
   onGenerate: () => void;
 }) {
-  // What the current selection turns into, so the choice feels concrete.
-  const postEstimate = selected.reduce(
-    (n, id) => n + (PLATFORMS.find((p) => p.id === id)?.postCount ?? 1),
-    0
-  );
+  const [compareOpen, setCompareOpen] = useState(false);
+  const [allOpen, setAllOpen] = useState(false);
+  const ranked = rankRecommendations(strategy.recommendations);
+  const selectedId = selected.find((id) => ranked.some((rec) => rec.platformId === id));
+  const choice = ranked.find((rec) => rec.platformId === selectedId) ?? ranked[0] ?? null;
+  const choiceRank = choice
+    ? ranked.findIndex((rec) => rec.platformId === choice.platformId) + 1
+    : 0;
+  const postEstimate = choice
+    ? (PLATFORMS.find((platform) => platform.id === choice.platformId)?.postCount ?? 1)
+    : 0;
+  const canPreparePlatform = (platformId: string) =>
+    !preparablePlatformIds || preparablePlatformIds.includes(platformId);
+  const choicePrepared = canPreparePlatform(choice.platformId);
+
+  if (!choice) {
+    return (
+      <Card className="p-6">
+        <h2 className="text-lg font-semibold">No channel decision is available</h2>
+        <p className="mt-2 text-sm text-neutral-400">
+          The strategy did not contain a usable platform recommendation. Go back and rebuild
+          it before generating content.
+        </p>
+        <Button className="mt-4" variant="outline" onClick={onBack}>
+          ← Back to Diagnose
+        </Button>
+      </Card>
+    );
+  }
+
+  const intentReason = choice.breakdown?.intentFit.reason;
+  const riskReason = choice.breakdown?.risk.reason;
+  const venue = choice.venue?.trim();
+
   return (
     <div className="space-y-6">
-      <PositioningCard strategy={strategy} />
-
-      {strategy.audienceSegments && <AudienceCard segments={strategy.audienceSegments} />}
-
-      {strategy.phases && <LaunchPlanCard phases={strategy.phases} />}
-
-      <Card className="p-6">
-        <div className="mb-1 flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Channels, ranked for your product</h2>
-          <span className="text-xs text-neutral-500">{selected.length} selected</span>
+      <Card className="overflow-hidden">
+        <div className="border-b border-line bg-accent-950/20 p-5 sm:p-6">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-accent-300">
+                {choiceRank === 1
+                  ? "Recommended next experiment"
+                  : `Selected alternative · ranked #${choiceRank}`}
+              </p>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <h2 className="text-2xl font-semibold text-neutral-100">
+                  {choice.platformName}
+                </h2>
+                <PriorityBadge priority={choice.priority} />
+                <span className="font-mono text-xs text-neutral-400">
+                  {choice.score}/100
+                </span>
+              </div>
+              <p className="mt-2 max-w-2xl text-sm leading-relaxed text-neutral-300">
+                {choice.bestMove || choice.angle || choice.rationale}
+              </p>
+            </div>
+            <div className="rounded-lg border border-line bg-surface/70 px-3 py-2 text-right">
+              <p className="text-[10px] uppercase tracking-wide text-neutral-500">Venue</p>
+              <p className="mt-0.5 max-w-56 text-xs text-neutral-200">
+                {venue || "Not verified yet — confirm before posting"}
+              </p>
+              <ProvenanceTag rec={choice} />
+            </div>
+          </div>
         </div>
-        <p className="mb-4 text-xs text-neutral-500">
-          We pre-checked your best-scoring channels. Content is written{" "}
-          <span className="font-medium text-neutral-300">only for checked channels</span> —
-          fewer channels means a tighter plan you&apos;ll actually execute. Current pick ≈{" "}
-          {postEstimate} ready-to-post drafts + {selected.length} playbooks. You can add
-          more channels later from the results page.
-        </p>
-        <div className="space-y-2">
-          {strategy.recommendations.map((r) => (
-            <RecRow
-              key={r.platformId}
-              rec={r}
-              on={selected.includes(r.platformId)}
-              onToggle={() => onToggle(r.platformId)}
-            />
-          ))}
+
+        <div className="grid gap-px bg-line sm:grid-cols-2">
+          <DecisionCell label="Why now" value={choice.rationale} />
+          <DecisionCell
+            label="Fit to your goal"
+            value={
+              successContract
+                ? `${successContract.primaryGoal}. ${intentReason || "The channel fit is reflected in the computed score above."}`
+                : intentReason || "This legacy plan has no stored goal-fit explanation."
+            }
+          />
+          <DecisionCell label="Estimated effort" value={effortEstimate(choice)} />
+          <DecisionCell
+            label="Main risk"
+            value={
+              riskReason ||
+              "No detailed risk rating is stored for this legacy recommendation."
+            }
+          />
+          <DecisionCell
+            label="Observable signal"
+            value={observableSignal(successContract)}
+          />
+          <DecisionCell
+            label={choiceRank === 1 ? "Why #1 beats #2" : "Ranking trade-off"}
+            value={rankComparison(choice, ranked)}
+          />
+        </div>
+
+        <div className="flex flex-col gap-3 border-t border-line p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+          <p className="text-xs leading-relaxed text-neutral-500">
+            {choicePrepared ? (
+              <>
+                Prepares {postEstimate} {postEstimate === 1 ? "draft" : "drafts"} for this
+                channel only. Nothing is posted automatically; all{" "}
+                {strategy.recommendations.length} ranked channels stay in the library.
+              </>
+            ) : (
+              <>
+                This fictional walkthrough has no baked draft for {choice.platformName}.
+                Choose one of the prepared example channels; a real project can prepare any
+                ranked channel on demand.
+              </>
+            )}
+          </p>
+          <Button
+            className="min-h-11 shrink-0"
+            onClick={onGenerate}
+            disabled={loading || !selectedId || !choicePrepared}
+          >
+            {loading
+              ? "Preparing…"
+              : choicePrepared
+                ? "Prepare this experiment →"
+                : "Example draft not included"}
+          </Button>
         </div>
       </Card>
 
-      {strategy.discoveries && strategy.discoveries.length > 0 && (
-        <Card className="p-6">
-          <h2 className="text-lg font-semibold">🔎 Niche channels to check out</h2>
-          {strategy.discoveries.some((d) => !d.validated) && (
-            <p className="mb-3 text-xs text-neutral-500">
-              Unchecked links are AI-suggested — verify before posting (community invites
-              can change).
+      <div className="flex flex-wrap gap-2">
+        <Button
+          className="min-h-11"
+          variant="outline"
+          aria-expanded={compareOpen}
+          onClick={() => setCompareOpen((open) => !open)}
+        >
+          {compareOpen ? "Hide alternatives" : "Compare alternatives"}
+        </Button>
+        <Button
+          className="min-h-11"
+          variant="outline"
+          aria-expanded={allOpen}
+          onClick={() => setAllOpen((open) => !open)}
+        >
+          {allOpen
+            ? "Hide channel library"
+            : `Explore all ${strategy.recommendations.length} channels`}
+        </Button>
+      </div>
+
+      {compareOpen && (
+        <Card className="p-5 sm:p-6">
+          <div className="mb-4">
+            <h2 className="text-lg font-semibold">Top alternatives</h2>
+            <p className="mt-1 text-xs text-neutral-500">
+              The rank is the decision default, not a lock. Choose another channel when you
+              have better access to its audience or venue.
             </p>
-          )}
-          <ul className="space-y-2 text-sm">
-            {strategy.discoveries.map((d, i) => (
-              <li key={i} className="rounded-lg bg-surface-2 px-3 py-2">
-                {/* Discovery URLs come from model/search output — only link http(s). */}
-                {isSafeExternalHref(d.url) ? (
-                  <a
-                    href={d.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="font-medium text-accent-300"
-                  >
-                    {d.name}
-                  </a>
-                ) : (
-                  <span className="font-medium text-accent-300">{d.name}</span>
-                )}
-                {d.validated && (
-                  <span className="ml-2 align-middle text-xs text-emerald-400">
-                    ✓ link checked
+          </div>
+          <div className="grid gap-3 sm:grid-cols-3">
+            {ranked.slice(0, 3).map((rec, index) => (
+              <button
+                key={rec.platformId}
+                type="button"
+                aria-pressed={rec.platformId === choice.platformId}
+                onClick={() => onSelect(rec.platformId)}
+                className={`min-h-32 rounded-xl border p-4 text-left transition-colors ${
+                  rec.platformId === choice.platformId
+                    ? "border-accent-500 bg-accent-600/10"
+                    : "border-line bg-surface-2 hover:border-neutral-600"
+                }`}
+              >
+                <span className="flex items-center justify-between gap-3">
+                  <span className="text-[10px] font-semibold uppercase tracking-wide text-neutral-500">
+                    Rank #{index + 1}
                   </span>
-                )}
-                <span className="text-neutral-400"> — {d.why}</span>
-              </li>
+                  <span className="font-mono text-xs text-neutral-400">{rec.score}</span>
+                </span>
+                <span className="mt-2 block text-sm font-semibold text-neutral-100">
+                  {rec.platformName}
+                </span>
+                <span className="mt-1 line-clamp-3 block text-xs leading-relaxed text-neutral-400">
+                  {rec.bestMove || rec.rationale}
+                </span>
+                <span className="mt-3 block text-xs font-medium text-accent-300">
+                  {rec.platformId === choice.platformId
+                    ? "Selected ✓"
+                    : canPreparePlatform(rec.platformId)
+                      ? "Choose this"
+                      : "Inspect only in example"}
+                </span>
+              </button>
             ))}
-          </ul>
+          </div>
         </Card>
       )}
 
-      <div className="flex gap-3">
+      {allOpen && (
+        <Card className="p-5 sm:p-6">
+          <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
+            <div>
+              <h2 className="text-lg font-semibold">Full channel library</h2>
+              <p className="mt-1 text-xs text-neutral-500">
+                Every score remains inspectable. Selecting a channel changes the single
+                experiment above; it does not generate a multi-channel batch.
+              </p>
+            </div>
+            <span className="text-xs text-neutral-500">1 selected</span>
+          </div>
+          <div className="space-y-2">
+            {ranked.map((rec) => (
+              <RecRow
+                key={rec.platformId}
+                rec={rec}
+                selected={rec.platformId === choice.platformId}
+                onSelect={() => onSelect(rec.platformId)}
+              />
+            ))}
+          </div>
+        </Card>
+      )}
+
+      <details className="rounded-xl border border-line bg-surface/40 p-5 sm:p-6">
+        <summary className="min-h-11 cursor-pointer py-2 text-sm font-medium text-neutral-300 hover:text-white">
+          Review the full strategic rationale
+        </summary>
+        <div className="mt-4 space-y-6 border-t border-line pt-6">
+          <PositioningCard strategy={strategy} />
+          {strategy.audienceSegments && (
+            <AudienceCard segments={strategy.audienceSegments} />
+          )}
+          {strategy.phases && <LaunchPlanCard phases={strategy.phases} />}
+          {strategy.discoveries && strategy.discoveries.length > 0 && (
+            <NicheChannels strategy={strategy} />
+          )}
+        </div>
+      </details>
+
+      <div className="flex gap-3 border-t border-line pt-4">
         <Button variant="outline" onClick={onBack}>
-          ← Back
-        </Button>
-        <Button onClick={onGenerate} disabled={!selected.length || loading}>
-          Generate {postEstimate} posts for {selected.length}{" "}
-          {selected.length === 1 ? "channel" : "channels"} →
+          ← Back to Diagnose
         </Button>
       </div>
     </div>
+  );
+}
+
+function DecisionCell({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0 bg-surface/80 p-5 sm:p-6">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-neutral-500">
+        {label}
+      </p>
+      <p className="mt-2 text-sm leading-relaxed text-neutral-300">{value}</p>
+    </div>
+  );
+}
+
+function NicheChannels({ strategy }: { strategy: MarketingStrategy }) {
+  const discoveries = strategy.discoveries ?? [];
+  return (
+    <Card className="p-6">
+      <h2 className="text-lg font-semibold">Niche venues to verify</h2>
+      {discoveries.some((discovery) => !discovery.validated) && (
+        <p className="mb-3 text-xs text-neutral-500">
+          Unchecked links are model suggestions. Verify the venue and its rules before
+          posting.
+        </p>
+      )}
+      <ul className="space-y-2 text-sm">
+        {discoveries.map((discovery, index) => (
+          <li key={index} className="rounded-lg bg-surface-2 px-3 py-2">
+            {isSafeExternalHref(discovery.url) ? (
+              <a
+                href={discovery.url}
+                target="_blank"
+                rel="noreferrer"
+                className="font-medium text-accent-300"
+              >
+                {discovery.name}
+              </a>
+            ) : (
+              <span className="font-medium text-accent-300">{discovery.name}</span>
+            )}
+            {discovery.validated && (
+              <span className="ml-2 align-middle text-xs text-emerald-400">
+                ✓ link checked
+              </span>
+            )}
+            <span className="text-neutral-400"> — {discovery.why}</span>
+          </li>
+        ))}
+      </ul>
+    </Card>
   );
 }
 
@@ -213,33 +431,33 @@ function ProvenanceTag({ rec }: { rec: PlatformRecommendation }) {
 
 function RecRow({
   rec,
-  on,
-  onToggle,
+  selected,
+  onSelect,
 }: {
   rec: PlatformRecommendation;
-  on: boolean;
-  onToggle: () => void;
+  selected: boolean;
+  onSelect: () => void;
 }) {
   const [open, setOpen] = useState(false);
   return (
     <div
       className={`rounded-lg border p-3 transition-colors ${
-        on
+        selected
           ? "border-accent-500 bg-accent-600/10"
           : "border-line bg-surface-2 hover:border-neutral-600"
       }`}
     >
       <button
-        onClick={onToggle}
-        aria-pressed={on}
+        onClick={onSelect}
+        aria-pressed={selected}
         className="flex w-full items-start gap-3 text-left"
       >
         <span
           className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded text-xs ${
-            on ? "bg-accent-600 text-white" : "bg-neutral-700"
+            selected ? "bg-accent-600 text-white" : "bg-neutral-700"
           }`}
         >
-          {on ? "✓" : ""}
+          {selected ? "✓" : ""}
         </span>
         <span className="min-w-0 flex-1">
           <span className="flex flex-wrap items-center gap-2">

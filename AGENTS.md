@@ -117,6 +117,8 @@ lib/
   growth.ts             M18 Launch/Growth mode boundary + stage-aware primary-goal helper
   successContract.ts    M25.1 bounded success definition, persisted-data normalizer,
                         visible summaries and checkpoint/signal helpers
+  strategyDecision.ts   M25.2 deterministic one-experiment ranking, honest comparison,
+                        effort and observable-signal projection
   execution.ts          M19 Prepare→Publish→Measure→Learn lifecycle projection,
                         countdowns and operator-controlled platform destinations
   experimentHistory.ts M24.1 Outcome-owned verdict reads, honest legacy-final fallback
@@ -160,7 +162,8 @@ components/
                         explicit bounded evidence-source inputs),
                         DiagnosisSummary + EvidenceReview (compact first read + full proof),
                         LaunchSetup (Success Contract + date + weekly budget),
-                        StrategyView (score breakdowns), ResultsView (workspace orchestrator:
+                        StrategyView (one next experiment + secondary comparisons/full
+                        score library), ResultsView (workspace orchestrator:
                         action-first Today + Strategy Library/Progress/Weekly Review),
                         PlanSummary, CopilotPanel, ProjectBar, SignIn, AuthScreen (guest
                         preview + explicit login handoff), DemoGuide, Paywall,
@@ -189,6 +192,7 @@ docs/M24-product-measurement.md Guest-preview production acceptance, aggregate f
 docs/M24.1-correctness.md Outcome Verdict, legacy history, tracked URL and execution-id contract
 docs/M25-evidence-receipt.md Server-authored source coverage, multi-page evidence and v8 contract
 docs/M25.1-success-contract.md Compact Diagnose, measurable success definition and v9 contract
+docs/M25.2-focused-strategy.md One-decision Strategy, deterministic rank/migration contract
 tests/                  vitest suites: urlPolicy, safeFetch, billing, webhook route, validate,
                         golden (12-fixture offline evals), generateRoute, flowReducer
                         (state-machine invariants), storage (draft migrations), workspace
@@ -307,6 +311,22 @@ cross-origin 403. Aggregate product-health reporting is operator-only at `/api/m
 Redeploy: `npx vercel --prod --yes`. Push env from `.env.local`: `~/push-env.sh`.
 
 ## Status / changelog
+- **2026-08-10**: **M25.2 — Strategy is one executable decision.** Strategy no
+  longer opens with a report and four preselected channels. A deterministic projection
+  now selects exactly one recommendation by computed score, canonical catalog order and
+  platform ID; the first card exposes venue provenance, best move, goal fit, an explicitly
+  labelled effort estimate, stored risk, the Success Contract signal and the factual reason
+  #1 outranks #2. `Prepare this experiment` sends one platform to generation, while top-three
+  comparison, all ranked channels and the complete strategic narrative remain secondary
+  disclosures. An explicit replacement action cannot leave zero or multiple choices. Old
+  unfinished multi-select projects focus on their highest-ranked selected channel; generated
+  historical multi-channel plans remain unchanged. The fictional walkthrough now projects
+  an already-baked selected channel locally, so its no-model-call promise also holds when a
+  visitor returns to Strategy; absent example drafts are labelled instead of invented.
+  No SQL, env, vendor, analytics or storage-version change was added. 423 offline tests,
+  typecheck, lint, format and production build are green. Desktop QA verified recommendation,
+  alternative choice and one-channel Prepare with no generate request; a real 375×812
+  viewport verified 44 px primary CTA, no horizontal overflow and no browser warnings/errors.
 - **2026-08-04**: **M25.1 — compact Diagnose + a real Success Contract.** Diagnose
   now opens with only Product, Audience, Main value, Primary goal and deterministic
   verified/inferred/unknown counts; exact quotes, source coverage and the complete

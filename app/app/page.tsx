@@ -363,10 +363,14 @@ function AppFlow({
         <StrategyView
           strategy={f.strategy}
           selected={f.selected}
-          onToggle={f.toggleSelected}
+          successContract={f.successContract}
+          preparablePlatformIds={
+            f.demo ? f.result?.content.map((channel) => channel.platformId) : undefined
+          }
+          onSelect={f.selectPlatform}
           loading={f.loading}
           onBack={() => f.setStep("profile")}
-          onGenerate={f.generate}
+          onGenerate={f.demo ? f.openPreparedDemo : f.generate}
         />
       )}
 

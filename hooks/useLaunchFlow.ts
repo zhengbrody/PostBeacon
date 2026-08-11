@@ -161,7 +161,7 @@ export function useLaunchFlow() {
         if (isGateError(e, "paywall")) return setPaywall("limit");
         throw e;
       }
-    }, "Writing your launch content…");
+    }, "Preparing one focused experiment…");
 
   // Rewrite one platform's content in place, leaving the rest of the results intact.
   const regeneratePost = (platformId: string) =>
@@ -468,8 +468,7 @@ export function useLaunchFlow() {
     retryFailed,
     strategy: state.strategy,
     selected: state.selected,
-    toggleSelected: (platformId: string) =>
-      dispatch({ type: "SELECTION_TOGGLED", platformId }),
+    selectPlatform: (platformId: string) => dispatch({ type: "SELECTION_SET", platformId }),
     result: state.result,
     posted: state.posted,
     togglePosted: (id: string) => dispatch({ type: "POSTED_TOGGLED", id }),
@@ -504,6 +503,7 @@ export function useLaunchFlow() {
     analyze,
     buildStrategy,
     generate,
+    openPreparedDemo: () => dispatch({ type: "FOCUSED_RESULT_OPENED" }),
     reset: () => dispatch({ type: "RESET" }),
     loadProject,
     snapshot,
