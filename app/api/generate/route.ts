@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
     const userId = guard.userId;
 
     // platformIds arrive deduped, bounded, and catalog-known from the schema.
-    const { profile, platformIds, provider, facts } = parseBody(
+    const { profile, platformIds, provider, facts, successContract } = parseBody(
       generateBodySchema,
       await readJsonBody(req)
     );
@@ -62,7 +62,8 @@ export async function POST(req: NextRequest) {
           profile,
           p,
           provider,
-          facts
+          facts,
+          successContract
         );
         const ok: PlatformContent = {
           platformId: p.id,

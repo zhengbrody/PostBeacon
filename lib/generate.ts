@@ -10,10 +10,11 @@ import type {
   PlatformPost,
   ProductProfile,
   Provider,
+  SuccessContract,
 } from "./types";
 
 /** Bump when the content prompt changes (recorded on every output). */
-export const GENERATE_PROMPT_VERSION = "g3";
+export const GENERATE_PROMPT_VERSION = "g4";
 
 export interface PlatformGeneration {
   posts: PlatformPost[];
@@ -33,7 +34,8 @@ export async function generatePlatformPosts(
   profile: ProductProfile,
   p: PlatformDef,
   provider?: Provider,
-  facts: Fact[] = []
+  facts: Fact[] = [],
+  successContract?: SuccessContract
 ): Promise<PlatformGeneration> {
   const ledger = factsForPrompt(facts);
   const publisherVoice = profile.publisherVoice ?? "brand";
@@ -63,7 +65,10 @@ Competitor test: if a sentence could describe a competitor unchanged, add a prod
         : ""
     }`,
     user: `PRODUCT PROFILE:
-${JSON.stringify(profile, null, 2)}${ledger ? `\n\n${ledger}` : ""}
+${JSON.stringify(profile, null, 2)}
+
+EXPERIMENT SUCCESS CONTRACT:
+${successContract ? JSON.stringify(successContract, null, 2) : "Not configured. Do not invent a target."}${ledger ? `\n\n${ledger}` : ""}
 
 Write ${p.postCount} ready-to-post piece(s) for ${p.name}. Each must read like a real person native to ${p.name} wrote it, and be copy-paste ready${
       p.longForm ? " — write the FULL piece, not an outline" : ""

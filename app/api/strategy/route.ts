@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
     const guard = await guardRoute(req);
     if ("response" in guard) return guard.response;
 
-    const { profile, provider, facts } = parseBody(
+    const { profile, provider, facts, successContract } = parseBody(
       strategyBodySchema,
       await readJsonBody(req)
     );
@@ -50,6 +50,9 @@ export async function POST(req: NextRequest) {
         "You are a world-class Chief Marketing Officer writing the 0→1 launch plan for an indie/vibecoded product. You are decisive: you make real trade-offs instead of spreading effort evenly, you tell the founder where NOT to waste time, and you ground every call in this specific product and audience. No generic marketing advice, no platitudes. Write the way you'd brief a founder you respect — direct, concrete, occasionally blunt. Respect the fact ledger: build on established facts, hedge inferred ones, and never assume what's marked unknown.",
       user: `PRODUCT PROFILE:
 ${JSON.stringify(profile, null, 2)}
+
+EXPERIMENT SUCCESS CONTRACT:
+${successContract ? JSON.stringify(successContract, null, 2) : "Not configured. Do not invent a target."}
 
 ${factsForPrompt(ledger)}
 
@@ -81,6 +84,7 @@ Return JSON exactly:
 
 Rules:
 - At least one risk must be about avoiding looking like an ad / getting flagged on the strict communities (HN, Reddit, Lobsters).
+- Sequence the plan around the stated primary signal and evaluation window. Do not replace the founder's target with a different success definition.
 - Concrete over generic everywhere. Real numbers, real communities, real actions.`,
     });
 

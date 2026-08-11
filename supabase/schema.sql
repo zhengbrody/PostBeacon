@@ -121,8 +121,13 @@ create table if not exists public.outcomes (
   signups int,
   revenue numeric,
   qualitative_feedback text,
+  verdict jsonb,
   recorded_at timestamptz not null default now()
 );
+
+-- M24.1 repair for installations that already created outcomes.
+alter table public.outcomes
+  add column if not exists verdict jsonb;
 
 create table if not exists public.tasks (
   campaign_id uuid not null references public.campaigns (id) on delete cascade,

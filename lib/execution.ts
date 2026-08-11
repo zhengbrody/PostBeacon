@@ -1,4 +1,9 @@
 import type { Experiment, OutcomeCheckpoint, WorkspaceState } from "./types";
+import {
+  completedScheduledVerdict,
+  effectiveExperimentVerdict,
+  hasHistoricalFinalVerdict,
+} from "./experimentHistory";
 
 const HOUR = 3_600_000;
 
@@ -56,13 +61,19 @@ export function experimentLifecycle(exp: Experiment, now: Date): ExperimentLifec
   const has72 = exp.outcomes.some((outcome) => outcome.checkpoint === "72h");
   const hasEarly = exp.outcomes.some((outcome) => outcome.checkpoint === "manual");
   const measured = has24 || has72;
-  const learned = Boolean(exp.verdict) && (has24 || has72);
+  const verdict = effectiveExperimentVerdict(exp);
+  const verdictDetail = verdict
+    ? hasHistoricalFinalVerdict(exp)
+      ? `Historical final verdict: ${verdict.reason} The original checkpoint is unavailable.`
+      : verdict.reason
+    : undefined;
+  const learned = Boolean(completedScheduledVerdict(exp));
 
   if (exp.status === "stopped") {
     return {
       steps: stepsFor(measured, learned, "learn"),
       headline: "Experiment stopped",
-      detail: exp.verdict?.reason ?? "This channel experiment was stopped.",
+      detail: verdictDetail ?? "This channel experiment was stopped.",
       due: false,
       complete: true,
     };
@@ -72,7 +83,7 @@ export function experimentLifecycle(exp: Experiment, now: Date): ExperimentLifec
     return {
       steps: stepsFor(true, learned, "learn"),
       headline: "Experiment complete",
-      detail: exp.verdict?.reason ?? "The final 72h result is recorded.",
+      detail: verdictDetail ?? "The final 72h result is recorded.",
       due: false,
       complete: true,
     };
@@ -96,10 +107,9 @@ export function experimentLifecycle(exp: Experiment, now: Date): ExperimentLifec
     detail: due
       ? "Record what happened. Missing metrics can stay blank."
       : hasEarly && !has24
-        ? `${exp.verdict?.advice ?? "The early signal is saved."} The scheduled check remains open.`
+        ? `${verdict?.advice ?? "The early signal is saved."} The scheduled check remains open.`
         : learned
-          ? (exp.verdict?.advice ??
-            "The early result is saved; the final read will refine it.")
+          ? (verdict?.advice ?? "The early result is saved; the final read will refine it.")
           : "The post is live. PostBeacon is waiting for a useful signal window instead of guessing early.",
     nextCheckpoint: checkpoint,
     dueAt: new Date(dueAtMs).toISOString(),

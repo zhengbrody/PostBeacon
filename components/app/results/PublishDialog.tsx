@@ -7,12 +7,15 @@ import { Field } from "@/components/ui/Field";
 import { ExecutionProgress } from "./ExecutionProgress";
 import { DraftSafetyNotice } from "./DraftSafetyNotice";
 import { auditDraftSafety } from "@/lib/contentSafety";
+import { normalizeTrackedUrl } from "@/lib/trackedUrl";
+import { successContractSummary } from "@/lib/successContract";
 import type { ExecutionStep } from "@/lib/execution";
 import type {
   Fact,
   PlatformContent,
   PlatformRecommendation,
   ProductProfile,
+  SuccessContract,
 } from "@/lib/types";
 
 const PUBLISH_STEPS: ExecutionStep[] = [
@@ -39,6 +42,7 @@ export function PublishDialog({
   facts,
   profile,
   rec,
+  successContract,
   defaultPostIdx,
   initialCommunity,
   initialAngle,
@@ -50,6 +54,7 @@ export function PublishDialog({
   facts: Fact[];
   profile: ProductProfile;
   rec?: PlatformRecommendation;
+  successContract?: SuccessContract;
   defaultPostIdx: number;
   /** Optional prefills (e.g. from a confirmed create_experiment proposal). */
   initialCommunity?: string;
@@ -66,6 +71,8 @@ export function PublishDialog({
     Math.min(defaultPostIdx, Math.max(0, content.posts.length - 1))
   );
   const [trackedUrl, setTrackedUrl] = useState("");
+  const normalizedTrackedUrl = normalizeTrackedUrl(trackedUrl);
+  const trackedUrlInvalid = trackedUrl.trim() !== "" && !normalizedTrackedUrl;
   const selectedPost = content.posts[postIdx];
   const safety = selectedPost
     ? auditDraftSafety(selectedPost, facts, profile, content.platformId)
@@ -98,6 +105,21 @@ export function PublishDialog({
               : "Confirm what you actually published. This click starts the 24h countdown and updates Today, Progress and Weekly Review together."}
           </p>
         </div>
+
+        {successContract && (
+          <div className="mb-4 rounded-lg border border-accent-700/40 bg-accent-600/10 p-3">
+            <div className="text-xs font-semibold uppercase tracking-wide text-accent-300">
+              Experiment contract
+            </div>
+            <p className="mt-1 text-sm text-neutral-200">
+              {successContractSummary(successContract)}
+            </p>
+            <p className="mt-1 text-[11px] text-neutral-500">
+              This rule is saved with this experiment and will not change if you edit the
+              workspace goal later.
+            </p>
+          </div>
+        )}
 
         {content.posts.length > 1 && (
           <label className="mb-3 block text-xs text-neutral-400">
@@ -136,11 +158,17 @@ export function PublishDialog({
             onChange={setTrackedUrl}
             placeholder="https://…"
           />
+          {trackedUrlInvalid && (
+            <p className="text-xs text-red-300" role="alert">
+              Use a complete http:// or https:// URL. Relative and non-web links cannot be
+              tracked.
+            </p>
+          )}
         </div>
 
         <div className="mt-5 flex gap-2">
           <Button
-            disabled={!safety.ready}
+            disabled={!safety.ready || trackedUrlInvalid}
             title={!safety.ready ? "Fix the truth-check issues before tracking" : undefined}
             onClick={() =>
               onConfirm({
@@ -148,7 +176,7 @@ export function PublishDialog({
                 angle: angle.trim(),
                 postIdx,
                 variant: content.posts[postIdx]?.hook ?? "",
-                trackedUrl: trackedUrl.trim(),
+                trackedUrl: normalizedTrackedUrl ?? "",
               })
             }
           >

@@ -7,11 +7,15 @@ import { ExecutionProgress } from "./ExecutionProgress";
 import { parseMetric } from "@/lib/coerce";
 import { nextActionsAfter } from "@/lib/today";
 import { experimentLifecycle } from "@/lib/execution";
+import { effectiveExperimentVerdict, outcomeVerdict } from "@/lib/experimentHistory";
+import { normalizeTrackedUrl } from "@/lib/trackedUrl";
+import { SIGNAL_LABELS, successContractSummary } from "@/lib/successContract";
 import type {
   Experiment,
   MarketingStrategy,
   Outcome,
   OutcomeCheckpoint,
+  OutcomeMetric,
   VerdictCall,
 } from "@/lib/types";
 
@@ -105,10 +109,24 @@ export function OutcomePanel({
     setPhase("feedback");
   }
 
-  const verdict = experiment.verdict;
+  const verdict =
+    outcomeVerdict(experiment, checkpoint)?.verdict ??
+    effectiveExperimentVerdict(experiment);
+  const trackedHref = normalizeTrackedUrl(experiment.trackedUrl);
   const lifecycle = experimentLifecycle(experiment, new Date());
   const checkpointLabel =
     checkpoint === "manual" ? "Early result" : `${checkpoint} results`;
+  const metricFields: Record<
+    OutcomeMetric,
+    { value: string; onChange: (value: string) => void }
+  > = {
+    impressions: { value: impressions, onChange: setImpressions },
+    replies: { value: replies, onChange: setReplies },
+    clicks: { value: clicks, onChange: setClicks },
+    signups: { value: signups, onChange: setSignups },
+    revenue: { value: revenue, onChange: setRevenue },
+  };
+  const contract = experiment.successContract;
 
   const panel = (
     <Card
@@ -131,21 +149,25 @@ export function OutcomePanel({
             {checkpoint === "manual"
               ? "Record only a real signal you can already see. This is an early read; the scheduled 24h and 72h checks remain. "
               : "Type or paste what you see on the live post. "}
-            {experiment.trackedUrl
+            {trackedHref
               ? "Use the live-post link below if you need it. "
               : "Open the platform's analytics if you need it. "}
             Leave anything you didn&apos;t measure empty — empty is honest, 0 is a claim.
           </p>
-          {experiment.trackedUrl && (
+          {trackedHref ? (
             <a
-              href={experiment.trackedUrl}
+              href={trackedHref}
               target="_blank"
               rel="noreferrer"
               className="mb-3 inline-block text-xs font-medium text-accent-300 hover:underline"
             >
               Open the live post →
             </a>
-          )}
+          ) : experiment.trackedUrl ? (
+            <p className="mb-3 text-xs text-neutral-500">
+              The saved live-post link is invalid and cannot be opened.
+            </p>
+          ) : null}
           <div className="mb-4 rounded-lg border border-line bg-surface-2/40 p-3">
             <div className="text-xs font-medium text-neutral-300">
               Nothing happened? Record that honestly in one click.
@@ -164,13 +186,57 @@ export function OutcomePanel({
               No measurable response
             </Button>
           </div>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            <NumField label="Impressions" value={impressions} onChange={setImpressions} />
-            <NumField label="Replies" value={replies} onChange={setReplies} />
-            <NumField label="Clicks" value={clicks} onChange={setClicks} />
-            <NumField label="Signups" value={signups} onChange={setSignups} />
-            <NumField label="Revenue ($)" value={revenue} onChange={setRevenue} />
-          </div>
+          {contract ? (
+            <div className="space-y-3">
+              <div className="rounded-lg border border-accent-700/40 bg-accent-600/10 p-3">
+                <div className="text-xs font-semibold uppercase tracking-wide text-accent-300">
+                  Primary signal
+                </div>
+                <p className="mt-1 text-sm text-neutral-200">
+                  {successContractSummary(contract)}
+                </p>
+                {contract.baseline !== undefined && (
+                  <p className="mt-1 text-xs text-neutral-500">
+                    Comparable baseline: {contract.primarySignal === "revenue" ? "$" : ""}
+                    {contract.baseline}
+                  </p>
+                )}
+                <div className="mt-3 max-w-xs">
+                  <NumField
+                    label={SIGNAL_LABELS[contract.primarySignal]}
+                    value={metricFields[contract.primarySignal].value}
+                    onChange={metricFields[contract.primarySignal].onChange}
+                  />
+                </div>
+              </div>
+              <details className="rounded-lg border border-line bg-surface-2/30">
+                <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between px-3 text-xs text-neutral-400">
+                  Additional observations · optional
+                  <span className="text-accent-300">Add metrics ↓</span>
+                </summary>
+                <div className="grid grid-cols-2 gap-3 border-t border-line p-3 sm:grid-cols-3">
+                  {(Object.keys(metricFields) as OutcomeMetric[])
+                    .filter((metric) => metric !== contract.primarySignal)
+                    .map((metric) => (
+                      <NumField
+                        key={metric}
+                        label={SIGNAL_LABELS[metric]}
+                        value={metricFields[metric].value}
+                        onChange={metricFields[metric].onChange}
+                      />
+                    ))}
+                </div>
+              </details>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              <NumField label="Impressions" value={impressions} onChange={setImpressions} />
+              <NumField label="Replies" value={replies} onChange={setReplies} />
+              <NumField label="Clicks" value={clicks} onChange={setClicks} />
+              <NumField label="Signups" value={signups} onChange={setSignups} />
+              <NumField label="Revenue ($)" value={revenue} onChange={setRevenue} />
+            </div>
+          )}
           <label className="mt-3 block text-xs text-neutral-400">
             What people said (paste comments, DMs, notes)
             <textarea

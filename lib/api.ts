@@ -12,8 +12,11 @@ import type {
   CopilotReplyV2,
   CopilotRequest,
   Fact,
+  AnalysisReceipt,
+  EvidenceSourceInput,
   GuestPreviewProviderCapability,
   GuestPreviewResult,
+  SuccessContract,
 } from "./types";
 
 export interface UsageInfo {
@@ -90,31 +93,51 @@ export const api = {
    * an account bearer token or persist the returned data. */
   guestPreview: (url: string, deepseekConsent: boolean, signal?: AbortSignal) =>
     postGuest<GuestPreviewResult>("/api/preview", { url, deepseekConsent }, signal),
-  analyze: (url: string, provider: Provider) =>
+  analyze: (url: string, provider: Provider, evidenceSources: EvidenceSourceInput[] = []) =>
     post<{
       profile: ProductProfile;
       facts: Fact[];
       questions: ClarifyingQuestion[];
       meta: GenerationMeta;
+      receipt: AnalysisReceipt;
       page: { url: string; title: string };
-    }>("/api/analyze", { url, provider }),
-  strategy: (profile: ProductProfile, provider: Provider, facts: Fact[]) =>
-    post<MarketingStrategy>("/api/strategy", { profile, provider, facts }),
+    }>("/api/analyze", { url, provider, evidenceSources }),
+  strategy: (
+    profile: ProductProfile,
+    provider: Provider,
+    facts: Fact[],
+    successContract?: SuccessContract
+  ) =>
+    post<MarketingStrategy>("/api/strategy", {
+      profile,
+      provider,
+      facts,
+      successContract,
+    }),
   generate: (
     profile: ProductProfile,
     platformIds: string[],
     provider: Provider,
-    facts: Fact[]
-  ) => post<GenerateResult>("/api/generate", { profile, platformIds, provider, facts }),
+    facts: Fact[],
+    successContract?: SuccessContract
+  ) =>
+    post<GenerateResult>("/api/generate", {
+      profile,
+      platformIds,
+      provider,
+      facts,
+      successContract,
+    }),
   regenerate: (
     profile: ProductProfile,
     platformId: string,
     provider: Provider,
-    facts: Fact[]
+    facts: Fact[],
+    successContract?: SuccessContract
   ) =>
     post<{ posts: PlatformPost[]; playbook?: PlatformPlaybook; meta?: GenerationMeta }>(
       "/api/regenerate",
-      { profile, platformId, provider, facts }
+      { profile, platformId, provider, facts, successContract }
     ),
   copilot: (body: CopilotRequest) => post<CopilotReplyV2>("/api/copilot", body),
   usage: async (): Promise<UsageInfo> => {

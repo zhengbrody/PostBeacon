@@ -1,4 +1,10 @@
-import type { Fact, GenerateResult, MarketingStrategy, ProductProfile } from "./types";
+import type {
+  AnalysisReceipt,
+  Fact,
+  GenerateResult,
+  MarketingStrategy,
+  ProductProfile,
+} from "./types";
 import { PLATFORMS } from "./platforms";
 import { groundRecommendations, toRecommendation } from "./scoring";
 
@@ -52,6 +58,39 @@ const profile: ProductProfile = {
 // observed (machine-checked page quotes), inferred (the model's read), and
 // user-confirmed (the founder answered the clarifying questions).
 const VERIFIED_AT = "2026-07-08T09:00:00.000Z";
+const analysisReceipt: AnalysisReceipt = {
+  completedAt: VERIFIED_AT,
+  sources: [
+    {
+      kind: "primary",
+      requestedUrl: "cronwise.dev",
+      canonicalUrl: "https://cronwise.dev/",
+      title: "Cronwise",
+      status: "fetched",
+      method: "static",
+      textTruncated: false,
+    },
+  ],
+  checks: {
+    urlsValidated: 1,
+    pagesFetched: 1,
+    factsExtracted: 8,
+    claimsVerified: 7,
+    claimsInferred: 1,
+    claimsUnknown: 0,
+    claimsDemoted: 0,
+  },
+  foundAreas: ["pricing", "features", "use cases"],
+  notFoundAreas: ["documentation", "changelog", "GitHub"],
+  provider: {
+    provider: "openai",
+    model: "fictional-example",
+    promptVersion: "a5-demo",
+    generatedAt: VERIFIED_AT,
+  },
+  limitation:
+    "Coverage describes only the fictional submitted-page extract used by this walkthrough.",
+};
 const facts: Fact[] = [
   {
     id: "tagline",
@@ -762,6 +801,7 @@ export const DEMO_PROJECT = {
   url: "cronwise.dev",
   profile,
   facts,
+  analysisReceipt,
   strategy,
   result,
   posted: {} as Record<string, boolean>,

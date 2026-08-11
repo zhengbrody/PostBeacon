@@ -87,6 +87,8 @@ lib/
   productAnalytics.ts  Allowlisted cookieless funnel events; drops content/identity fields
   productMetrics.ts    Pure aggregate funnel + two-window weekly-retention engine and
                        paginated, content-free normalized-table reader
+  sourceCoverage.ts    M25.0 server-authored Analyze receipt, persisted-JSON normalizer
+                       and deterministic submitted-extract coverage labels
   site.ts               Public config (feedback + monitored privacy contact) —
                         NEXT_PUBLIC_* overridable with safe fallbacks
   privacy.ts            M17 single source for public privacy claims: data inventory,
@@ -113,8 +115,14 @@ lib/
                         check-in due logic, one primary move + collapsed alternatives,
                         rule-based verdicts, first-value path, timeline, weekly review
   growth.ts             M18 Launch/Growth mode boundary + stage-aware primary-goal helper
+  successContract.ts    M25.1 bounded success definition, persisted-data normalizer,
+                        visible summaries and checkpoint/signal helpers
   execution.ts          M19 Prepare→Publish→Measure→Learn lifecycle projection,
                         countdowns and operator-controlled platform destinations
+  experimentHistory.ts M24.1 Outcome-owned verdict reads, honest legacy-final fallback
+                        and v7 workspace compatibility repair
+  experimentIdentity.ts M24.1 draft/execution/checkpoint task identity helpers
+  trackedUrl.ts         M24.1 absolute HTTP(S)-only live-post navigation/persistence seam
   projectIdentity.ts    Same-name saved-project labels (product + hostname + updated date)
   workspace.ts          Write-through sync to the campaigns/experiments/outcomes/tasks
                         tables (feature-detected, best-effort; meta.workspace hydrates)
@@ -136,7 +144,7 @@ lib/
   api.ts                Browser→server typed client (used by the hook)
   projectSaveError.ts   Bounded Supabase/PostgREST project-save error copy
   storage.ts            Versioned localStorage draft (DRAFT_SCHEMA_VERSION + migrateDraft;
-                        v6 includes reminder preference; projects.meta carries the same version)
+                        v9 includes receipt + Success Contract; projects.meta carries it)
   supabase/client.ts    Browser Supabase client (graceful if unconfigured)
   supabase/server.ts    Service-role client (server-only; trust-counts usage)
 hooks/
@@ -148,7 +156,10 @@ hooks/
 components/
   ui/                   Button, Card, Badge, Spinner, Field, Tabs (design system primitives)
   app/                  Stepper, UrlStep, ProfileForm, FactLedger (provenance UI + questions),
-                        LaunchSetup (required primary goal + date + weekly budget),
+                        SourceCoverageReceipt (real fetch/verification/provider receipt +
+                        explicit bounded evidence-source inputs),
+                        DiagnosisSummary + EvidenceReview (compact first read + full proof),
+                        LaunchSetup (Success Contract + date + weekly budget),
                         StrategyView (score breakdowns), ResultsView (workspace orchestrator:
                         action-first Today + Strategy Library/Progress/Weekly Review),
                         PlanSummary, CopilotPanel, ProjectBar, SignIn, AuthScreen (guest
@@ -175,10 +186,15 @@ docs/M21-product-system-audit.md Pre-launch audit: journey/state maps, evidenced
 docs/M23-first-value.md Landing/guest preview/demo/handoff contract and activation boundary
 docs/M24-product-measurement.md Guest-preview production acceptance, aggregate funnel,
                                retention definitions and privacy/operator contract
+docs/M24.1-correctness.md Outcome Verdict, legacy history, tracked URL and execution-id contract
+docs/M25-evidence-receipt.md Server-authored source coverage, multi-page evidence and v8 contract
+docs/M25.1-success-contract.md Compact Diagnose, measurable success definition and v9 contract
 tests/                  vitest suites: urlPolicy, safeFetch, billing, webhook route, validate,
                         golden (12-fixture offline evals), generateRoute, flowReducer
                         (state-machine invariants), storage (draft migrations), workspace
-                        (Today/verdicts/review), execution (lifecycle/countdowns),
+                        (Today/verdicts/review), source coverage/analyze route,
+                        Success Contract normalization/target reads/history snapshots,
+                        execution (lifecycle/countdowns),
                         coerce (metric parsing), export (learning-loop
                         completeness), copilotActions (action boundary, injection,
                         destructive gates, memory), account (deletion coverage vs schema,
@@ -187,7 +203,8 @@ tests/                  vitest suites: urlPolicy, safeFetch, billing, webhook ro
                         ordering); eval.live (gated)
 tests/golden/           fixtures.ts — 12 product-type golden fixtures with ground truth
 supabase/schema.sql     projects + entitlements + webhook_events + M15 campaigns/
-                        experiments/outcomes/tasks tables (owner-only RLS) + delete RPC
+                        experiments/outcomes (checkpoint verdict)/tasks tables
+                        (owner-only RLS) + delete RPC
 supabase/migrations/    production-safe, transactional repair migrations
 supabase/audit.sql      single-result PASS/FAIL report for project columns/tables/RLS/
                         policies/cascades/RPC
@@ -273,10 +290,11 @@ Porkbun DNS: apex `A 76.76.21.21`, www `CNAME cname.vercel-dns.com` (nameservers
 Set in Vercel: OPENAI/DEEPSEEK keys; Claude is intentionally disabled. Supabase public configuration is enabled and the
 production login gate is active. `SUPABASE_SERVICE_ROLE_KEY` is configured as a Sensitive,
 Production-only secret; Preview has only the public Supabase URL/anon key. The original
-seven-check schema/RLS/cascade audit is fully green in production: seven tables/RLS, six
-owner policies, six auth-user cascades,
+schema/RLS/cascade audit plus the M24.1 Outcome checkpoint contract are fully green in
+production (nine checks): seven tables/RLS, six owner policies, six auth-user cascades,
 four workspace-parent cascades, closed webhook ledger and service-role-only transactional deletion
-RPC all PASS. Billing remains unverified/off unless all Polar variables are set.
+RPC all PASS; `outcomes.verdict` is installed. Billing remains unverified/off unless all
+Polar variables are set.
 `NEXT_PUBLIC_PRIVACY_EMAIL=privacy@postbeacon.app` is live; Porkbun forwarding delivered an
 external inbound test to the monitored founder mailbox. `DEFAULT_PROVIDER=openai`;
 `NEXT_PUBLIC_DEEPSEEK_FALLBACK=true` allows a visibly disclosed DeepSeek retry during beta.
@@ -289,6 +307,59 @@ cross-origin 403. Aggregate product-health reporting is operator-only at `/api/m
 Redeploy: `npx vercel --prod --yes`. Push env from `.env.local`: `~/push-env.sh`.
 
 ## Status / changelog
+- **2026-08-04**: **M25.1 — compact Diagnose + a real Success Contract.** Diagnose
+  now opens with only Product, Audience, Main value, Primary goal and deterministic
+  verified/inferred/unknown counts; exact quotes, source coverage and the complete
+  Fact Ledger remain editable under one Review all evidence disclosure, while the
+  working diagnosis and full profile editor are secondary disclosures. Primary Goal
+  is no longer display-only: the founder explicitly chooses a primary signal, optional
+  comparable baseline, meaningful minimum result and 24h/72h decision window. One
+  validated workspace contract feeds Strategy, generation, Copilot, Today and export;
+  the reducer atomically snapshots it onto every published Experiment, so later goal
+  changes cannot rewrite history. Measure leads with that experiment's primary signal
+  and folds secondary observations. Verdict reads the stored target: reached,
+  baseline-improving, early, unmeasured and final-miss paths are deterministic and
+  explain their rule; pre-v9 experiments retain the legacy rule rather than receiving
+  a fabricated historical target. Draft schema v9 rides existing local/project meta
+  JSON, with no SQL, env, vendor or analytics change. 414 offline tests, typecheck,
+  lint, format and production build are green. The fictional browser walkthrough
+  verified goal→contract updates, contract-visible publish, primary-signal Measure and
+  a target-reached read on desktop and a real 375×812 viewport, with no horizontal
+  overflow or browser warnings/errors.
+- **2026-08-04**: **M25.0 — visible evidence boundary.** Signed-in Analyze now returns
+  and persists a server-authored receipt: validated/fetched source counts, static vs
+  rendered mode, truncation, final source URLs, verified/inferred/unknown/demoted facts,
+  submitted-extract coverage labels and the actual provider/model/fallback. Operators may
+  explicitly add up to four Pricing, Docs, Changelog or GitHub pages; PostBeacon never
+  crawls adjacent pages, preflights every URL through the existing SSRF policy, fetches
+  with concurrency two and isolates optional failures. Multi-page Fact verification now
+  finds the exact submitted corpus containing each quote instead of assigning every fact
+  to the landing page. Draft schema v8 stores only the bounded receipt in localStorage or
+  `projects.meta`; untrusted saved JSON is normalized before UI use and no body, prompt,
+  identity or raw upstream error enters the receipt. Markdown/JSON exports retain the
+  compact provenance. The fictional demo labels its receipt as example data/no model call.
+  404 offline tests, typecheck, lint, format and production build are green. Desktop
+  browser QA verified the Diagnose receipt, source disclosure and zero console errors;
+  the available in-app browser again ignored its requested 375px viewport override, so
+  this milestone does not claim a fresh mobile-runtime pass. No SQL migration is required.
+- **2026-08-02**: **M24.1 — correct experiment history and safe tracked links.** Each
+  new Outcome now owns the deterministic Verdict produced at that checkpoint;
+  Experiment.verdict remains only the latest/final compatibility summary. Timeline,
+  Markdown export, lifecycle and Copilot no longer project a 72h read backwards onto
+  24h. Unrecoverable pre-v7 reads are labelled “Historical final verdict — checkpoint
+  unavailable” and are never fabricated into old Outcome rows. The additive
+  `outcomes.verdict jsonb` migration deliberately performs no backfill. Live-post URLs
+  now cross one absolute HTTP(S)-only input/render/mirror seam, so javascript:, data:,
+  mailto:, relative and protocol-relative values stay inert. Publish task identity is
+  now draft-specific (`post:<platform>:<index>`), record tasks remain experiment +
+  checkpoint specific, and legacy platform-only tasks suppress only the first draft;
+  a generated variant on the same channel can become a separate experiment. Draft
+  schema v7, normalized mirror and production audit were synchronized. 394 offline
+  tests, typecheck, lint, format and production build are green. The desktop fictional
+  walkthrough verified blocked unsafe URLs, valid-link publish, checkpoint recording and
+  checkpoint-specific Timeline output with zero browser warnings/errors; the sole in-app
+  browser ignored its requested 375px viewport override, so this milestone does not claim
+  a fresh mobile-runtime pass.
 - **2026-07-25**: **M24 — guest-preview acceptance + privacy-safe product metrics.** The
   live guest route passed a fresh production run (one truth-checked channel/draft with real
   provider provenance), same-visitor repeat limit with `Retry-After`, DeepSeek acknowledgement

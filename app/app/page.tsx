@@ -9,6 +9,9 @@ import { UrlStep } from "@/components/app/UrlStep";
 import { ProfileForm } from "@/components/app/ProfileForm";
 import { FactLedger } from "@/components/app/FactLedger";
 import { LaunchSetup } from "@/components/app/LaunchSetup";
+import { SourceCoverageReceipt } from "@/components/app/SourceCoverageReceipt";
+import { DiagnosisSummary } from "@/components/app/DiagnosisSummary";
+import { EvidenceReview } from "@/components/app/EvidenceReview";
 import { StrategyView } from "@/components/app/StrategyView";
 import { ResultsView } from "@/components/app/ResultsView";
 import { ProjectBar } from "@/components/app/ProjectBar";
@@ -297,11 +300,17 @@ function AppFlow({
 
       {f.step === "profile" && f.profile && (
         <div className="space-y-6">
+          <DiagnosisSummary
+            profile={f.profile}
+            facts={f.facts}
+            successContract={f.successContract}
+          />
           <FactLedger
             facts={f.facts}
             // The growth goal has one home in LaunchSetup below. Keeping the
             // same question in two adjacent cards made the intake feel broken.
             questions={f.questions.filter((question) => question.id !== "conversionGoal")}
+            mode="questions"
             onConfirm={f.confirmFact}
             onCorrect={f.correctFact}
             onDelete={f.deleteFact}
@@ -312,15 +321,34 @@ function AppFlow({
             setLaunchDate={f.setLaunchDate}
             weeklyMinutes={f.workspace.weeklyMinutes}
             setWeeklyMinutes={f.setWeeklyMinutes}
-            primaryGoal={f.profile.conversionGoal}
+            successContract={f.successContract}
             stage={f.profile.stage}
-            setPrimaryGoal={(goal) => f.answerQuestion("conversionGoal", goal)}
+            setSuccessContract={f.setSuccessContract}
             publisherVoice={f.profile.publisherVoice}
             setPublisherVoice={(publisherVoice) => {
               const profile = f.profile;
               if (profile) f.setProfile({ ...profile, publisherVoice });
             }}
           />
+          <EvidenceReview facts={f.facts}>
+            {f.analysisReceipt && (
+              <SourceCoverageReceipt
+                receipt={f.analysisReceipt}
+                loading={f.loading}
+                example={f.demo}
+                onReanalyze={(sources) => void f.reanalyzeWithSources(sources)}
+              />
+            )}
+            <FactLedger
+              facts={f.facts}
+              questions={[]}
+              mode="evidence"
+              onConfirm={f.confirmFact}
+              onCorrect={f.correctFact}
+              onDelete={f.deleteFact}
+              onAnswer={f.answerQuestion}
+            />
+          </EvidenceReview>
           <ProfileForm
             profile={f.profile}
             setProfile={f.setProfile}
@@ -348,6 +376,7 @@ function AppFlow({
           strategy={f.strategy}
           profile={f.profile}
           facts={f.facts}
+          analysisReceipt={f.analysisReceipt}
           workspace={f.workspace}
           memory={f.memory}
           posted={f.posted}

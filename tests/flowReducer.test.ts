@@ -8,7 +8,12 @@ import {
 } from "@/hooks/launchFlowReducer";
 import { PLATFORMS } from "@/lib/platforms";
 import { DEMO_PROJECT } from "@/lib/demo";
-import type { GenerateResult, MarketingStrategy, ProductProfile } from "@/lib/types";
+import type {
+  AnalysisReceipt,
+  GenerateResult,
+  MarketingStrategy,
+  ProductProfile,
+} from "@/lib/types";
 
 const [P0, P1, P2] = PLATFORMS.map((p) => p.id);
 
@@ -65,6 +70,36 @@ function seq(...actions: FlowAction[]): FlowState {
 const analyzed: FlowAction = { type: "ANALYZED", profile, facts: [], questions: [] };
 const built: FlowAction = { type: "STRATEGY_BUILT", strategy };
 const generated: FlowAction = { type: "GENERATED", result };
+const receipt: AnalysisReceipt = {
+  completedAt: "2026-08-04T00:00:00.000Z",
+  sources: [
+    {
+      kind: "primary",
+      requestedUrl: "example.com",
+      canonicalUrl: "https://example.com/",
+      status: "fetched",
+      method: "static",
+    },
+  ],
+  checks: {
+    urlsValidated: 1,
+    pagesFetched: 1,
+    factsExtracted: 0,
+    claimsVerified: 0,
+    claimsInferred: 0,
+    claimsUnknown: 0,
+    claimsDemoted: 0,
+  },
+  foundAreas: [],
+  notFoundAreas: ["pricing"],
+  provider: {
+    provider: "openai",
+    model: "test",
+    promptVersion: "a5",
+    generatedAt: "2026-08-04T00:00:00.000Z",
+  },
+  limitation: "submitted extracts only",
+};
 
 describe("flowReducer invariants", () => {
   it("a fresh analysis clears everything derived from the previous product", () => {
@@ -80,6 +115,68 @@ describe("flowReducer invariants", () => {
     expect(s.selected).toEqual([]);
     expect(s.posted).toEqual({});
     expect(s.step).toBe("profile");
+  });
+
+  it("keeps one authoritative Success Contract and snapshots it at publish", () => {
+    const first = {
+      primaryGoal: "User feedback / conversations",
+      primarySignal: "replies" as const,
+      minimumResult: 2,
+      evaluationWindow: "72h" as const,
+    };
+    const changed = {
+      ...first,
+      primaryGoal: "Qualified traffic / awareness",
+      primarySignal: "clicks" as const,
+      minimumResult: 10,
+    };
+    const published = seq(
+      analyzed,
+      { type: "SUCCESS_CONTRACT_SET", contract: first },
+      built,
+      generated,
+      {
+        type: "EXPERIMENT_CREATED",
+        experiment: {
+          id: "experiment-1",
+          platformId: P0,
+          platformName: P0,
+          community: "venue",
+          angle: "angle",
+          variant: "hook",
+          hypothesis: "hypothesis",
+          publishedAt: "2026-08-04T00:00:00.000Z",
+          status: "live",
+          postIdx: 0,
+          outcomes: [],
+        },
+      }
+    );
+    const updated = flowReducer(published, {
+      type: "SUCCESS_CONTRACT_SET",
+      contract: changed,
+    });
+    expect(updated.workspace.successContract).toEqual(changed);
+    expect(updated.profile?.conversionGoal).toBe(changed.primaryGoal);
+    expect(updated.workspace.experiments[0].successContract).toEqual(first);
+  });
+
+  it("stores the server receipt, replaces it on re-analysis, and loads old projects", () => {
+    const first = flowReducer(initialFlowState, {
+      ...analyzed,
+      receipt,
+    });
+    expect(first.analysisReceipt).toEqual(receipt);
+    const replacement = { ...receipt, completedAt: "2026-08-04T01:00:00.000Z" };
+    const second = flowReducer(first, { ...analyzed, receipt: replacement });
+    expect(second.analysisReceipt).toEqual(replacement);
+
+    const legacy = flowReducer(initialFlowState, {
+      type: "PROJECT_LOADED",
+      project: { profile },
+      demo: false,
+    });
+    expect(legacy.analysisReceipt).toBeNull();
   });
 
   it("a rebuilt strategy invalidates the old result and reseeds the selection", () => {

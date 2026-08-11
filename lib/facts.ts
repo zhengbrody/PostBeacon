@@ -78,6 +78,16 @@ export function auditFacts(
   rawFacts: unknown,
   page: PageCorpus
 ): { facts: Fact[]; audit: FactAudit } {
+  return auditFactsAcrossPages(rawFacts, [page]);
+}
+
+/** Verify every observed quote against the exact submitted source that
+ * contains it. This prevents a concatenated multi-page prompt from assigning
+ * every verified claim to the landing-page URL. */
+export function auditFactsAcrossPages(
+  rawFacts: unknown,
+  pages: PageCorpus[]
+): { facts: Fact[]; audit: FactAudit } {
   const audit: FactAudit = {
     proposedObserved: 0,
     demotedObserved: 0,
@@ -112,22 +122,27 @@ export function auditFacts(
       status = "unknown";
       claim = "";
       confidence = 0;
-    } else if (
-      proposed === "observed" &&
-      (quoteAppearsOnPage(evidence, page) || quoteAppearsOnPage(claim, page))
-    ) {
-      status = "observed";
-      // Models sometimes paraphrase the evidence field while copying the claim
-      // exactly from the page. The claim itself is safe evidence only when the
-      // same strict code check verifies it against the scraped corpus.
-      keptEvidence = quoteAppearsOnPage(evidence, page) ? evidence : claim;
-      sourceUrl = page.url;
-      confidence = Math.max(confidence, 0.8);
+    } else if (proposed === "observed") {
+      const evidencePage = pages.find((page) => quoteAppearsOnPage(evidence, page));
+      const claimPage = pages.find((page) => quoteAppearsOnPage(claim, page));
+      const matchedPage = evidencePage ?? claimPage;
+      if (matchedPage) {
+        status = "observed";
+        // Models sometimes paraphrase the evidence field while copying the claim
+        // exactly from the page. The claim itself is safe evidence only when the
+        // same strict code check verifies it against the scraped corpus.
+        keptEvidence = evidencePage ? evidence : claim;
+        sourceUrl = matchedPage.url;
+        confidence = Math.max(confidence, 0.8);
+      } else {
+        audit.demotedObserved++;
+        status = "inferred";
+        confidence = Math.min(confidence, 0.6);
+      }
     } else {
       // Covers: model said observed but the quote doesn't verify (the lie we
       // exist to catch), model said inferred, model said user-confirmed
       // (never its call to make), or any unrecognized status.
-      if (proposed === "observed") audit.demotedObserved++;
       status = "inferred";
       confidence = Math.min(confidence, 0.6);
     }

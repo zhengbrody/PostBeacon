@@ -7,6 +7,7 @@ import { DEMO_PROJECT } from "@/lib/demo";
 import { PLATFORMS } from "@/lib/platforms";
 import type { ContextField } from "@/lib/facts";
 import { variantDirection } from "@/lib/today";
+import { effectiveExperimentVerdict } from "@/lib/experimentHistory";
 import { PRODUCT_EVENTS, trackProductEvent } from "@/lib/productAnalytics";
 import {
   applyActionPlan,
@@ -34,6 +35,8 @@ import type {
   ScheduleItem,
   TaskRecord,
   ProviderRunMeta,
+  EvidenceSourceInput,
+  SuccessContract,
 } from "@/lib/types";
 
 export type { Step };
@@ -91,29 +94,39 @@ export function useLaunchFlow() {
     if (meta?.fallbackFrom) setProvider(meta.provider);
   };
 
-  const analyze = () =>
+  const analyze = (evidenceSources: EvidenceSourceInput[] = []) =>
     run(async () => {
-      const { profile, facts, questions, meta } = await api.analyze(url, provider);
+      const { profile, facts, questions, meta, receipt } = await api.analyze(
+        url,
+        provider,
+        evidenceSources
+      );
       adoptFallback(meta);
       dispatch({
         type: "ANALYZED",
         profile,
         facts: facts ?? [],
         questions: questions ?? [],
+        receipt,
       });
       trackProductEvent(PRODUCT_EVENTS.analysisCompleted, {
         mode: "signed-in",
         provider: meta.provider,
       });
-    }, "Reading your landing page…");
+    }, "Validating and analyzing your submitted sources…");
 
   const buildStrategy = () =>
     run(async () => {
       if (!profile) return;
-      if (!profile.conversionGoal?.trim()) {
-        throw new Error("Choose one primary growth goal before building the strategy.");
+      if (!state.workspace.successContract) {
+        throw new Error("Define how this experiment will be judged before continuing.");
       }
-      const strategy = await api.strategy(profile, provider, facts);
+      const strategy = await api.strategy(
+        profile,
+        provider,
+        facts,
+        state.workspace.successContract
+      );
       adoptFallback(strategy.meta);
       dispatch({ type: "STRATEGY_BUILT", strategy });
       trackProductEvent(PRODUCT_EVENTS.strategyCompleted, {
@@ -127,7 +140,13 @@ export function useLaunchFlow() {
       if (!profile) return;
       setPaywall(null);
       try {
-        const result = await api.generate(profile, selected, provider, facts);
+        const result = await api.generate(
+          profile,
+          selected,
+          provider,
+          facts,
+          state.workspace.successContract
+        );
         adoptFallback(result.content.find((c) => c.meta?.fallbackFrom)?.meta);
         dispatch({ type: "GENERATED", result });
         setGenerations((n) => n + 1);
@@ -152,7 +171,8 @@ export function useLaunchFlow() {
         profile,
         platformId,
         provider,
-        facts
+        facts,
+        state.workspace.successContract
       );
       adoptFallback(meta);
       dispatch({
@@ -175,7 +195,8 @@ export function useLaunchFlow() {
           profile,
           platformId,
           provider,
-          facts
+          facts,
+          state.workspace.successContract
         );
         adoptFallback(meta);
         dispatch({
@@ -204,7 +225,7 @@ export function useLaunchFlow() {
   // loop, on demand. Direction is built in code from the outcome data; the
   // rewrite lands as a new draft on that channel. Never auto-posts.
   const generateVariant = (experiment: Experiment) => {
-    const verdict = experiment.verdict;
+    const verdict = effectiveExperimentVerdict(experiment);
     if (!verdict) return Promise.resolve();
     return run(async () => {
       if (!profile || !state.strategy) return;
@@ -403,6 +424,7 @@ export function useLaunchFlow() {
       posted: state.posted,
       selected: state.selected,
       facts: state.facts,
+      analysisReceipt: state.analysisReceipt,
       workspace: state.workspace,
       memory: state.memory,
     }),
@@ -414,6 +436,7 @@ export function useLaunchFlow() {
       state.posted,
       state.selected,
       state.facts,
+      state.analysisReceipt,
       state.workspace,
       state.memory,
     ]
@@ -433,6 +456,8 @@ export function useLaunchFlow() {
     profile: state.profile,
     setProfile: (p: ProductProfile) => dispatch({ type: "PROFILE_SET", profile: p }),
     facts: state.facts,
+    analysisReceipt: state.analysisReceipt,
+    reanalyzeWithSources: (sources: EvidenceSourceInput[]) => analyze(sources),
     questions: state.questions,
     confirmFact: (id: string) => dispatch({ type: "FACT_CONFIRMED", id }),
     correctFact: (id: string, claim: string) =>
@@ -484,6 +509,9 @@ export function useLaunchFlow() {
     snapshot,
     // ---- workspace (M15) ----
     workspace: state.workspace,
+    successContract: state.workspace.successContract,
+    setSuccessContract: (contract: SuccessContract) =>
+      dispatch({ type: "SUCCESS_CONTRACT_SET", contract }),
     // ---- copilot action engine + memory (M16) ----
     memory: state.memory,
     applyAction,

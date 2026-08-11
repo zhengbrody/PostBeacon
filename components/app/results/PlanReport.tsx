@@ -11,6 +11,7 @@ import { orderByRecommendation } from "@/lib/plan";
 import { toMarkdown, toJson, downloadFile, type ExportSnapshot } from "@/lib/export";
 import type {
   Fact,
+  AnalysisReceipt,
   GenerateResult,
   MarketingStrategy,
   PlatformPost,
@@ -31,6 +32,7 @@ export function PlanReport({
   strategy,
   profile,
   facts,
+  analysisReceipt,
   workspace,
   memory,
   posted,
@@ -56,6 +58,7 @@ export function PlanReport({
   strategy: MarketingStrategy | null;
   profile: ProductProfile | null;
   facts: Fact[];
+  analysisReceipt: AnalysisReceipt | null;
   workspace: WorkspaceState;
   memory: ProductMemory;
   posted: Record<string, boolean>;
@@ -88,6 +91,7 @@ export function PlanReport({
       result,
       launchDate,
       facts,
+      analysisReceipt,
       workspace,
       memory,
     };

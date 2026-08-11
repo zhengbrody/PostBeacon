@@ -1,5 +1,5 @@
 import { generateJsonMeta } from "./llm";
-import { auditFacts, pickClarifyingQuestions } from "./facts";
+import { auditFactsAcrossPages, pickClarifyingQuestions } from "./facts";
 import { asString, asStringList } from "./coerce";
 import type { FactAudit, PageCorpus } from "./facts";
 import type {
@@ -11,7 +11,7 @@ import type {
 } from "./types";
 
 /** Bump when the analyze prompt changes (recorded on every output). */
-export const ANALYZE_PROMPT_VERSION = "a4";
+export const ANALYZE_PROMPT_VERSION = "a5";
 
 export interface AnalysisOutcome {
   profile: ProductProfile;
@@ -29,20 +29,31 @@ export interface AnalysisOutcome {
  */
 export async function analyzeScrapedPage(
   page: PageCorpus,
-  provider?: Provider
+  provider?: Provider,
+  evidencePages: PageCorpus[] = []
 ): Promise<AnalysisOutcome> {
+  const pages = [page, ...evidencePages];
+  const corpus = pages
+    .map(
+      (
+        source,
+        index
+      ) => `SOURCE ${index + 1}${index === 0 ? " (PRIMARY LANDING PAGE)" : " (OPERATOR-SUBMITTED EVIDENCE)"}
+URL: ${source.url}
+TITLE: ${source.title}
+META: ${source.description}
+HEADINGS: ${source.headings.join(" | ")}
+BODY (truncated): ${source.text}`
+    )
+    .join("\n\n---\n\n");
   const { data, meta } = await generateJsonMeta({
     provider,
     maxTokens: 3000,
     system:
       "You are a sharp product strategist doing a first-pass diagnosis of a product from its landing page. Don't just lift the marketing copy — form a real point of view on what this is, who would actually pay attention, and why. Be concrete and specific, no fluff. Landing pages oversell; translate hype into the plain underlying truth. The diagnosis fields must do different jobs: whatItIs explains the mechanism in plain language; whyCare names the specific failure, cost, or desire that creates urgency; useCase names one trigger moment and the action taken. Do not fill them with generic category truths, and never introduce a capability the page does not support.\n\nProvenance discipline (non-negotiable): for every fact you must decide honestly whether the PAGE STATES IT ('observed' — and you must copy a short verbatim quote as evidence) or whether YOU are concluding it ('inferred'). If the page simply doesn't say, mark it 'unknown' and leave the claim EMPTY — an honest unknown is worth more than a plausible guess. Your evidence quotes are machine-checked against the page text; a quote that isn't really there gets your fact demoted.",
-    user: `Here is the scraped landing page.
+    user: `Here are the explicitly submitted product pages. Source 1 is the primary landing page. Treat additional pages as evidence only; never infer that an unsubmitted page was checked.
 
-URL: ${page.url}
-TITLE: ${page.title}
-META: ${page.description}
-HEADINGS: ${page.headings.join(" | ")}
-BODY (truncated): ${page.text}
+${corpus}
 
 Return a JSON object with exactly these keys:
 {
@@ -74,7 +85,7 @@ Fact entries to produce, in this order:
 - Up to 3 extra notable claims worth remembering (pricing, hard numbers, integrations, platform support) — each tagged honestly.`,
   });
 
-  const { facts, audit } = auditFacts(data?.facts, page);
+  const { facts, audit } = auditFactsAcrossPages(data?.facts, pages);
   const questions = pickClarifyingQuestions(facts);
 
   const s = asString;

@@ -62,6 +62,7 @@ describe("draft schema migrations", () => {
     const d = migrateDraft({ schemaVersion: 4, url: "x.com", workspace })!;
     expect(d.workspace).toEqual({
       ...workspace,
+      experiments: [{ id: "e1", outcomes: [] }],
       reminderPreferences: { email: false, updatedAt: "" },
     });
   });
@@ -93,6 +94,103 @@ describe("draft schema migrations", () => {
     const d = migrateDraft({ schemaVersion: 5, url: "x.com", memory })!;
     expect(d.memory).toEqual(memory);
     expect(d.workspace?.reminderPreferences).toEqual({ email: false, updatedAt: "" });
+  });
+
+  it("v6 keeps an unrecoverable verdict at experiment level", () => {
+    const verdict = {
+      call: "promising",
+      reason: "old final read",
+      advice: "continue",
+      decidedAt: "2026-07-01T00:00:00.000Z",
+    };
+    const d = migrateDraft({
+      schemaVersion: 6,
+      workspace: {
+        experiments: [
+          {
+            id: "legacy",
+            outcomes: [{ id: "o1", checkpoint: "24h", recordedAt: verdict.decidedAt }],
+            verdict,
+          },
+        ],
+        taskLog: [],
+      },
+    })!;
+    expect(d.workspace?.experiments[0].verdict).toEqual(verdict);
+    expect(d.workspace?.experiments[0].outcomes[0].verdict).toBeUndefined();
+    expect(d.analysisReceipt).toBeNull();
+  });
+
+  it("v8 preserves a bounded analysis receipt across repeated migration", () => {
+    const analysisReceipt = {
+      completedAt: "2026-08-04T00:00:00.000Z",
+      sources: [
+        {
+          kind: "primary" as const,
+          requestedUrl: "example.com",
+          canonicalUrl: "https://example.com/",
+          status: "fetched" as const,
+          method: "static" as const,
+        },
+      ],
+      checks: {
+        urlsValidated: 1,
+        pagesFetched: 1,
+        factsExtracted: 3,
+        claimsVerified: 2,
+        claimsInferred: 1,
+        claimsUnknown: 0,
+        claimsDemoted: 0,
+      },
+      foundAreas: ["features"],
+      notFoundAreas: ["pricing"],
+      provider: {
+        provider: "openai" as const,
+        model: "test",
+        promptVersion: "a5",
+        generatedAt: "2026-08-04T00:00:00.000Z",
+      },
+      limitation: "submitted extracts only",
+    };
+    const once = migrateDraft({
+      schemaVersion: DRAFT_SCHEMA_VERSION,
+      url: "example.com",
+      analysisReceipt,
+    })!;
+    expect(migrateDraft(once)?.analysisReceipt).toEqual(analysisReceipt);
+  });
+
+  it("v9 preserves the workspace contract and each experiment snapshot", () => {
+    const current = {
+      schemaVersion: 9,
+      workspace: {
+        successContract: {
+          primaryGoal: "Free signups / installs",
+          primarySignal: "signups",
+          minimumResult: 3,
+          evaluationWindow: "72h",
+        },
+        experiments: [
+          {
+            id: "experiment-1",
+            outcomes: [],
+            successContract: {
+              primaryGoal: "User feedback / conversations",
+              primarySignal: "replies",
+              minimumResult: 2,
+              evaluationWindow: "24h",
+            },
+          },
+        ],
+        taskLog: [],
+      },
+    };
+    const migrated = migrateDraft(current)!;
+    expect(migrated.workspace?.successContract?.primarySignal).toBe("signups");
+    expect(migrated.workspace?.experiments[0].successContract?.primarySignal).toBe(
+      "replies"
+    );
+    expect(migrated.schemaVersion).toBe(DRAFT_SCHEMA_VERSION);
   });
 
   it("rejects non-object garbage instead of throwing", () => {

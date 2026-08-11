@@ -189,6 +189,20 @@ describe("deletion cleanup coverage (the 'nothing survives' proof)", () => {
     expect(migration).toMatch(/notify pgrst,\s*'reload schema'/i);
   });
 
+  it("the outcome-verdict migration is transactional and never backfills invented history", () => {
+    const migration = readFileSync(
+      join(__dirname, "../supabase/migrations/20260802_outcome_verdict.sql"),
+      "utf-8"
+    );
+    expect(migration).toMatch(/^--[\s\S]*\nbegin;/i);
+    expect(migration).toMatch(
+      /alter table public\.outcomes[\s\S]*add column if not exists verdict jsonb/i
+    );
+    expect(migration).not.toMatch(/update public\.outcomes/i);
+    expect(migration).toMatch(/notify pgrst,\s*'reload schema'/i);
+    expect(migration.trimEnd()).toMatch(/commit;$/i);
+  });
+
   it("the production audit reports explicit PASS/FAIL rows for missing objects", () => {
     const audit = readFileSync(join(__dirname, "../supabase/audit.sql"), "utf-8");
     expect(audit).toContain("all tables installed");

@@ -11,10 +11,24 @@ export interface ScrapedPage {
   headings: string[];
   text: string;
   rendered: boolean; // true if the headless renderer was used
+  textTruncated: boolean; // receipt limitation; never pretend the extract was complete
+}
+
+/** Canonical syntax normalization shared by the route's preflight receipt and
+ * the fetcher. Network/DNS policy is still enforced by safeFetch. */
+export function normalizeScrapeUrl(rawUrl: string): string {
+  const trimmed = rawUrl.trim();
+  const url = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  return assertPublicHttpUrl(url).toString();
 }
 
 /** Pull the signal a model needs out of a page's HTML. One path for static + rendered. */
-function extract(html: string, url: string, rendered: boolean): ScrapedPage {
+function extract(
+  html: string,
+  url: string,
+  rendered: boolean,
+  responseTruncated = false
+): ScrapedPage {
   const $ = cheerio.load(html);
   $("script, style, noscript, svg").remove();
 
@@ -31,7 +45,8 @@ function extract(html: string, url: string, rendered: boolean): ScrapedPage {
     if (t && headings.length < 30) headings.push(t);
   });
 
-  const text = $("body").text().replace(/\s+/g, " ").trim().slice(0, 6000);
+  const fullText = $("body").text().replace(/\s+/g, " ").trim();
+  const text = fullText.slice(0, 6000);
 
   return {
     url,
@@ -40,6 +55,7 @@ function extract(html: string, url: string, rendered: boolean): ScrapedPage {
     headings,
     text,
     rendered,
+    textTruncated: responseTruncated || fullText.length > text.length,
   };
 }
 
@@ -48,7 +64,7 @@ function looksEmpty(page: ScrapedPage): boolean {
   return page.text.length < 400 && page.headings.length === 0;
 }
 
-async function fetchStatic(url: string): Promise<string> {
+async function fetchStatic(url: string) {
   const res = await safeFetch(url, {
     headers: {
       "User-Agent": "Mozilla/5.0 (compatible; PostBeaconBot/1.0; +https://postbeacon.app)",
@@ -63,7 +79,7 @@ async function fetchStatic(url: string): Promise<string> {
   if (!res.ok) {
     throw new PublicError(`Fetch failed: ${res.status} ${res.statusText}`.trim(), 502);
   }
-  return res.body;
+  return res;
 }
 
 /**
@@ -75,16 +91,14 @@ async function fetchStatic(url: string): Promise<string> {
  * static result if rendering is unavailable or fails.
  */
 export async function scrapeUrl(rawUrl: string): Promise<ScrapedPage> {
-  const trimmed = rawUrl.trim();
-  const url = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  const url = normalizeScrapeUrl(rawUrl);
   // Reject disallowed targets up front — before any fetch, and before the URL
   // could reach the headless renderer.
-  assertPublicHttpUrl(url);
 
   let staticPage: ScrapedPage | null = null;
   try {
-    const html = await fetchStatic(url);
-    staticPage = extract(html, url, false);
+    const response = await fetchStatic(url);
+    staticPage = extract(response.body, response.finalUrl, false, response.truncated);
     if (!looksEmpty(staticPage) || !renderConfigured()) return staticPage;
   } catch (err) {
     // Static fetch failed (timeout, network, 4xx). If we can render, fall

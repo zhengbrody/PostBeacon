@@ -8,8 +8,13 @@ import {
 } from "@/lib/facts";
 import { orderByRecommendation, scheduleEntryFor, sortSchedule } from "@/lib/plan";
 import { verdictFor } from "@/lib/today";
+import { migrateWorkspaceHistory } from "@/lib/experimentHistory";
+import { draftExecutionKey } from "@/lib/experimentIdentity";
+import { normalizeAnalysisReceipt } from "@/lib/sourceCoverage";
+import { defaultSuccessContract, normalizeSuccessContract } from "@/lib/successContract";
 import type {
   AuditEntry,
+  AnalysisReceipt,
   ClarifyingQuestion,
   Experiment,
   Fact,
@@ -24,6 +29,7 @@ import type {
   ProductProfile,
   RewriteFeedback,
   ScheduleItem,
+  SuccessContract,
   TaskRecord,
   WorkspaceState,
 } from "@/lib/types";
@@ -44,6 +50,7 @@ export interface FlowState {
   url: string;
   profile: ProductProfile | null;
   facts: Fact[];
+  analysisReceipt: AnalysisReceipt | null;
   questions: ClarifyingQuestion[];
   strategy: MarketingStrategy | null;
   selected: string[]; // channels checked for generation (⊆ strategy recs)
@@ -78,6 +85,7 @@ export const initialFlowState: FlowState = {
   url: "",
   profile: null,
   facts: [],
+  analysisReceipt: null,
   questions: [],
   strategy: null,
   selected: [],
@@ -109,12 +117,14 @@ export interface LoadedProject {
   selected?: string[];
   launchDate?: string;
   facts?: Fact[];
+  analysisReceipt?: AnalysisReceipt | null;
   workspace?: WorkspaceState;
   memory?: ProductMemory;
   meta?: {
     selected?: string[];
     launchDate?: string;
     facts?: Fact[];
+    analysisReceipt?: AnalysisReceipt | null;
     workspace?: WorkspaceState;
     memory?: ProductMemory;
   } | null;
@@ -130,6 +140,7 @@ export type FlowAction =
       profile: ProductProfile;
       facts: Fact[];
       questions: ClarifyingQuestion[];
+      receipt?: AnalysisReceipt;
     }
   | { type: "PROFILE_SET"; profile: ProductProfile }
   | { type: "FACT_CONFIRMED"; id: string }
@@ -168,6 +179,7 @@ export type FlowAction =
   | { type: "PROJECT_ID_SET"; id: string }
   // ---- workspace (M15) ----
   | { type: "WEEKLY_MINUTES_SET"; minutes?: number }
+  | { type: "SUCCESS_CONTRACT_SET"; contract: SuccessContract }
   | { type: "EMAIL_REMINDERS_SET"; enabled: boolean; timezone?: string; at: string }
   | { type: "TASK_ACTED"; record: TaskRecord }
   | { type: "EXPERIMENT_CREATED"; experiment: Experiment; taskId?: string }
@@ -213,8 +225,17 @@ const STEP_ORDER: Step[] = ["input", "profile", "strategy", "results"];
  */
 export function normalize(s: FlowState): FlowState {
   let next = s;
-  if (!next.profile && (next.facts.length || next.questions.length || next.strategy)) {
-    next = { ...next, facts: [], questions: [], strategy: null };
+  if (
+    !next.profile &&
+    (next.facts.length || next.analysisReceipt || next.questions.length || next.strategy)
+  ) {
+    next = {
+      ...next,
+      facts: [],
+      analysisReceipt: null,
+      questions: [],
+      strategy: null,
+    };
   }
   if (!next.strategy && (next.selected.length || next.result)) {
     next = { ...next, selected: [], result: null };
@@ -273,10 +294,36 @@ function transition(s: FlowState, a: FlowAction): FlowState {
 
     case "PROJECT_LOADED": {
       const p = a.project;
+      let workspace = migrateWorkspaceHistory({
+        ...emptyWorkspace,
+        ...(p.workspace ?? p.meta?.workspace ?? {}),
+      });
+      if (!workspace.successContract && p.profile?.conversionGoal?.trim()) {
+        workspace = {
+          ...workspace,
+          successContract: defaultSuccessContract(p.profile.conversionGoal),
+        };
+      }
+      const loadedProfile = p.profile
+        ? {
+            ...p.profile,
+            conversionGoal:
+              workspace.successContract?.primaryGoal ?? p.profile.conversionGoal,
+          }
+        : null;
+      const savedFacts = p.facts ?? p.meta?.facts ?? [];
+      const loadedFacts = workspace.successContract
+        ? [
+            ...savedFacts.filter(
+              (fact) => fact.id !== "conversionGoal" && fact.field !== "conversionGoal"
+            ),
+            answerFact("conversionGoal", workspace.successContract.primaryGoal),
+          ]
+        : savedFacts;
       return {
         step: "input", // normalize derives the real step via the clamp below
         url: p.url || "",
-        profile: p.profile || null,
+        profile: loadedProfile,
         strategy: p.strategy || null,
         result: p.result || null,
         posted: p.posted || {},
@@ -284,7 +331,10 @@ function transition(s: FlowState, a: FlowAction): FlowState {
         projectId: p.id || "",
         // Facts: flat field (local draft) or meta (Supabase row); pre-M13
         // saves have neither → empty ledger.
-        facts: p.facts ?? p.meta?.facts ?? [],
+        facts: loadedFacts,
+        analysisReceipt: normalizeAnalysisReceipt(
+          p.analysisReceipt ?? p.meta?.analysisReceipt
+        ),
         questions: [], // questions are an analyze-time artifact, not persisted
         // Three generations of saved data: flat `selected`, `meta`, or neither
         // (pre-M11) → derive a fresh default.
@@ -292,10 +342,7 @@ function transition(s: FlowState, a: FlowAction): FlowState {
           p.selected ?? p.meta?.selected ?? defaultSelection(p.strategy?.recommendations),
         // Workspace: flat field (local draft v4) or meta (Supabase row);
         // pre-M15 saves have neither → empty loop history.
-        workspace: {
-          ...emptyWorkspace,
-          ...(p.workspace ?? p.meta?.workspace ?? {}),
-        },
+        workspace,
         // Memory: v5 flat field or meta; pre-M16 saves → empty memory.
         memory: p.memory ?? p.meta?.memory ?? emptyMemory,
         demo: a.demo,
@@ -319,6 +366,7 @@ function transition(s: FlowState, a: FlowAction): FlowState {
         demo: false,
         profile: a.profile,
         facts: a.facts,
+        analysisReceipt: normalizeAnalysisReceipt(a.receipt),
         questions: a.questions,
         strategy: null,
         selected: [],
@@ -328,6 +376,9 @@ function transition(s: FlowState, a: FlowAction): FlowState {
           ...emptyWorkspace,
           weeklyMinutes: s.workspace.weeklyMinutes,
           reminderPreferences: s.workspace.reminderPreferences,
+          ...(a.profile.conversionGoal?.trim()
+            ? { successContract: defaultSuccessContract(a.profile.conversionGoal) }
+            : {}),
         },
         // Tone + banned claims are durable preferences; angle verdicts,
         // rewrite feedback and edit tracking belong to the old plan.
@@ -369,11 +420,16 @@ function transition(s: FlowState, a: FlowAction): FlowState {
       const remaining = s.questions.filter((q) => q.id !== a.id);
       if (!trimmed) return { ...s, questions: remaining }; // skip = honest unknown
       const fact = answerFact(a.id, trimmed);
+      const profile = s.profile ? applyFactToProfile(s.profile, fact) : s.profile;
       return {
         ...s,
         questions: remaining,
         facts: [...s.facts.filter((f) => f.id !== a.id), fact],
-        profile: s.profile ? applyFactToProfile(s.profile, fact) : s.profile,
+        profile,
+        workspace:
+          a.id === "conversionGoal"
+            ? { ...s.workspace, successContract: defaultSuccessContract(trimmed) }
+            : s.workspace,
       };
     }
 
@@ -618,6 +674,24 @@ function transition(s: FlowState, a: FlowAction): FlowState {
     case "WEEKLY_MINUTES_SET":
       return { ...s, workspace: { ...s.workspace, weeklyMinutes: a.minutes } };
 
+    case "SUCCESS_CONTRACT_SET": {
+      const contract = normalizeSuccessContract(a.contract);
+      if (!contract) return s;
+      return {
+        ...s,
+        profile: s.profile
+          ? { ...s.profile, conversionGoal: contract.primaryGoal }
+          : s.profile,
+        facts: [
+          ...s.facts.filter(
+            (fact) => fact.id !== "conversionGoal" && fact.field !== "conversionGoal"
+          ),
+          answerFact("conversionGoal", contract.primaryGoal),
+        ],
+        workspace: { ...s.workspace, successContract: contract },
+      };
+    }
+
     case "EMAIL_REMINDERS_SET":
       return {
         ...s,
@@ -645,16 +719,19 @@ function transition(s: FlowState, a: FlowAction): FlowState {
       // Publishing by hand: the experiment starts the loop, the draft is
       // marked posted, and the Today card (if any) is logged done — one
       // transition so they can never drift apart.
+      const experiment = a.experiment.successContract
+        ? a.experiment
+        : { ...a.experiment, successContract: s.workspace.successContract };
       const taskLog = a.taskId
         ? [
             ...s.workspace.taskLog.filter((t) => t.id !== a.taskId),
             {
               id: a.taskId,
               kind: "post" as const,
-              title: `Post to ${a.experiment.platformName}`,
+              title: `Post to ${experiment.platformName}`,
               status: "done" as const,
               estMinutes: 0,
-              at: a.experiment.publishedAt,
+              at: experiment.publishedAt,
             },
           ]
         : s.workspace.taskLog;
@@ -662,11 +739,11 @@ function transition(s: FlowState, a: FlowAction): FlowState {
         ...s,
         posted: {
           ...s.posted,
-          [`${a.experiment.platformId}-${a.experiment.postIdx}`]: true,
+          [draftExecutionKey(experiment.platformId, experiment.postIdx)]: true,
         },
         workspace: {
           ...s.workspace,
-          experiments: [...s.workspace.experiments, a.experiment],
+          experiments: [...s.workspace.experiments, experiment],
           taskLog,
         },
       };
@@ -681,7 +758,9 @@ function transition(s: FlowState, a: FlowAction): FlowState {
         platformName: target.platformName,
         angle: target.angle,
         goal: s.profile?.conversionGoal,
+        successContract: target.successContract,
       });
+      const outcome = { ...a.outcome, verdict };
       // Product memory learns which angles win or lose, citing the experiment.
       // no-signal at 24h means "too early", not a loss.
       const angleVerdict =
@@ -712,7 +791,7 @@ function transition(s: FlowState, a: FlowAction): FlowState {
               ? e
               : {
                   ...e,
-                  outcomes: [...e.outcomes, a.outcome],
+                  outcomes: [...e.outcomes, outcome],
                   verdict,
                   status: e.status === "stopped" ? e.status : ("analyzed" as const),
                 }

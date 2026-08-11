@@ -1,6 +1,14 @@
 import { PLATFORMS } from "./platforms";
 import { clipString } from "./coerce";
 import { growthMode, type GrowthMode } from "./growth";
+import { completedScheduledVerdict, effectiveExperimentVerdict } from "./experimentHistory";
+import { isFinalContractCheckpoint, outcomeSignal, SIGNAL_LABELS } from "./successContract";
+import {
+  draftExecutionKey,
+  draftKeyFromPostTaskId,
+  postTaskId,
+  recordTaskId,
+} from "./experimentIdentity";
 import type {
   Experiment,
   ExperimentVerdict,
@@ -8,6 +16,7 @@ import type {
   MarketingStrategy,
   Outcome,
   OutcomeCheckpoint,
+  SuccessContract,
   TaskRecord,
   VerdictCall,
   WorkspaceState,
@@ -42,6 +51,7 @@ export interface TodayAction {
   platformId?: string;
   experimentId?: string;
   checkpoint?: Extract<OutcomeCheckpoint, "24h" | "72h">;
+  postIdx?: number;
 }
 
 export interface TodayView {
@@ -71,7 +81,7 @@ const hasScheduledResult = (experiment: Experiment) =>
   );
 
 const hasCompletedRead = (experiment: Experiment) =>
-  Boolean(experiment.verdict) && hasScheduledResult(experiment);
+  Boolean(completedScheduledVerdict(experiment)) && hasScheduledResult(experiment);
 
 /** The first-value path, derived locally from the user's own workspace. No
  * cross-user event collection is needed to make the next success obvious. */
@@ -147,11 +157,11 @@ export function deriveToday(plan: PlanSlice, now: Date): TodayView {
         dueAt: new Date(exp.publishedAt).getTime() + (cp === "24h" ? 24 : 72) * HOUR,
       }))
     )
-    .filter(({ exp, cp }) => !acted.has(`record:${exp.id}:${cp}`))
+    .filter(({ exp, cp }) => !acted.has(recordTaskId(exp.id, cp)))
     .sort((a, b) => a.dueAt - b.dueAt);
   for (const { exp, cp } of records) {
     actions.push({
-      id: `record:${exp.id}:${cp}`,
+      id: recordTaskId(exp.id, cp),
       kind: "record",
       title: `Record ${cp} results — ${exp.platformName}`,
       whyNow: `Published ${hoursAgo(exp.publishedAt, now)}h ago${
@@ -167,20 +177,35 @@ export function deriveToday(plan: PlanSlice, now: Date): TodayView {
 
   // 2. Posting actions from the calendar, in schedule order.
   const day = planDay(plan.launchDate, now);
-  const published = new Set(
-    workspace.experiments.map((e) => `${e.platformId}`) // one live post-task per channel
+  const unavailableDrafts = new Set(
+    workspace.experiments.map((experiment) =>
+      draftExecutionKey(experiment.platformId, experiment.postIdx)
+    )
   );
+  for (const task of workspace.taskLog) {
+    const draftKey = draftKeyFromPostTaskId(task.id);
+    if (draftKey) unavailableDrafts.add(draftKey);
+  }
   const recFor = (platformId: string) =>
     strategy?.recommendations.find((r) => r.platformId === platformId);
   const upcoming: TodayAction[] = [];
 
   for (const item of result?.schedule ?? []) {
     const isCustom = !PLATFORMS.some((p) => p.id === item.platformId);
+    const channelContent = result?.content.find(
+      (content) => content.platformId === item.platformId
+    );
+    const nextPostIdx = isCustom
+      ? undefined
+      : channelContent?.posts.findIndex(
+          (_, postIdx) =>
+            !unavailableDrafts.has(draftExecutionKey(item.platformId, postIdx))
+        );
+    if (!isCustom && (nextPostIdx === undefined || nextPostIdx < 0)) continue;
     const id = isCustom
       ? `custom:${item.day}:${clipString(item.action, 24)}`
-      : `post:${item.platformId}`;
+      : postTaskId(item.platformId, nextPostIdx!);
     if (acted.has(id)) continue;
-    if (!isCustom && published.has(item.platformId)) continue;
     if (
       !isCustom &&
       !result?.content.some((c) => c.platformId === item.platformId && c.posts.length)
@@ -202,9 +227,13 @@ export function deriveToday(plan: PlanSlice, now: Date): TodayView {
       estMinutes: isCustom ? CUSTOM_MINUTES : EFFORT_MINUTES[platform?.effort ?? "medium"],
       due,
       platformId: isCustom ? undefined : item.platformId,
+      postIdx: isCustom ? undefined : nextPostIdx,
     };
     if (due) actions.push(action);
     else upcoming.push(action);
+    if (!isCustom) {
+      unavailableDrafts.add(draftExecutionKey(item.platformId, nextPostIdx!));
+    }
     if (actions.length >= MAX_TODAY_ACTIONS) break;
   }
 
@@ -247,8 +276,66 @@ const num = (v: number | undefined) => (typeof v === "number" ? v : null);
 
 export function verdictFor(
   outcome: Outcome,
-  ctx: { platformName: string; angle: string; goal?: string }
+  ctx: {
+    platformName: string;
+    angle: string;
+    goal?: string;
+    successContract?: SuccessContract;
+  }
 ): ExperimentVerdict {
+  const contract = ctx.successContract;
+  if (contract) {
+    const value = outcomeSignal(outcome, contract.primarySignal);
+    const label = SIGNAL_LABELS[contract.primarySignal];
+    const target = contract.minimumResult;
+    const unit = contract.primarySignal === "revenue" ? "$" : "";
+    const final = isFinalContractCheckpoint(outcome.checkpoint, contract.evaluationWindow);
+
+    if (value === undefined) {
+      return {
+        call: "no-signal",
+        reason: `${label} was not measured, so PostBeacon cannot judge the target honestly.`,
+        advice: `Check the live ${ctx.platformName} analytics and record ${label.toLowerCase()} before changing the angle.`,
+        decidedAt: outcome.recordedAt,
+      };
+    }
+    if (value >= target) {
+      return {
+        call: "supported",
+        reason: `Target reached: ${unit}${value} ${label.toLowerCase()} against a minimum of ${unit}${target} by ${contract.evaluationWindow}.`,
+        advice: `Keep this angle on ${ctx.platformName}; the explicit success contract was met. Test one controlled variation instead of changing channel and message together.`,
+        decidedAt: outcome.recordedAt,
+      };
+    }
+    if (contract.baseline !== undefined && value > contract.baseline) {
+      return {
+        call: "promising",
+        reason: `Directional improvement: ${unit}${value} ${label.toLowerCase()} beat the ${unit}${contract.baseline} baseline, but has not reached the ${unit}${target} target.`,
+        advice: final
+          ? `Keep the channel, tighten one variable, and run a second comparable test against the same baseline.`
+          : `Keep the experiment live until ${contract.evaluationWindow}; do not reset a direction that is improving early.`,
+        decidedAt: outcome.recordedAt,
+      };
+    }
+    if (!final) {
+      return {
+        call: value > 0 ? "promising" : "no-signal",
+        reason:
+          value > 0
+            ? `Early progress: ${unit}${value} ${label.toLowerCase()} toward a ${unit}${target} target. The final window is ${contract.evaluationWindow}.`
+            : `No ${label.toLowerCase()} yet, but the agreed final window is ${contract.evaluationWindow}.`,
+        advice: `Hold the experiment steady and record the ${contract.evaluationWindow} checkpoint before making the final channel decision.`,
+        decidedAt: outcome.recordedAt,
+      };
+    }
+    return {
+      call: "weak",
+      reason: `Target missed: ${unit}${value} ${label.toLowerCase()} against a minimum of ${unit}${target} at ${contract.evaluationWindow}.`,
+      advice: `Change one variable on ${ctx.platformName} or stop the channel; do not label the whole strategy a failure from one controlled test.`,
+      decidedAt: outcome.recordedAt,
+    };
+  }
+
   const signups = num(outcome.signups);
   const revenue = num(outcome.revenue);
   const replies = num(outcome.replies);
@@ -290,7 +377,7 @@ export function verdictFor(
           : `Consider stopping this channel for now and moving the time to your next-ranked channel.`;
   }
 
-  return { call, reason, advice, decidedAt: new Date().toISOString() };
+  return { call, reason, advice, decidedAt: outcome.recordedAt };
 }
 
 /** ≤3 concrete next steps shown right after an outcome is saved. */
@@ -379,13 +466,21 @@ export function timelineEvents(workspace: WorkspaceState): TimelineEvent[] {
         at: o.recordedAt,
         icon: "📊",
         text: `Recorded ${o.checkpoint} results for ${exp.platformName}${
-          exp.verdict ? ` → ${exp.verdict.call}` : ""
+          o.verdict ? ` → ${o.verdict.call}` : ""
         }`,
       });
     }
-    if (exp.status === "stopped") {
+    if (exp.verdict && !exp.outcomes.some((outcome) => outcome.verdict)) {
       events.push({
-        at: exp.verdict?.decidedAt ?? exp.publishedAt,
+        at: exp.verdict.decidedAt,
+        icon: "🗂",
+        text: `Historical final verdict for ${exp.platformName} → ${exp.verdict.call} (checkpoint unavailable)`,
+      });
+    }
+    if (exp.status === "stopped") {
+      const verdict = effectiveExperimentVerdict(exp);
+      events.push({
+        at: verdict?.decidedAt ?? exp.publishedAt,
         icon: "⏹",
         text: `Stopped the ${exp.platformName} experiment`,
       });
@@ -434,9 +529,14 @@ export function weeklyReview(
 
   // A learning loop is COMPLETE only after a scheduled 24h/72h result produced
   // a verdict. Manual early signals are useful reads, but never inflate retention.
-  const loops = workspace.experiments
-    .filter(hasCompletedRead)
-    .map((e) => ({ experiment: e, decidedAt: e.verdict!.decidedAt }));
+  const completed = workspace.experiments.flatMap((experiment) => {
+    const verdict = completedScheduledVerdict(experiment);
+    return verdict ? [{ experiment, verdict }] : [];
+  });
+  const loops = completed.map(({ experiment, verdict }) => ({
+    experiment,
+    decidedAt: verdict.decidedAt,
+  }));
   const loopsThisWeek = loops.filter(
     (l) => new Date(l.decidedAt).getTime() >= weekAgo
   ).length;
@@ -452,23 +552,21 @@ export function weeklyReview(
     };
     row.experiments++;
     row.outcomes += e.outcomes.length;
-    if (
-      e.verdict &&
-      (!row.bestCall || CALL_RANK[e.verdict.call] > CALL_RANK[row.bestCall])
-    ) {
-      row.bestCall = e.verdict.call;
+    const verdict = effectiveExperimentVerdict(e);
+    if (verdict && (!row.bestCall || CALL_RANK[verdict.call] > CALL_RANK[row.bestCall])) {
+      row.bestCall = verdict.call;
     }
     byChannel.set(e.platformId, row);
   }
 
-  const best = [...workspace.experiments]
-    .filter(hasCompletedRead)
-    .sort((a, b) => CALL_RANK[b.verdict!.call] - CALL_RANK[a.verdict!.call])[0];
+  const best = [...completed].sort(
+    (a, b) => CALL_RANK[b.verdict.call] - CALL_RANK[a.verdict.call]
+  )[0];
 
   const suggestions: string[] = [];
-  if (best && best.verdict!.call !== "no-signal") {
+  if (best && best.verdict.call !== "no-signal") {
     suggestions.push(
-      `Double down on what worked: "${clipString(best.angle, 70)}" (${best.platformName}, ${best.verdict!.call}).`
+      `Double down on what worked: "${clipString(best.experiment.angle, 70)}" (${best.experiment.platformName}, ${best.verdict.call}).`
     );
   }
   const unproven = strategy?.recommendations.find(
@@ -498,7 +596,7 @@ export function weeklyReview(
     loopsThisWeek,
     loops,
     channels: [...byChannel.values()],
-    bestAngle: best ? best.angle : undefined,
+    bestAngle: best?.experiment.angle,
     unprovenChannel,
     suggestions: suggestions.slice(0, 3),
   };

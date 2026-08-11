@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/Button";
 import { ExecutionProgress } from "./ExecutionProgress";
 import { InlinePostWorkbench } from "./InlinePostWorkbench";
 import { experimentLifecycle } from "@/lib/execution";
+import { normalizeTrackedUrl } from "@/lib/trackedUrl";
+import { successContractSummary } from "@/lib/successContract";
 import type { TodayAction, TodayView } from "@/lib/today";
 import type {
   Experiment,
@@ -13,6 +15,7 @@ import type {
   PlatformContent,
   PlatformPost,
   ProductProfile,
+  SuccessContract,
 } from "@/lib/types";
 
 interface TodayActions {
@@ -57,7 +60,7 @@ function ActionButtons({
       )}
       {a.kind === "post" && a.platformId && (
         <>
-          <Button disabled={loading} onClick={() => onPublish(a.platformId!)}>
+          <Button disabled={loading} onClick={() => onPublish(a.platformId!, a.postIdx)}>
             I published it
           </Button>
           <Button variant="outline" onClick={() => onOpenContent(a.platformId)}>
@@ -125,6 +128,7 @@ function ActiveExperimentCard({
   onOpenProgress: () => void;
 }) {
   const lifecycle = experimentLifecycle(experiment, new Date());
+  const trackedHref = normalizeTrackedUrl(experiment.trackedUrl);
   return (
     <Card className="border-emerald-900/70 bg-emerald-950/10 p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -139,16 +143,18 @@ function ActiveExperimentCard({
             {lifecycle.detail}
           </p>
         </div>
-        {experiment.trackedUrl && (
+        {trackedHref ? (
           <a
-            href={experiment.trackedUrl}
+            href={trackedHref}
             target="_blank"
             rel="noreferrer"
             className="text-xs font-medium text-accent-300 hover:underline"
           >
             Open live post →
           </a>
-        )}
+        ) : experiment.trackedUrl ? (
+          <span className="text-xs text-neutral-500">Saved live-post link is invalid</span>
+        ) : null}
       </div>
       <div className="mt-4">
         <ExecutionProgress steps={lifecycle.steps} />
@@ -183,6 +189,7 @@ export function TodayTab({
   view,
   productName,
   primaryGoal,
+  successContract,
   facts,
   profile,
   emailRemindersAvailable,
@@ -203,6 +210,7 @@ export function TodayTab({
   view: TodayView;
   productName?: string;
   primaryGoal?: string;
+  successContract?: SuccessContract;
   facts: Fact[];
   profile?: ProductProfile | null;
   emailRemindersAvailable: boolean;
@@ -261,6 +269,11 @@ export function TodayTab({
             Primary goal:{" "}
             <span className="text-neutral-200">{primaryGoal || "Not set"}</span>
           </p>
+          {successContract && (
+            <p className="mt-1 text-xs text-neutral-500">
+              Decision rule: {successContractSummary(successContract)}
+            </p>
+          )}
         </div>
         <div className="text-right text-xs text-neutral-500">
           <div>{view.loopsThisWeek} completed experiments this week</div>
@@ -342,6 +355,7 @@ export function TodayTab({
               facts={facts}
               profile={profile}
               posted={posted}
+              defaultPostIdx={primary.postIdx}
               loading={handlers.loading}
               onUpdatePost={handlers.onUpdatePost}
               onRegenerate={handlers.onRegenerate}

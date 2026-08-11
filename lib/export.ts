@@ -1,5 +1,6 @@
 import type {
   Fact,
+  AnalysisReceipt,
   ProductProfile,
   GenerateResult,
   MarketingStrategy,
@@ -8,6 +9,7 @@ import type {
   WorkspaceState,
 } from "./types";
 import { scheduleDate } from "./dates";
+import { successContractSummary } from "./successContract";
 
 export interface ExportSnapshot {
   url?: string;
@@ -16,6 +18,7 @@ export interface ExportSnapshot {
   result: GenerateResult | null;
   launchDate?: string;
   facts?: Fact[];
+  analysisReceipt?: AnalysisReceipt | null;
   // The learning loop travels with the plan: for anonymous users this export
   // is the ONLY way to take experiments/outcomes/memory off the device.
   workspace?: WorkspaceState;
@@ -28,10 +31,33 @@ export function toJson(snap: ExportSnapshot): string {
 
 /** Render the whole CMO launch plan as portable Markdown. */
 export function toMarkdown(snap: ExportSnapshot): string {
-  const { profile, strategy, result, launchDate = "", facts, workspace } = snap;
+  const {
+    profile,
+    strategy,
+    result,
+    launchDate = "",
+    facts,
+    analysisReceipt,
+    workspace,
+  } = snap;
   const out: string[] = [];
   out.push(`# ${profile?.name || "Launch"} — launch plan`, "");
   if (profile?.tagline) out.push(`> ${profile.tagline}`, "");
+
+  if (analysisReceipt) {
+    out.push("## Analysis receipt", "");
+    out.push(
+      `- **Provider:** ${analysisReceipt.provider.provider} · ${analysisReceipt.provider.model}${analysisReceipt.provider.fallbackFrom ? ` (fallback from ${analysisReceipt.provider.fallbackFrom})` : ""}`,
+      `- **Sources:** ${analysisReceipt.checks.pagesFetched}/${analysisReceipt.sources.length} fetched`,
+      `- **Facts:** ${analysisReceipt.checks.claimsVerified} verified · ${analysisReceipt.checks.claimsInferred} inferred · ${analysisReceipt.checks.claimsUnknown} unknown · ${analysisReceipt.checks.claimsDemoted} demoted`
+    );
+    for (const source of analysisReceipt.sources) {
+      out.push(
+        `- **${source.kind}:** ${source.status}${source.canonicalUrl ? ` — ${source.canonicalUrl}` : ""}${source.failure ? ` (${source.failure})` : ""}`
+      );
+    }
+    out.push(`- _${analysisReceipt.limitation}_`, "");
+  }
 
   if (facts?.length) {
     out.push("## Fact ledger", "");
@@ -45,6 +71,16 @@ export function toMarkdown(snap: ExportSnapshot): string {
           }`
         );
       }
+    }
+    out.push("");
+  }
+
+  if (workspace?.successContract) {
+    out.push("## Experiment success contract", "");
+    out.push(`- **Primary goal:** ${workspace.successContract.primaryGoal}`);
+    out.push(`- **Decision rule:** ${successContractSummary(workspace.successContract)}`);
+    if (workspace.successContract.baseline !== undefined) {
+      out.push(`- **Comparable baseline:** ${workspace.successContract.baseline}`);
     }
     out.push("");
   }
@@ -162,6 +198,9 @@ function appendExperiments(out: string[], workspace: WorkspaceState) {
       `### ${e.platformName}${e.community ? ` · ${e.community}` : ""} — ${when} (${e.status})`
     );
     if (e.hypothesis) out.push(`*Hypothesis:* ${e.hypothesis}`);
+    if (e.successContract) {
+      out.push(`*Success contract:* ${successContractSummary(e.successContract)}`);
+    }
     if (e.angle) out.push(`*Angle:* ${e.angle}`);
     for (const o of e.outcomes) {
       const metrics = (
@@ -181,8 +220,15 @@ function appendExperiments(out: string[], workspace: WorkspaceState) {
           o.qualitativeFeedback ? ` — “${o.qualitativeFeedback}”` : ""
         }`
       );
+      if (o.verdict) {
+        out.push(`  - **Verdict:** ${o.verdict.call} — ${o.verdict.reason}`);
+      }
     }
-    if (e.verdict) out.push(`- **Verdict:** ${e.verdict.call} — ${e.verdict.reason}`);
+    if (e.verdict && !e.outcomes.some((outcome) => outcome.verdict)) {
+      out.push(
+        `- **Historical final verdict:** ${e.verdict.call} — ${e.verdict.reason} _(checkpoint unavailable)_`
+      );
+    }
     out.push("");
   }
 }

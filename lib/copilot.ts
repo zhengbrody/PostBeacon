@@ -1,6 +1,8 @@
 import { generateJsonMeta } from "./llm";
 import { ANTI_AI_RULES } from "./voice";
 import { factsForPrompt } from "./facts";
+import { effectiveExperimentVerdict, hasHistoricalFinalVerdict } from "./experimentHistory";
+import { successContractSummary } from "./successContract";
 import { getPlatforms, type PlatformDef } from "./platforms";
 import { scheduleDate } from "./dates";
 import { validateProposedActions, type ActionContext } from "./copilotActions";
@@ -148,6 +150,13 @@ function buildContext(req: CopilotRequest): string {
   const ledger = factsForPrompt(list(req.facts));
   if (ledger) out.push("", ledger);
 
+  if (req.workspace?.successContract) {
+    out.push(
+      "",
+      `EXPERIMENT SUCCESS CONTRACT: ${successContractSummary(req.workspace.successContract)}. Primary goal: ${req.workspace.successContract.primaryGoal}. Do not substitute a different success metric or target.`
+    );
+  }
+
   // Workspace: real experiments + recorded outcomes → evidence refs [exp:id].
   const experiments = list(req.workspace?.experiments);
   if (experiments.length) {
@@ -157,10 +166,11 @@ function buildContext(req: CopilotRequest): string {
     );
     for (const e of experiments.slice(-10)) {
       const latest = e.outcomes[e.outcomes.length - 1];
+      const verdict = effectiveExperimentVerdict(e);
       out.push(
         `[exp:${e.id}] ${e.platformName}${e.community ? " · " + e.community : ""} — angle: ${clip(e.angle, 90)} · status ${e.status}` +
-          (e.verdict
-            ? ` · verdict ${e.verdict.call} (${clip(e.verdict.reason, 110)})`
+          (verdict
+            ? ` · ${hasHistoricalFinalVerdict(e) ? "historical final verdict (checkpoint unavailable)" : "verdict"} ${verdict.call} (${clip(verdict.reason, 110)})`
             : "") +
           (latest
             ? ` · last ${latest.checkpoint}: impressions ${latest.impressions ?? "?"}, replies ${latest.replies ?? "?"}, clicks ${latest.clicks ?? "?"}, signups ${latest.signups ?? "?"}`

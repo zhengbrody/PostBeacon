@@ -7,14 +7,18 @@ import { FailuresCard } from "@/components/app/results/FailuresCard";
 import { TodayTab } from "@/components/app/results/TodayTab";
 import { PlanReport } from "@/components/app/results/PlanReport";
 import { TimelineTab } from "@/components/app/results/TimelineTab";
+import { normalizeTrackedUrl } from "@/lib/trackedUrl";
+import { postTaskId } from "@/lib/experimentIdentity";
 import { ReviewTab } from "@/components/app/results/ReviewTab";
 import { DemoGuide, type DemoGuideStep } from "@/components/app/DemoGuide";
 import { PublishDialog, type PublishDetails } from "@/components/app/results/PublishDialog";
 import { OutcomePanel } from "@/components/app/results/OutcomePanel";
 import { deriveToday, type TodayAction } from "@/lib/today";
 import { latestRelevantExperiment } from "@/lib/execution";
+import { successContractSummary } from "@/lib/successContract";
 import type {
   Experiment,
+  AnalysisReceipt,
   Fact,
   GenerateResult,
   MarketingStrategy,
@@ -40,6 +44,7 @@ export function ResultsView({
   strategy,
   profile,
   facts,
+  analysisReceipt,
   workspace,
   memory,
   posted,
@@ -72,6 +77,7 @@ export function ResultsView({
   strategy: MarketingStrategy | null;
   profile: ProductProfile | null;
   facts: Fact[];
+  analysisReceipt: AnalysisReceipt | null;
   workspace: WorkspaceState;
   memory: ProductMemory;
   posted: Record<string, boolean>;
@@ -176,7 +182,8 @@ export function ResultsView({
     const rec = strategy?.recommendations.find(
       (r) => r.platformId === publishContent.platformId
     );
-    const goal = profile?.conversionGoal || "conversion";
+    const successContract = workspace.successContract;
+    const goal = successContract?.primaryGoal || profile?.conversionGoal || "conversion";
     const experiment: Experiment = {
       id: crypto.randomUUID(),
       platformId: publishContent.platformId,
@@ -186,14 +193,17 @@ export function ResultsView({
       variant: details.variant,
       hypothesis: `"${details.angle || rec?.angle || "this angle"}" on ${
         details.community || publishContent.platformName
-      } will produce ${goal} signal within 72h`,
-      trackedUrl: details.trackedUrl || undefined,
+      } will produce ${goal} signal${
+        successContract ? ` (${successContractSummary(successContract)})` : " within 72h"
+      }`,
+      trackedUrl: normalizeTrackedUrl(details.trackedUrl),
       publishedAt: new Date().toISOString(),
       status: "live",
       postIdx: details.postIdx,
       outcomes: [],
+      successContract,
     };
-    onPublishExperiment(experiment, `post:${publishContent.platformId}`);
+    onPublishExperiment(experiment, postTaskId(publishContent.platformId, details.postIdx));
     setNotice({
       title: demo
         ? `${publishContent.platformName} example experiment started`
@@ -339,6 +349,7 @@ export function ResultsView({
           view={today}
           productName={profile?.name}
           primaryGoal={profile?.conversionGoal}
+          successContract={workspace.successContract}
           facts={facts}
           profile={profile}
           loading={loading}
@@ -408,6 +419,7 @@ export function ResultsView({
           strategy={strategy}
           profile={profile}
           facts={facts}
+          analysisReceipt={analysisReceipt}
           workspace={workspace}
           memory={memory}
           posted={posted}
@@ -463,6 +475,7 @@ export function ResultsView({
           content={publishContent}
           facts={facts}
           profile={profile}
+          successContract={workspace.successContract}
           rec={strategy?.recommendations.find(
             (r) => r.platformId === publishFor.platformId
           )}

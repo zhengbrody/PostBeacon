@@ -39,6 +39,45 @@ describe("analyzeBodySchema", () => {
       parseBody(analyzeBodySchema, { url: "https://e.com/" + "a".repeat(2100) })
     ).toThrow(PublicError);
   });
+
+  it("accepts at most four allowlisted evidence sources and dedupes URLs", () => {
+    const out = parseBody(analyzeBodySchema, {
+      url: "https://example.com",
+      evidenceSources: [
+        { kind: "pricing", url: "https://example.com/pricing" },
+        { kind: "docs", url: "https://example.com/pricing" },
+        { kind: "github", url: "https://github.com/example/repo" },
+      ],
+    });
+    expect(out.evidenceSources).toEqual([
+      { kind: "pricing", url: "https://example.com/pricing" },
+      { kind: "github", url: "https://github.com/example/repo" },
+    ]);
+    expect(() =>
+      parseBody(analyzeBodySchema, {
+        url: "https://example.com",
+        evidenceSources: Array.from({ length: 5 }, (_, i) => ({
+          kind: "docs",
+          url: `https://example.com/${i}`,
+        })),
+      })
+    ).toThrow(PublicError);
+  });
+
+  it("rejects unknown evidence-source kinds and oversized source URLs", () => {
+    expect(() =>
+      parseBody(analyzeBodySchema, {
+        url: "https://example.com",
+        evidenceSources: [{ kind: "social", url: "https://example.com/social" }],
+      })
+    ).toThrow(PublicError);
+    expect(() =>
+      parseBody(analyzeBodySchema, {
+        url: "https://example.com",
+        evidenceSources: [{ kind: "docs", url: "https://e.com/" + "x".repeat(2100) }],
+      })
+    ).toThrow(PublicError);
+  });
 });
 
 describe("generateBodySchema", () => {
@@ -100,6 +139,33 @@ describe("profile bounds (via strategyBodySchema)", () => {
       profile: { name: "X", __proto__pollution: "boom", extra: "field" },
     });
     expect(out.profile).not.toHaveProperty("extra");
+  });
+
+  it("accepts one bounded Success Contract and rejects meaningless targets", () => {
+    const successContract = {
+      primaryGoal: "Free signups / installs",
+      primarySignal: "signups",
+      baseline: 2,
+      minimumResult: 5,
+      evaluationWindow: "72h",
+    };
+    expect(
+      parseBody(strategyBodySchema, { profile, successContract }).successContract
+    ).toEqual(successContract);
+    expect(() =>
+      parseBody(generateBodySchema, {
+        profile,
+        platformIds: [P0],
+        successContract: { ...successContract, minimumResult: 0 },
+      })
+    ).toThrow(PublicError);
+    expect(() =>
+      parseBody(regenerateBodySchema, {
+        profile,
+        platformId: P0,
+        successContract: { ...successContract, primarySignal: "followers" },
+      })
+    ).toThrow(PublicError);
   });
 });
 

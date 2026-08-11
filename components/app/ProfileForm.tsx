@@ -36,33 +36,40 @@ export function ProfileForm({
   return (
     <div className="space-y-6">
       {diagnosis && (
-        <Card className="border-accent-700/50 bg-accent-600/10 p-6">
-          <div className="mb-3 flex items-center gap-2">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-accent-300">
-              Working diagnosis
-            </h2>
-            {profile.confidence && <ConfidenceTag confidence={profile.confidence} />}
-          </div>
-          <p className="mb-4 text-xs text-neutral-400">
-            This is PostBeacon&apos;s interpretation of the page, not a quoted claim. The
-            verified facts and your corrections above remain the source of truth.
-          </p>
-          <dl className="space-y-3 text-sm">
-            {profile.whatItIs && (
-              <DiagRow label="What it really is" value={profile.whatItIs} />
-            )}
-            {profile.whyCare && (
-              <DiagRow label="Why anyone cares" value={profile.whyCare} />
-            )}
-            {profile.useCase && (
-              <DiagRow label="The moment it's used" value={profile.useCase} />
-            )}
-          </dl>
-          {profile.confidence !== "high" && profile.confidenceNote && (
-            <p className="mt-3 border-t border-line pt-3 text-xs text-neutral-400">
-              ⚠ Inferred: {profile.confidenceNote}
-            </p>
-          )}
+        <Card className="overflow-hidden border-accent-700/40 bg-accent-600/10">
+          <details>
+            <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-3 px-6 py-4 hover:bg-white/[0.02]">
+              <span className="flex items-center gap-2">
+                <span className="text-sm font-semibold text-neutral-100">
+                  Review the working diagnosis
+                </span>
+                {profile.confidence && <ConfidenceTag confidence={profile.confidence} />}
+              </span>
+              <span className="text-xs font-medium text-accent-300">Open ↓</span>
+            </summary>
+            <div className="border-t border-accent-700/30 p-6">
+              <p className="mb-4 text-xs text-neutral-400">
+                This is PostBeacon&apos;s interpretation of the page, not a quoted claim.
+                The verified facts and your corrections remain the source of truth.
+              </p>
+              <dl className="space-y-3 text-sm">
+                {profile.whatItIs && (
+                  <DiagRow label="What it really is" value={profile.whatItIs} />
+                )}
+                {profile.whyCare && (
+                  <DiagRow label="Why anyone cares" value={profile.whyCare} />
+                )}
+                {profile.useCase && (
+                  <DiagRow label="The moment it's used" value={profile.useCase} />
+                )}
+              </dl>
+              {profile.confidence !== "high" && profile.confidenceNote && (
+                <p className="mt-3 border-t border-line pt-3 text-xs text-neutral-400">
+                  ⚠ Inferred: {profile.confidenceNote}
+                </p>
+              )}
+            </div>
+          </details>
         </Card>
       )}
 

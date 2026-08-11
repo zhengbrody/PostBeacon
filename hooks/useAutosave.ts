@@ -7,6 +7,7 @@ import { saveDraft, clearDraft, DRAFT_SCHEMA_VERSION } from "@/lib/storage";
 import { syncWorkspaceTables } from "@/lib/workspace";
 import type {
   Fact,
+  AnalysisReceipt,
   GenerateResult,
   MarketingStrategy,
   ProductMemory,
@@ -23,6 +24,7 @@ interface AutosaveFlow {
     posted: Record<string, boolean>;
     selected: string[];
     facts: Fact[];
+    analysisReceipt: AnalysisReceipt | null;
     workspace: WorkspaceState;
     memory: ProductMemory;
   };
@@ -113,6 +115,7 @@ export function useAutosave(
               selected: snap.selected,
               launchDate,
               facts: snap.facts,
+              analysisReceipt: snap.analysisReceipt,
               workspace: snap.workspace,
               memory: snap.memory,
             },
@@ -146,6 +149,7 @@ export function useAutosave(
           selected: snap.selected,
           launchDate,
           facts: snap.facts,
+          analysisReceipt: snap.analysisReceipt,
           workspace: snap.workspace,
           memory: snap.memory,
         });

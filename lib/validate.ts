@@ -114,6 +114,14 @@ const profileSchema = z.object({
   publisherVoice: z.enum(["brand", "founder"]).optional(),
 });
 
+export const successContractSchema = z.object({
+  primaryGoal: s(500).min(1),
+  primarySignal: z.enum(["impressions", "replies", "clicks", "signups", "revenue"]),
+  baseline: z.number().finite().min(0).max(1_000_000_000).optional(),
+  minimumResult: z.number().finite().positive().max(1_000_000_000),
+  evaluationWindow: z.enum(["24h", "72h"]),
+});
+
 /** Fact Ledger entries as the wire accepts them (M13). The server re-derives
  *  what matters (verifyFacts / evidenceQuality); this just bounds the shape. */
 const factSchema = z.object({
@@ -302,6 +310,24 @@ const resultSchema = z.object({
 export const analyzeBodySchema = z.object({
   url: z.string().min(4).max(2048),
   provider: providerSchema.optional(),
+  evidenceSources: z
+    .array(
+      z.object({
+        kind: z.enum(["pricing", "docs", "changelog", "github", "other"]),
+        url: z.string().min(4).max(2048),
+      })
+    )
+    .max(4)
+    .default([])
+    .transform((sources) => {
+      const seen = new Set<string>();
+      return sources.filter((source) => {
+        const key = source.url.trim().toLowerCase();
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+    }),
 });
 
 /** A signed-out visitor cannot select a provider. The consent bit is accepted
@@ -316,6 +342,7 @@ export const strategyBodySchema = z.object({
   profile: profileSchema,
   provider: providerSchema.optional(),
   facts: factsFieldSchema,
+  successContract: successContractSchema.optional(),
 });
 
 export const generateBodySchema = z.object({
@@ -323,6 +350,7 @@ export const generateBodySchema = z.object({
   platformIds: platformIdsSchema,
   provider: providerSchema.optional(),
   facts: factsFieldSchema,
+  successContract: successContractSchema.optional(),
 });
 
 export const regenerateBodySchema = z.object({
@@ -330,6 +358,7 @@ export const regenerateBodySchema = z.object({
   platformId: knownPlatformSchema,
   provider: providerSchema.optional(),
   facts: factsFieldSchema,
+  successContract: successContractSchema.optional(),
 });
 
 /** Workspace slice the copilot needs for evidence refs (bounded). */
@@ -339,7 +368,15 @@ const metricSchema = z
   .nullish()
   .transform((v) => (typeof v === "number" && Number.isFinite(v) ? v : undefined));
 
+const workspaceVerdictSchema = z.object({
+  call: z.enum(["supported", "promising", "weak", "no-signal"]),
+  reason: s(500).default(""),
+  advice: s(500).default(""),
+  decidedAt: s(40).default(""),
+});
+
 const copilotWorkspaceSchema = z.object({
+  successContract: successContractSchema.optional(),
   experiments: z
     .array(
       z.object({
@@ -369,18 +406,13 @@ const copilotWorkspaceSchema = z.object({
               signups: metricSchema,
               revenue: metricSchema,
               qualitativeFeedback: s(4000).optional(),
+              verdict: workspaceVerdictSchema.optional(),
             })
           )
           .max(6)
           .default([]),
-        verdict: z
-          .object({
-            call: z.enum(["supported", "promising", "weak", "no-signal"]),
-            reason: s(500).default(""),
-            advice: s(500).default(""),
-            decidedAt: s(40).default(""),
-          })
-          .optional(),
+        successContract: successContractSchema.optional(),
+        verdict: workspaceVerdictSchema.optional(),
       })
     )
     .max(30)

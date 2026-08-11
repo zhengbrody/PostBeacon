@@ -3,12 +3,15 @@
 
 import type {
   Fact,
+  AnalysisReceipt,
   GenerateResult,
   MarketingStrategy,
   ProductMemory,
   ProductProfile,
   WorkspaceState,
 } from "./types";
+import { migrateWorkspaceHistory } from "./experimentHistory";
+import { normalizeAnalysisReceipt } from "./sourceCoverage";
 
 const KEY = "postbeacon:draft";
 
@@ -21,9 +24,13 @@ const KEY = "postbeacon:draft";
  *   v4 — M15: + workspace (experiments, task log, weekly budget)
  *   v5 — M16: + memory (product memory: tone, banned claims, angle verdicts)
  *   v6 — M18: + explicit event-email reminder preference
+ *   v7 — M24.1: + checkpoint-owned Outcome verdicts; legacy final verdicts
+ *                remain experiment-level and are labelled honestly
+ *   v8 — M25.0: + server-authored analysis receipt and submitted-source list
+ *   v9 — M25.1: + workspace/experiment Success Contract snapshots
  * Bump this and extend migrateDraft() when the persisted shape changes.
  */
-export const DRAFT_SCHEMA_VERSION = 6;
+export const DRAFT_SCHEMA_VERSION = 9;
 
 export interface Draft {
   schemaVersion?: number; // absent on pre-versioning saves; stamped on write
@@ -36,6 +43,7 @@ export interface Draft {
   selected?: string[]; // channels checked for generation
   launchDate?: string;
   facts?: Fact[]; // M13 fact ledger (provenance for the profile)
+  analysisReceipt?: AnalysisReceipt | null; // M25.0 bounded proof, no page text
   workspace?: WorkspaceState; // M15 launch workspace (experiments, task log)
   memory?: ProductMemory; // M16 product memory (lean, never chat transcripts)
 }
@@ -72,6 +80,10 @@ export function migrateDraft(raw: unknown): Draft | null {
       reminderPreferences: { email: false, updatedAt: "" },
     };
   }
+  if (out.workspace) {
+    out.workspace = migrateWorkspaceHistory(out.workspace);
+  }
+  out.analysisReceipt = normalizeAnalysisReceipt(out.analysisReceipt);
   out.schemaVersion = DRAFT_SCHEMA_VERSION;
   return out;
 }

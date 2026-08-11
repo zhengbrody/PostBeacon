@@ -2,6 +2,13 @@
 
 import { Card } from "@/components/ui/Card";
 import { PRIMARY_GOALS, recommendedPrimaryGoal } from "@/lib/growth";
+import {
+  defaultSuccessContract,
+  OUTCOME_METRICS,
+  SIGNAL_LABELS,
+  successContractSummary,
+} from "@/lib/successContract";
+import type { OutcomeMetric, SuccessContract } from "@/lib/types";
 
 /**
  * Growth-workspace intake. The primary goal is required; launch date and
@@ -20,9 +27,9 @@ export function LaunchSetup({
   setLaunchDate,
   weeklyMinutes,
   setWeeklyMinutes,
-  primaryGoal,
+  successContract,
   stage,
-  setPrimaryGoal,
+  setSuccessContract,
   publisherVoice,
   setPublisherVoice,
 }: {
@@ -30,13 +37,14 @@ export function LaunchSetup({
   setLaunchDate: (v: string) => void;
   weeklyMinutes?: number;
   setWeeklyMinutes: (m?: number) => void;
-  primaryGoal?: string;
+  successContract?: SuccessContract;
   stage?: string;
-  setPrimaryGoal: (goal: string) => void;
+  setSuccessContract: (contract: SuccessContract) => void;
   publisherVoice?: "brand" | "founder";
   setPublisherVoice: (voice: "brand" | "founder") => void;
 }) {
   const recommended = recommendedPrimaryGoal(stage);
+  const primaryGoal = successContract?.primaryGoal;
   const customGoal =
     primaryGoal && !(PRIMARY_GOALS as readonly string[]).includes(primaryGoal);
 
@@ -71,7 +79,7 @@ export function LaunchSetup({
             <button
               type="button"
               className="min-h-11 rounded-lg border border-accent-500/60 bg-accent-600/20 px-3 py-2 text-left text-xs font-medium text-accent-200 hover:bg-accent-600/30"
-              onClick={() => setPrimaryGoal(recommended)}
+              onClick={() => setSuccessContract(defaultSuccessContract(recommended))}
             >
               Use recommended: {recommended}
             </button>
@@ -82,7 +90,7 @@ export function LaunchSetup({
             <button
               type="button"
               key={goal}
-              onClick={() => setPrimaryGoal(goal)}
+              onClick={() => setSuccessContract(defaultSuccessContract(goal))}
               className={`min-h-11 rounded-full border px-3 py-1.5 text-xs transition-colors ${
                 primaryGoal === goal
                   ? "border-accent-500 bg-accent-600/25 text-accent-100"
@@ -98,6 +106,109 @@ export function LaunchSetup({
             </span>
           )}
         </div>
+        {successContract && (
+          <div className="mt-4 border-t border-accent-700/30 pt-4">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div>
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-accent-300">
+                  Experiment success contract
+                </h3>
+                <p className="mt-1 text-xs text-neutral-400">
+                  This exact rule is copied onto the experiment when you publish.
+                </p>
+              </div>
+              <span className="rounded-full bg-surface-2 px-2.5 py-1 text-[11px] text-neutral-300">
+                {successContractSummary(successContract)}
+              </span>
+            </div>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <label className="text-xs text-neutral-400">
+                Primary signal
+                <select
+                  value={successContract.primarySignal}
+                  onChange={(event) =>
+                    setSuccessContract({
+                      ...successContract,
+                      primarySignal: event.target.value as OutcomeMetric,
+                    })
+                  }
+                  className="mt-1.5 min-h-11 w-full rounded-md border border-line bg-surface-2 px-3 text-sm text-neutral-100 outline-none focus:border-accent-500"
+                >
+                  {OUTCOME_METRICS.map((metric) => (
+                    <option key={metric} value={metric}>
+                      {SIGNAL_LABELS[metric]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-xs text-neutral-400">
+                Meaningful minimum result
+                <input
+                  type="number"
+                  min="0.01"
+                  step={successContract.primarySignal === "revenue" ? "0.01" : "1"}
+                  value={successContract.minimumResult}
+                  onChange={(event) => {
+                    const minimumResult = Number(event.target.value);
+                    if (Number.isFinite(minimumResult) && minimumResult > 0) {
+                      setSuccessContract({ ...successContract, minimumResult });
+                    }
+                  }}
+                  className="mt-1.5 min-h-11 w-full rounded-md border border-line bg-surface-2 px-3 text-sm text-neutral-100 outline-none focus:border-accent-500"
+                />
+              </label>
+              <label className="text-xs text-neutral-400">
+                Comparable baseline · optional
+                <input
+                  type="number"
+                  min="0"
+                  step={successContract.primarySignal === "revenue" ? "0.01" : "1"}
+                  value={successContract.baseline ?? ""}
+                  placeholder="Not known"
+                  onChange={(event) => {
+                    const raw = event.target.value;
+                    const baseline = raw === "" ? undefined : Number(raw);
+                    if (
+                      baseline === undefined ||
+                      (Number.isFinite(baseline) && baseline >= 0)
+                    ) {
+                      setSuccessContract({ ...successContract, baseline });
+                    }
+                  }}
+                  className="mt-1.5 min-h-11 w-full rounded-md border border-line bg-surface-2 px-3 text-sm text-neutral-100 outline-none focus:border-accent-500"
+                />
+              </label>
+              <div className="text-xs text-neutral-400">
+                Final decision window
+                <div className="mt-1.5 grid grid-cols-2 gap-2">
+                  {(["24h", "72h"] as const).map((window) => (
+                    <button
+                      type="button"
+                      key={window}
+                      onClick={() =>
+                        setSuccessContract({
+                          ...successContract,
+                          evaluationWindow: window,
+                        })
+                      }
+                      className={`min-h-11 rounded-md border text-sm transition-colors ${
+                        successContract.evaluationWindow === window
+                          ? "border-accent-500 bg-accent-600/25 text-accent-100"
+                          : "border-line bg-surface-2 text-neutral-300 hover:border-neutral-600"
+                      }`}
+                    >
+                      {window}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <p className="mt-3 text-[11px] leading-relaxed text-neutral-500">
+              Baseline is the result from a genuinely comparable earlier test. Leave it
+              blank when you do not have one; PostBeacon will not invent improvement.
+            </p>
+          </div>
+        )}
       </div>
 
       <details className="mt-4 rounded-lg border border-line bg-surface-2/50">

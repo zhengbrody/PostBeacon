@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import type { ClarifyingQuestion, Fact, FactStatus } from "@/lib/types";
 import type { ContextField } from "@/lib/facts";
+import { isSafeExternalHref } from "@/lib/urlPolicy";
 
 /**
  * The Fact Ledger UI (M13): what we know, how we know it, and the ≤3
@@ -98,9 +99,19 @@ function FactRow({
             <p className="mt-1 text-sm text-neutral-100">{fact.claim}</p>
           )}
           {fact.status === "observed" && fact.evidence && !editing && (
-            <p className="mt-1 text-xs leading-relaxed text-neutral-500">
+            <div className="mt-1 text-xs leading-relaxed text-neutral-500">
               Page evidence: &ldquo;{fact.evidence}&rdquo;
-            </p>
+              {fact.sourceUrl && isSafeExternalHref(fact.sourceUrl) && (
+                <a
+                  href={fact.sourceUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="ml-2 text-accent-300 hover:underline"
+                >
+                  Open source ↗
+                </a>
+              )}
+            </div>
           )}
         </div>
         {!editing && (
@@ -203,6 +214,7 @@ function QuestionRow({
 export function FactLedger({
   facts,
   questions,
+  mode = "all",
   onConfirm,
   onCorrect,
   onDelete,
@@ -210,6 +222,7 @@ export function FactLedger({
 }: {
   facts: Fact[];
   questions: ClarifyingQuestion[];
+  mode?: "all" | "questions" | "evidence";
   onConfirm: (id: string) => void;
   onCorrect: (id: string, claim: string) => void;
   onDelete: (id: string) => void;
@@ -222,11 +235,18 @@ export function FactLedger({
   const establishedFacts = visibleFacts.filter(
     (fact) => fact.status === "observed" || fact.status === "user-confirmed"
   );
-  if (!visibleFacts.length && !questions.length) return null;
+  const showQuestions = mode === "all" || mode === "questions";
+  const showEvidence = mode === "all" || mode === "evidence";
+  if (
+    (showQuestions ? questions.length : 0) === 0 &&
+    (showEvidence ? visibleFacts.length : 0) === 0
+  ) {
+    return null;
+  }
 
   return (
     <>
-      {questions.length > 0 && (
+      {showQuestions && questions.length > 0 && (
         <Card className="border-accent-700/50 bg-accent-600/10 p-6">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-accent-300">
             Tell us what the page cannot
@@ -244,7 +264,7 @@ export function FactLedger({
         </Card>
       )}
 
-      {reviewFacts.length > 0 && (
+      {showEvidence && reviewFacts.length > 0 && (
         <Card className="border-amber-500/30 p-6">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 className="text-lg font-semibold">AI suggestions to review</h2>
@@ -270,7 +290,7 @@ export function FactLedger({
         </Card>
       )}
 
-      {establishedFacts.length > 0 && (
+      {showEvidence && establishedFacts.length > 0 && (
         <Card className="overflow-hidden">
           <details>
             <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-3 px-6 py-4 hover:bg-white/[0.02]">

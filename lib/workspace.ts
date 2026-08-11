@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ProductProfile, WorkspaceState } from "./types";
+import { normalizeTrackedUrl } from "./trackedUrl";
 
 /**
  * Write-through sync of workspace state into the normalized Supabase tables
@@ -73,7 +74,7 @@ export async function syncWorkspaceTables(
           angle: e.angle,
           variant: e.variant,
           hypothesis: e.hypothesis,
-          tracked_url: e.trackedUrl ?? null,
+          tracked_url: normalizeTrackedUrl(e.trackedUrl) ?? null,
           status: e.status,
           post_idx: e.postIdx,
           published_at: e.publishedAt,
@@ -92,6 +93,7 @@ export async function syncWorkspaceTables(
           signups: o.signups ?? null,
           revenue: o.revenue ?? null,
           qualitative_feedback: o.qualitativeFeedback ?? null,
+          verdict: o.verdict ?? null,
           recorded_at: o.recordedAt,
         }))
       );

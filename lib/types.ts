@@ -9,6 +9,49 @@ export interface ProviderRunMeta {
   fallbackFrom?: Provider;
 }
 
+export type EvidenceSourceKind =
+  "primary" | "pricing" | "docs" | "changelog" | "github" | "other";
+
+/** A page the operator explicitly submits as product evidence. PostBeacon
+ * never discovers or crawls adjacent pages implicitly. */
+export interface EvidenceSourceInput {
+  kind: Exclude<EvidenceSourceKind, "primary">;
+  url: string;
+}
+
+export interface EvidenceSourceReceipt {
+  kind: EvidenceSourceKind;
+  requestedUrl: string;
+  canonicalUrl?: string;
+  title?: string;
+  status: "fetched" | "failed";
+  method?: "static" | "rendered";
+  textTruncated?: boolean;
+  /** Bounded public failure label. Never includes submitted content or an
+   * upstream error body. */
+  failure?: "invalid-url" | "duplicate" | "fetch-failed";
+}
+
+/** Server-authored proof of what Analyze actually inspected. It deliberately
+ * contains no page body, prompt, identity or raw error. */
+export interface AnalysisReceipt {
+  completedAt: string;
+  sources: EvidenceSourceReceipt[];
+  checks: {
+    urlsValidated: number;
+    pagesFetched: number;
+    factsExtracted: number;
+    claimsVerified: number;
+    claimsInferred: number;
+    claimsUnknown: number;
+    claimsDemoted: number;
+  };
+  foundAreas: string[];
+  notFoundAreas: string[];
+  provider: GenerationMeta;
+  limitation: string;
+}
+
 /** Server-authored capability contract for the signed-out preview. The browser
  * must not reconstruct provider routing or privacy warnings from public env. */
 export interface GuestPreviewProviderCapability {
@@ -315,6 +358,19 @@ export interface CopilotRequest {
 export type ExperimentStatus = "live" | "analyzed" | "stopped";
 export type OutcomeCheckpoint = "24h" | "72h" | "manual";
 export type VerdictCall = "supported" | "promising" | "weak" | "no-signal";
+export type OutcomeMetric = "impressions" | "replies" | "clicks" | "signups" | "revenue";
+export type SuccessWindow = "24h" | "72h";
+
+/** The founder's explicit definition of a meaningful experiment result.
+ * It is copied onto an Experiment at publish time so changing the workspace
+ * goal later never rewrites the decision contract of historical tests. */
+export interface SuccessContract {
+  primaryGoal: string;
+  primarySignal: OutcomeMetric;
+  baseline?: number;
+  minimumResult: number;
+  evaluationWindow: SuccessWindow;
+}
 
 /** One check-in's results. Absent numbers mean "not measured", never 0. */
 export interface Outcome {
@@ -327,6 +383,7 @@ export interface Outcome {
   signups?: number;
   revenue?: number;
   qualitativeFeedback?: string; // typed or pasted — comments, DMs, notes
+  verdict?: ExperimentVerdict; // the contemporaneous read for THIS checkpoint
 }
 
 /** The code-computed read on an experiment (rule-based, explainable). */
@@ -351,6 +408,9 @@ export interface Experiment {
   status: ExperimentStatus;
   postIdx: number; // which draft was published
   outcomes: Outcome[];
+  successContract?: SuccessContract; // immutable snapshot for this experiment
+  /** Latest/final summary for compatibility. Historical projects may have
+   * only this value; consumers must not pretend it belonged to every Outcome. */
   verdict?: ExperimentVerdict;
 }
 
@@ -368,6 +428,7 @@ export interface TaskRecord {
 /** Everything the workspace persists beyond the plan itself. */
 export interface WorkspaceState {
   weeklyMinutes?: number; // intake: weekly time budget
+  successContract?: SuccessContract; // current contract used by the next experiment
   reminderPreferences?: {
     email: boolean; // explicit opt-in; in-app due states are always on
     timezone?: string; // browser IANA zone, used only to time useful reminders

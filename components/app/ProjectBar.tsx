@@ -9,7 +9,13 @@ import { supabaseConfigured } from "@/lib/supabase/client";
 import { projectIdentity } from "@/lib/projectIdentity";
 import { Button } from "@/components/ui/Button";
 import { AccountName, SignIn, useSupabaseUser } from "./SignIn";
-import type { Fact, GenerateResult, MarketingStrategy, ProductProfile } from "@/lib/types";
+import type {
+  AnalysisReceipt,
+  Fact,
+  GenerateResult,
+  MarketingStrategy,
+  ProductProfile,
+} from "@/lib/types";
 
 export interface ProjectSnapshot {
   url: string;
@@ -19,6 +25,7 @@ export interface ProjectSnapshot {
   posted: Record<string, boolean>;
   selected: string[];
   facts: Fact[];
+  analysisReceipt: AnalysisReceipt | null;
 }
 
 /** A `projects` row as loadProject consumes it (meta carries client state). */
@@ -31,6 +38,7 @@ interface SavedProject extends Omit<ProjectSnapshot, "selected" | "facts"> {
     selected?: string[];
     launchDate?: string;
     facts?: Fact[];
+    analysisReceipt?: AnalysisReceipt | null;
   };
 }
 

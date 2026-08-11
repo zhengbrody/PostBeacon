@@ -86,7 +86,8 @@ export function UrlStep({
           >
             {PROVIDER_PRIVACY[provider].note}
           </span>{" "}
-          Your draft stays in this browser until you sign in.{" "}
+          Signed-in projects save to your account; without accounts, the current draft stays
+          in this browser.{" "}
           <Link
             href="/privacy"
             className="text-neutral-400 underline underline-offset-2 hover:text-accent-300"

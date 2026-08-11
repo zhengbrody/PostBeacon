@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
     if ("response" in guard) return guard.response;
 
     // platformId is schema-checked against the catalog, so this can't be empty.
-    const { profile, platformId, provider, facts } = parseBody(
+    const { profile, platformId, provider, facts, successContract } = parseBody(
       regenerateBodySchema,
       await readJsonBody(req)
     );
@@ -24,7 +24,8 @@ export async function POST(req: NextRequest) {
       profile,
       p,
       provider,
-      facts
+      facts,
+      successContract
     );
     return NextResponse.json({ posts, playbook, meta });
   } catch (err) {

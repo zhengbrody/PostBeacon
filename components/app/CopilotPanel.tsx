@@ -7,6 +7,7 @@ import { api, type ApiError } from "@/lib/api";
 import { PROVIDER_PRIVACY, providerFallbackNotice } from "@/lib/privacy";
 import { platformSupportsThreadReplies } from "@/lib/platforms";
 import { buildBriefing, type Briefing } from "@/lib/today";
+import { successContractSummary } from "@/lib/successContract";
 import {
   applyKindOf,
   impactOf,
@@ -29,6 +30,8 @@ import type {
   Provider,
   WorkspaceState,
 } from "@/lib/types";
+import { normalizeTrackedUrl } from "@/lib/trackedUrl";
+import { postTaskId } from "@/lib/experimentIdentity";
 
 /**
  * The Launch Copilot panel (M16): a CMO action engine, not a chat box.
@@ -289,6 +292,7 @@ export function CopilotPanel({
 
   function confirmPublish(details: PublishDetails) {
     if (!publishContent || !publishFor) return;
+    const successContract = workspace.successContract;
     publishExperiment(
       {
         id: crypto.randomUUID(),
@@ -301,14 +305,19 @@ export function CopilotPanel({
           publishFor.hypothesis ||
           `"${details.angle}" on ${details.community || publishContent.platformName} will produce ${
             profile.conversionGoal || "conversion"
-          } signal within 72h`,
-        trackedUrl: details.trackedUrl || undefined,
+          } signal${
+            successContract
+              ? ` (${successContractSummary(successContract)})`
+              : " within 72h"
+          }`,
+        trackedUrl: normalizeTrackedUrl(details.trackedUrl),
         publishedAt: new Date().toISOString(),
         status: "live",
         postIdx: details.postIdx,
         outcomes: [],
+        successContract,
       },
-      `post:${publishContent.platformId}`
+      postTaskId(publishContent.platformId, details.postIdx)
     );
     setPublishFor(null);
   }
@@ -565,6 +574,7 @@ export function CopilotPanel({
           content={publishContent}
           facts={facts}
           profile={profile}
+          successContract={workspace.successContract}
           rec={strategy.recommendations.find((r) => r.platformId === publishFor.platformId)}
           defaultPostIdx={publishFor.postIdx}
           initialCommunity={publishFor.community}

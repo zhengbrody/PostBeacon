@@ -20,6 +20,7 @@ export function InlinePostWorkbench({
   facts,
   profile,
   posted,
+  defaultPostIdx,
   loading,
   onUpdatePost,
   onRegenerate,
@@ -31,6 +32,7 @@ export function InlinePostWorkbench({
   facts: Fact[];
   profile: ProductProfile;
   posted: Record<string, boolean>;
+  defaultPostIdx?: number;
   loading: boolean;
   onUpdatePost: (platformId: string, idx: number, patch: Partial<PlatformPost>) => void;
   onRegenerate: (platformId: string) => void;
@@ -38,10 +40,16 @@ export function InlinePostWorkbench({
   onAskCopilot: (direction: string) => void;
   onOpenLibrary: () => void;
 }) {
-  const firstAvailable = Math.max(
-    0,
-    content.posts.findIndex((_, index) => !posted[`${content.platformId}-${index}`])
-  );
+  const requestedIsAvailable =
+    defaultPostIdx !== undefined &&
+    Boolean(content.posts[defaultPostIdx]) &&
+    !posted[`${content.platformId}-${defaultPostIdx}`];
+  const firstAvailable = requestedIsAvailable
+    ? defaultPostIdx
+    : Math.max(
+        0,
+        content.posts.findIndex((_, index) => !posted[`${content.platformId}-${index}`])
+      );
   const [postIdx, setPostIdx] = useState(firstAvailable);
   const [editing, setEditing] = useState(false);
   const [feedback, setFeedback] = useState(

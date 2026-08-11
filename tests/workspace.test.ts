@@ -10,6 +10,7 @@ import {
 } from "@/lib/today";
 import { flowReducer, initialFlowState, type FlowAction } from "@/hooks/launchFlowReducer";
 import { PLATFORMS } from "@/lib/platforms";
+import { postTaskId } from "@/lib/experimentIdentity";
 import type {
   Experiment,
   GenerateResult,
@@ -135,11 +136,11 @@ describe("deriveToday", () => {
   it("post cards show why-now, estimated minutes, and respect the plan day", () => {
     const view = deriveToday(plan(ws()), NOW); // today = day 3
     const dueTitles = view.actions.filter((a) => a.due).map((a) => a.id);
-    expect(dueTitles).toContain(`post:${P0}`); // day 1 ≤ 3
-    expect(dueTitles).toContain(`post:${P1}`); // day 2 ≤ 3
-    const p2 = view.actions.find((a) => a.id === `post:${P2}`);
+    expect(dueTitles).toContain(postTaskId(P0, 0)); // day 1 ≤ 3
+    expect(dueTitles).toContain(postTaskId(P1, 0)); // day 2 ≤ 3
+    const p2 = view.actions.find((a) => a.id === postTaskId(P2, 0));
     expect(p2?.due).toBe(false); // day 9 — up next, not due
-    const p0 = view.actions.find((a) => a.id === `post:${P0}`)!;
+    const p0 = view.actions.find((a) => a.id === postTaskId(P0, 0))!;
     expect(p0.whyNow).toContain("Day 1");
     expect(p0.estMinutes).toBeGreaterThan(0);
   });
@@ -166,8 +167,33 @@ describe("deriveToday", () => {
       NOW
     );
     const ids = view.actions.map((a) => a.id);
-    expect(ids).not.toContain(`post:${P0}`); // skipped
-    expect(ids).not.toContain(`post:${P1}`); // already published (experiment exists)
+    expect(ids).not.toContain(postTaskId(P0, 0)); // legacy skipped task
+    expect(ids).not.toContain(postTaskId(P1, 0)); // already published draft
+  });
+
+  it("offers a second draft on the same channel with a distinct task identity", () => {
+    const withVariant: GenerateResult = {
+      ...result,
+      content: result.content.map((content) =>
+        content.platformId === P0
+          ? { ...content, posts: [post, { ...post, hook: "second hook" }] }
+          : content
+      ),
+    };
+    const view = deriveToday(
+      {
+        ...plan(
+          ws({
+            experiments: [experiment({ platformId: P0, postIdx: 0 })],
+          })
+        ),
+        result: withVariant,
+      },
+      NOW
+    );
+    const second = view.actions.find((action) => action.id === postTaskId(P0, 1));
+    expect(second?.postIdx).toBe(1);
+    expect(second?.platformId).toBe(P0);
   });
 
   it("all caught up → a single review pointer", () => {
@@ -387,11 +413,13 @@ describe("reducer workspace transitions", () => {
     const s = seq(analyzed, built, generated, {
       type: "EXPERIMENT_CREATED",
       experiment: experiment(),
-      taskId: `post:${P0}`,
+      taskId: postTaskId(P0, 0),
     });
     expect(s.workspace.experiments).toHaveLength(1);
     expect(s.posted[`${P0}-0`]).toBe(true);
-    expect(s.workspace.taskLog.find((t) => t.id === `post:${P0}`)?.status).toBe("done");
+    expect(s.workspace.taskLog.find((t) => t.id === postTaskId(P0, 0))?.status).toBe(
+      "done"
+    );
   });
 
   it("recording an outcome computes the verdict atomically", () => {
@@ -408,8 +436,46 @@ describe("reducer workspace transitions", () => {
     );
     const exp = s.workspace.experiments[0];
     expect(exp.outcomes).toHaveLength(1);
+    expect(exp.outcomes[0].verdict?.call).toBe("supported");
     expect(exp.verdict?.call).toBe("supported");
     expect(exp.status).toBe("analyzed");
+  });
+
+  it("does not overwrite the earlier checkpoint's verdict when 72h lands", () => {
+    const after24 = seq(
+      analyzed,
+      built,
+      generated,
+      { type: "EXPERIMENT_CREATED", experiment: experiment() },
+      {
+        type: "OUTCOME_RECORDED",
+        experimentId: "exp-1",
+        outcome: {
+          id: "o24",
+          checkpoint: "24h",
+          recordedAt: hoursBefore(48),
+          replies: 4,
+        },
+      }
+    );
+    const after72 = flowReducer(after24, {
+      type: "OUTCOME_RECORDED",
+      experimentId: "exp-1",
+      outcome: {
+        id: "o72",
+        checkpoint: "72h",
+        recordedAt: hoursBefore(1),
+        signups: 2,
+      },
+    });
+    const exp = after72.workspace.experiments[0];
+    // Replies cannot substitute for the configured signup signal. The 24h
+    // checkpoint remains an honest insufficient-evidence read.
+    expect(exp.outcomes[0].verdict?.call).toBe("no-signal");
+    expect(exp.outcomes[0].verdict?.reason).toMatch(/not measured/i);
+    expect(exp.outcomes[0].verdict?.decidedAt).toBe(hoursBefore(48));
+    expect(exp.outcomes[1].verdict?.call).toBe("supported");
+    expect(exp.verdict).toEqual(exp.outcomes[1].verdict);
   });
 
   it("a fresh analysis clears the loop history but keeps the weekly budget", () => {
@@ -477,5 +543,63 @@ describe("reducer workspace transitions", () => {
     const events = timelineEvents(w);
     expect(events[0].at >= events[events.length - 1].at).toBe(true);
     expect(events.some((e) => e.text.includes("Published"))).toBe(true);
+  });
+
+  it("keeps the 24h and 72h timeline verdicts distinct", () => {
+    const v24 = {
+      call: "promising" as const,
+      reason: "early engagement",
+      advice: "wait",
+      decidedAt: hoursBefore(48),
+    };
+    const v72 = {
+      call: "supported" as const,
+      reason: "converted later",
+      advice: "repeat",
+      decidedAt: hoursBefore(1),
+    };
+    const events = timelineEvents(
+      ws({
+        experiments: [
+          experiment({
+            outcomes: [
+              { id: "24", checkpoint: "24h", recordedAt: hoursBefore(48), verdict: v24 },
+              { id: "72", checkpoint: "72h", recordedAt: hoursBefore(1), verdict: v72 },
+            ],
+            verdict: v72,
+          }),
+        ],
+      })
+    );
+    expect(
+      events.some((event) => event.text.includes("24h") && event.text.includes("promising"))
+    ).toBe(true);
+    expect(
+      events.some((event) => event.text.includes("72h") && event.text.includes("supported"))
+    ).toBe(true);
+  });
+
+  it("labels an unrecoverable legacy verdict once instead of assigning it to a checkpoint", () => {
+    const events = timelineEvents(
+      ws({
+        experiments: [
+          experiment({
+            outcomes: [{ id: "old", checkpoint: "24h", recordedAt: hoursBefore(5) }],
+            verdict: {
+              call: "weak",
+              reason: "legacy final read",
+              advice: "change",
+              decidedAt: hoursBefore(4),
+            },
+          }),
+        ],
+      })
+    );
+    expect(
+      events.filter((event) => event.text.includes("Historical final verdict"))
+    ).toHaveLength(1);
+    expect(events.find((event) => event.text.includes("Recorded 24h"))?.text).not.toContain(
+      "weak"
+    );
   });
 });
