@@ -119,6 +119,8 @@ lib/
                         visible summaries and checkpoint/signal helpers
   strategyDecision.ts   M25.2 deterministic one-experiment ranking, honest comparison,
                         effort and observable-signal projection
+  experimentContract.ts M25.3 pure Prepare/Publish contract, draft provenance and bounded
+                        X/LinkedIn share-kit projections from canonical plan state
   execution.ts          M19 Prepare→Publish→Measure→Learn lifecycle projection,
                         countdowns and operator-controlled platform destinations
   experimentHistory.ts M24.1 Outcome-owned verdict reads, honest legacy-final fallback
@@ -168,8 +170,8 @@ components/
                         PlanSummary, CopilotPanel, ProjectBar, SignIn, AuthScreen (guest
                         preview + explicit login handoff), DemoGuide, Paywall,
                         UsageBadge, FeedbackCTA
-  app/results/          Interactive workbench (M19): TodayTab + InlinePostWorkbench,
-                        ExecutionProgress, PublishDialog, OutcomePanel, TimelineTab,
+  app/results/          Interactive workbench (M19/M25.3): TodayTab + InlinePostWorkbench,
+                        DraftDecisionSupport, ExecutionProgress, PublishDialog, OutcomePanel, TimelineTab,
                         ReviewTab — plus the full report (PlanReport wrapping
                         the M14 per-tab modules: OverviewTab, ContentTab + ChannelBlock +
                         PostCard, CalendarTab, ExecuteTab, FailuresCard, PrintHeading)
@@ -193,6 +195,7 @@ docs/M24.1-correctness.md Outcome Verdict, legacy history, tracked URL and execu
 docs/M25-evidence-receipt.md Server-authored source coverage, multi-page evidence and v8 contract
 docs/M25.1-success-contract.md Compact Diagnose, measurable success definition and v9 contract
 docs/M25.2-focused-strategy.md One-decision Strategy, deterministic rank/migration contract
+docs/M25.3-experiment-contract.md Auditable Prepare/Publish contract, repair Diff and Share Kit
 tests/                  vitest suites: urlPolicy, safeFetch, billing, webhook route, validate,
                         golden (12-fixture offline evals), generateRoute, flowReducer
                         (state-machine invariants), storage (draft migrations), workspace
@@ -311,6 +314,23 @@ cross-origin 403. Aggregate product-health reporting is operator-only at `/api/m
 Redeploy: `npx vercel --prod --yes`. Push env from `.env.local`: `~/push-env.sh`.
 
 ## Status / changelog
+- **2026-08-12**: **M25.3 — Prepare and Publish are auditable.** The primary
+  draft now opens with one Experiment Contract assembled from canonical profile,
+  recommendation and Success Contract state: audience/venue, one tested Hook,
+  held-constant angle and the exact 24h/72h decision rule. Hook selection emits a
+  visible before/after change receipt. `Why this draft` exposes only recommendation-
+  cited Fact IDs, the deterministic platform-catalog rule, the selected angle and
+  explicit inference warnings; missing legacy evidence stays missing. A blocked
+  Truth Gate now opens a tightly scoped Copilot repair request, while the existing
+  proposal/confirm boundary shows Hook and Body diffs, preserves the original,
+  selects an applied variant and reruns the deterministic gate. A lightweight Share
+  Kit provides three ordered screenshot jobs, focus notes, alt text, a privacy-
+  redaction reminder, bounded three-part X copy and a LinkedIn version. Publish repeats
+  the contract and names the already-persisted fields it snapshots, so no duplicate
+  contract object, SQL, env, vendor or storage-version change was added. 427 offline
+  tests, typecheck, lint, format and production build are green. Desktop browser QA
+  verified both disclosures, the Hook receipt and publish snapshot; a real 375×812
+  viewport had no horizontal overflow and the browser logged no warnings/errors.
 - **2026-08-10**: **M25.2 — Strategy is one executable decision.** Strategy no
   longer opens with a report and four preselected channels. A deterministic projection
   now selects exactly one recommendation by computed score, canonical catalog order and

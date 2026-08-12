@@ -4,9 +4,17 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { ExecutionProgress } from "./ExecutionProgress";
 import { DraftSafetyNotice } from "./DraftSafetyNotice";
+import { DraftDecisionSupport } from "./DraftDecisionSupport";
 import { publishDestination, type ExecutionStep } from "@/lib/execution";
 import { auditDraftSafety, charBudget, platformCharLimit } from "@/lib/contentSafety";
-import type { Fact, PlatformContent, PlatformPost, ProductProfile } from "@/lib/types";
+import type {
+  Fact,
+  PlatformContent,
+  PlatformPost,
+  PlatformRecommendation,
+  ProductProfile,
+  SuccessContract,
+} from "@/lib/types";
 
 const PREPARE_STEPS: ExecutionStep[] = [
   { id: "prepare", label: "Prepare", done: true, active: false },
@@ -19,6 +27,8 @@ export function InlinePostWorkbench({
   content,
   facts,
   profile,
+  recommendation,
+  successContract,
   posted,
   defaultPostIdx,
   loading,
@@ -31,6 +41,8 @@ export function InlinePostWorkbench({
   content: PlatformContent;
   facts: Fact[];
   profile: ProductProfile;
+  recommendation?: PlatformRecommendation;
+  successContract?: SuccessContract;
   posted: Record<string, boolean>;
   defaultPostIdx?: number;
   loading: boolean;
@@ -55,11 +67,15 @@ export function InlinePostWorkbench({
   const [feedback, setFeedback] = useState(
     "Draft ready — prepare it here, then post manually."
   );
+  const [hookChange, setHookChange] = useState<{ from: string; to: string }>();
   const wasLoading = useRef(false);
+  const previousPostCount = useRef(content.posts.length);
+  const previousPlatform = useRef(content.platformId);
 
   useEffect(() => {
     setPostIdx(firstAvailable);
     setEditing(false);
+    setHookChange(undefined);
     setFeedback("Draft ready — prepare it here, then post manually.");
   }, [content.platformId, firstAvailable]);
 
@@ -67,6 +83,25 @@ export function InlinePostWorkbench({
     if (wasLoading.current && !loading) setFeedback("Fresh draft generated ✓");
     wasLoading.current = loading;
   }, [loading]);
+
+  useEffect(() => {
+    if (previousPlatform.current !== content.platformId) {
+      previousPlatform.current = content.platformId;
+      previousPostCount.current = content.posts.length;
+      return;
+    }
+    if (content.posts.length > previousPostCount.current) {
+      const nextIndex = content.posts.length - 1;
+      const previousHook = content.posts[postIdx]?.hook;
+      const nextHook = content.posts[nextIndex]?.hook;
+      setPostIdx(nextIndex);
+      if (previousHook && nextHook && previousHook !== nextHook) {
+        setHookChange({ from: previousHook, to: nextHook });
+      }
+      setFeedback("New variant selected — the deterministic Truth Gate ran again.");
+    }
+    previousPostCount.current = content.posts.length;
+  }, [content.platformId, content.posts, postIdx]);
 
   const post = content.posts[postIdx] ?? content.posts[0];
   const hooks = useMemo(
@@ -120,13 +155,25 @@ export function InlinePostWorkbench({
   }
 
   function switchHook(hook: string) {
+    if (hook === post.hook) return;
+    setHookChange({ from: post.hook, to: hook });
     update({ hook, hookVariants: hooks.filter((candidate) => candidate !== hook) });
-    setFeedback("Hook variant selected ✓");
+    setFeedback("Variable changed: Hook A → Hook B. Review the receipt before publishing.");
   }
 
   return (
     <div className="mt-5 space-y-4">
       <ExecutionProgress steps={PREPARE_STEPS} />
+
+      <DraftDecisionSupport
+        content={content}
+        facts={facts}
+        post={post}
+        profile={profile}
+        recommendation={recommendation}
+        successContract={successContract}
+        hookChange={hookChange}
+      />
 
       <div className="rounded-xl border border-line bg-black/20">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-3">
@@ -238,6 +285,30 @@ export function InlinePostWorkbench({
       </div>
 
       <DraftSafetyNotice report={safety} />
+
+      {!safety.ready && (
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-amber-900/50 bg-amber-950/10 px-3 py-2.5">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() =>
+              onAskCopilot(
+                `Repair the current ${content.platformName} draft so it passes the deterministic Truth Gate. Fix only these issue codes: ${safety.issues
+                  .map((issue) => issue.code)
+                  .join(
+                    ", "
+                  )}. Preserve every supported factual claim and the selected angle. Propose exactly one generate_variant action with the complete replacement hook and body. Show the before/after diff and do not change the draft until I explicitly apply it.`
+              )
+            }
+          >
+            Repair issues with Copilot →
+          </Button>
+          <p className="text-[11px] leading-relaxed text-neutral-500">
+            Copilot proposes a replacement; you see the diff and choose Apply or Dismiss.
+            The deterministic gate runs again after an applied change.
+          </p>
+        </div>
+      )}
 
       <div
         className="rounded-lg border border-accent-800/60 bg-accent-950/30 px-3 py-2 text-xs text-accent-200"

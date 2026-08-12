@@ -766,14 +766,22 @@ function ActionBody({ action, ctx }: { action: ProposedAction; ctx: ActionContex
       );
     }
     case "generate_variant":
-      return action.hook && action.body ? (
-        <div className="mt-2 rounded-md bg-surface p-2.5">
-          <div className="text-xs font-semibold text-accent-300">{action.hook}</div>
-          <pre className="mt-1 max-h-40 overflow-y-auto whitespace-pre-wrap font-sans text-xs leading-relaxed text-neutral-300">
-            {action.body}
-          </pre>
-        </div>
-      ) : (
+      if (action.hook && action.body) {
+        const current = ctx.result?.content.find(
+          (content) => content.platformId === action.platformId
+        )?.posts[action.postIdx ?? 0];
+        return (
+          <div className="mt-2 space-y-2 rounded-md bg-surface p-2.5 text-xs">
+            <Diff label="Hook" from={current?.hook ?? ""} to={action.hook} />
+            <Diff label="Body" from={current?.body ?? ""} to={action.body} />
+            <p className="border-t border-line pt-2 text-[11px] text-neutral-500">
+              Apply adds a new variant; the original draft remains available. The Truth Gate
+              reruns on the resulting draft before copy or publish.
+            </p>
+          </div>
+        );
+      }
+      return (
         <p className="mt-2 text-sm text-neutral-200">
           Direction: {action.direction || "same message, better execution"}
         </p>
@@ -829,8 +837,14 @@ function Diff({ label, from, to }: { label: string; from: string; to: string }) 
       <div className="text-[10px] font-semibold uppercase tracking-wide text-neutral-500">
         {label}
       </div>
-      {from && <p className="mt-0.5 text-neutral-500 line-through">{from}</p>}
-      <p className="mt-0.5 text-neutral-100">{to}</p>
+      {from && (
+        <p className="mt-0.5 max-h-32 overflow-y-auto whitespace-pre-wrap break-words text-neutral-500 line-through">
+          {from}
+        </p>
+      )}
+      <p className="mt-0.5 max-h-32 overflow-y-auto whitespace-pre-wrap break-words text-neutral-100">
+        {to}
+      </p>
     </div>
   );
 }

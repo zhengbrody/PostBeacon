@@ -176,6 +176,11 @@ export function ResultsView({
         (content) => content.platformId === today.primaryAction.platformId
       )
     : undefined;
+  const primaryRecommendation = today.primaryAction.platformId
+    ? strategy?.recommendations.find(
+        (recommendation) => recommendation.platformId === today.primaryAction.platformId
+      )
+    : undefined;
 
   function confirmPublish(details: PublishDetails) {
     if (!publishContent) return;
@@ -383,6 +388,7 @@ export function ResultsView({
           onRegenerate={demo ? () => demoOnlyNotice("Regeneration") : onRegenerate}
           onUpdatePost={onUpdatePost}
           primaryContent={primaryContent}
+          primaryRecommendation={primaryRecommendation}
           posted={posted}
           activeExperiment={activeExperiment}
           primaryExperiment={primaryExperiment}

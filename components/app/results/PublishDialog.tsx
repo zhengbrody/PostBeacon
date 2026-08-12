@@ -8,7 +8,7 @@ import { ExecutionProgress } from "./ExecutionProgress";
 import { DraftSafetyNotice } from "./DraftSafetyNotice";
 import { auditDraftSafety } from "@/lib/contentSafety";
 import { normalizeTrackedUrl } from "@/lib/trackedUrl";
-import { successContractSummary } from "@/lib/successContract";
+import { projectExperimentContract } from "@/lib/experimentContract";
 import type { ExecutionStep } from "@/lib/execution";
 import type {
   Fact,
@@ -77,6 +77,21 @@ export function PublishDialog({
   const safety = selectedPost
     ? auditDraftSafety(selectedPost, facts, profile, content.platformId)
     : { ready: false, issues: [] };
+  const experimentContract = selectedPost
+    ? projectExperimentContract({
+        profile,
+        recommendation: rec
+          ? {
+              ...rec,
+              venue: community.trim() || rec.venue,
+              angle: angle.trim() || rec.angle,
+            }
+          : undefined,
+        content,
+        post: selectedPost,
+        successContract,
+      })
+    : undefined;
 
   return (
     <div
@@ -106,17 +121,43 @@ export function PublishDialog({
           </p>
         </div>
 
-        {successContract && (
+        {experimentContract && (
           <div className="mb-4 rounded-lg border border-accent-700/40 bg-accent-600/10 p-3">
-            <div className="text-xs font-semibold uppercase tracking-wide text-accent-300">
-              Experiment contract
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="text-xs font-semibold uppercase tracking-wide text-accent-300">
+                Experiment contract
+              </div>
+              <span className="rounded-full bg-surface-2 px-2 py-1 text-[10px] text-neutral-400">
+                Snapshot on publish
+              </span>
             </div>
-            <p className="mt-1 text-sm text-neutral-200">
-              {successContractSummary(successContract)}
-            </p>
+            <dl className="mt-3 grid gap-2 text-xs sm:grid-cols-2">
+              <div>
+                <dt className="text-neutral-500">Audience / venue</dt>
+                <dd className="mt-0.5 text-neutral-200">
+                  {experimentContract.audience} · {experimentContract.venue}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-neutral-500">Variable</dt>
+                <dd className="mt-0.5 text-neutral-200">
+                  {experimentContract.variable} · {experimentContract.candidate}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-neutral-500">Angle</dt>
+                <dd className="mt-0.5 text-neutral-200">{experimentContract.angle}</dd>
+              </div>
+              <div>
+                <dt className="text-neutral-500">Success rule</dt>
+                <dd className="mt-0.5 text-neutral-200">
+                  {experimentContract.decisionRule}
+                </dd>
+              </div>
+            </dl>
             <p className="mt-1 text-[11px] text-neutral-500">
-              This rule is saved with this experiment and will not change if you edit the
-              workspace goal later.
+              The venue, angle, selected hook and Success Contract are saved with the
+              experiment. Later workspace edits cannot rewrite this run.
             </p>
           </div>
         )}

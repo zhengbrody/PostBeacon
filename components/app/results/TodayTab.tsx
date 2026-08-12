@@ -14,6 +14,7 @@ import type {
   Fact,
   PlatformContent,
   PlatformPost,
+  PlatformRecommendation,
   ProductProfile,
   SuccessContract,
 } from "@/lib/types";
@@ -196,6 +197,7 @@ export function TodayTab({
   emailRemindersEnabled,
   onToggleEmailReminders,
   primaryContent,
+  primaryRecommendation,
   posted,
   activeExperiment,
   primaryExperiment,
@@ -217,6 +219,7 @@ export function TodayTab({
   emailRemindersEnabled: boolean;
   onToggleEmailReminders: (enabled: boolean) => void;
   primaryContent?: PlatformContent;
+  primaryRecommendation?: PlatformRecommendation;
   posted: Record<string, boolean>;
   activeExperiment?: Experiment;
   primaryExperiment?: Experiment;
@@ -354,6 +357,8 @@ export function TodayTab({
               content={primaryContent}
               facts={facts}
               profile={profile}
+              recommendation={primaryRecommendation}
+              successContract={successContract}
               posted={posted}
               defaultPostIdx={primary.postIdx}
               loading={handlers.loading}
