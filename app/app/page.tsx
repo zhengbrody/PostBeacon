@@ -183,9 +183,18 @@ function AppFlow({
     null
   );
   const copilotRequestId = useRef(0);
-  const openCopilot = (prompt: string, targetPlatformId?: string) => {
+  const openCopilot = (
+    prompt: string,
+    targetPlatformId?: string,
+    targetPostIdx?: number
+  ) => {
     copilotRequestId.current += 1;
-    setCopilotOpenRequest({ id: copilotRequestId.current, prompt, targetPlatformId });
+    setCopilotOpenRequest({
+      id: copilotRequestId.current,
+      prompt,
+      targetPlatformId,
+      targetPostIdx,
+    });
   };
   const reachable: Step[] = ["input"];
   if (f.profile) reachable.push("profile");
@@ -400,6 +409,14 @@ function AppFlow({
           onRecordOutcome={f.recordOutcome}
           onStopExperiment={f.stopExperiment}
           onGenerateVariant={f.generateVariant}
+          onPlanExperiment={f.planExperiment}
+          onPreparePlanned={f.preparePlannedExperiment}
+          onCancelPlanned={f.cancelPlannedExperiment}
+          productUrl={f.url}
+          provider={f.provider}
+          onResearchOpportunities={f.researchOpportunities}
+          onClearOpportunityResearch={f.clearOpportunityResearch}
+          onQueueOpportunity={f.queueOpportunity}
           launchDate={f.launchDate}
           setLaunchDate={f.setLaunchDate}
           loading={f.loading}

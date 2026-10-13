@@ -2,7 +2,8 @@ import { PLATFORMS } from "./platforms";
 import { clipString } from "./coerce";
 import { growthMode, type GrowthMode } from "./growth";
 import { completedScheduledVerdict, effectiveExperimentVerdict } from "./experimentHistory";
-import { isFinalContractCheckpoint, outcomeSignal, SIGNAL_LABELS } from "./successContract";
+import { isFinalContractCheckpoint, outcomeSignal, signalLabel } from "./successContract";
+import { measuredOutcome } from "./learningEvidence";
 import {
   draftExecutionKey,
   draftKeyFromPostTaskId,
@@ -43,7 +44,7 @@ const CUSTOM_MINUTES = 15;
 
 export interface TodayAction {
   id: string; // stable across renders — TaskRecord references it
-  kind: "record" | "post" | "custom" | "review";
+  kind: "record" | "post" | "prepare" | "custom" | "review";
   title: string;
   whyNow: string;
   estMinutes: number;
@@ -52,6 +53,7 @@ export interface TodayAction {
   experimentId?: string;
   checkpoint?: Extract<OutcomeCheckpoint, "24h" | "72h">;
   postIdx?: number;
+  plannedExperimentId?: string;
 }
 
 export interface TodayView {
@@ -176,6 +178,20 @@ export function deriveToday(plan: PlanSlice, now: Date): TodayView {
   }
 
   // 2. Posting actions from the calendar, in schedule order.
+  for (const plan of workspace.plannedExperiments ?? []) {
+    if (plan.status !== "planned" && plan.status !== "ready") continue;
+    actions.push({
+      id: `planned:${plan.id}`,
+      kind: plan.status === "ready" ? "post" : "prepare",
+      title: `${plan.status === "ready" ? "Publish" : "Prepare"} next experiment — ${plan.platformName}`,
+      whyNow: `You confirmed this follow-up. ${plan.heldConstant}`,
+      estMinutes: 20,
+      due: true,
+      platformId: plan.platformId,
+      postIdx: plan.postIdx,
+      plannedExperimentId: plan.id,
+    });
+  }
   const day = planDay(plan.launchDate, now);
   const unavailableDrafts = new Set(
     workspace.experiments.map((experiment) =>
@@ -185,6 +201,10 @@ export function deriveToday(plan: PlanSlice, now: Date): TodayView {
   for (const task of workspace.taskLog) {
     const draftKey = draftKeyFromPostTaskId(task.id);
     if (draftKey) unavailableDrafts.add(draftKey);
+  }
+  for (const plan of workspace.plannedExperiments ?? []) {
+    if (plan.status === "ready" && plan.postIdx !== undefined)
+      unavailableDrafts.add(draftExecutionKey(plan.platformId, plan.postIdx));
   }
   const recFor = (platformId: string) =>
     strategy?.recommendations.find((r) => r.platformId === platformId);
@@ -283,10 +303,29 @@ export function verdictFor(
     successContract?: SuccessContract;
   }
 ): ExperimentVerdict {
+  if (outcome.invalidatedReason)
+    return {
+      call: "no-signal",
+      assessment: "invalidated",
+      reason: `Experiment invalidated: ${outcome.invalidatedReason}. Recorded observations are retained, not learned as wins or losses.`,
+      advice:
+        "Resolve the issue and run a new comparable test. Do not blame the channel or draft from this observation.",
+      decidedAt: outcome.recordedAt,
+    };
+  if (!measuredOutcome(outcome))
+    return {
+      call: "no-signal",
+      assessment: "insufficient",
+      reason:
+        "No metrics were measured. Notes are useful, but unknown is not zero or a failed experiment.",
+      advice:
+        "Record a measured primary signal or mark the measurement unavailable. Keep the channel decision open.",
+      decidedAt: outcome.recordedAt,
+    };
   const contract = ctx.successContract;
   if (contract) {
     const value = outcomeSignal(outcome, contract.primarySignal);
-    const label = SIGNAL_LABELS[contract.primarySignal];
+    const label = signalLabel(contract);
     const target = contract.minimumResult;
     const unit = contract.primarySignal === "revenue" ? "$" : "";
     const final = isFinalContractCheckpoint(outcome.checkpoint, contract.evaluationWindow);
@@ -294,6 +333,7 @@ export function verdictFor(
     if (value === undefined) {
       return {
         call: "no-signal",
+        assessment: "insufficient",
         reason: `${label} was not measured, so PostBeacon cannot judge the target honestly.`,
         advice: `Check the live ${ctx.platformName} analytics and record ${label.toLowerCase()} before changing the angle.`,
         decidedAt: outcome.recordedAt,
@@ -302,6 +342,7 @@ export function verdictFor(
     if (value >= target) {
       return {
         call: "supported",
+        assessment: outcome.checkpoint === "manual" ? "early" : "target-reached",
         reason: `Target reached: ${unit}${value} ${label.toLowerCase()} against a minimum of ${unit}${target} by ${contract.evaluationWindow}.`,
         advice: `Keep this angle on ${ctx.platformName}; the explicit success contract was met. Test one controlled variation instead of changing channel and message together.`,
         decidedAt: outcome.recordedAt,
@@ -310,6 +351,7 @@ export function verdictFor(
     if (contract.baseline !== undefined && value > contract.baseline) {
       return {
         call: "promising",
+        assessment: final ? "improved" : "early",
         reason: `Directional improvement: ${unit}${value} ${label.toLowerCase()} beat the ${unit}${contract.baseline} baseline, but has not reached the ${unit}${target} target.`,
         advice: final
           ? `Keep the channel, tighten one variable, and run a second comparable test against the same baseline.`
@@ -320,6 +362,7 @@ export function verdictFor(
     if (!final) {
       return {
         call: value > 0 ? "promising" : "no-signal",
+        assessment: "early",
         reason:
           value > 0
             ? `Early progress: ${unit}${value} ${label.toLowerCase()} toward a ${unit}${target} target. The final window is ${contract.evaluationWindow}.`
@@ -330,8 +373,9 @@ export function verdictFor(
     }
     return {
       call: "weak",
+      assessment: "target-missed",
       reason: `Target missed: ${unit}${value} ${label.toLowerCase()} against a minimum of ${unit}${target} at ${contract.evaluationWindow}.`,
-      advice: `Change one variable on ${ctx.platformName} or stop the channel; do not label the whole strategy a failure from one controlled test.`,
+      advice: `Choose another test on ${ctx.platformName} or pause this direction. One observed result does not identify the cause or disprove the whole strategy.`,
       decidedAt: outcome.recordedAt,
     };
   }
@@ -386,6 +430,24 @@ export function nextActionsAfter(
   verdict: ExperimentVerdict,
   strategy: MarketingStrategy | null
 ): string[] {
+  if (verdict.assessment === "insufficient" || verdict.assessment === "invalidated")
+    return [
+      verdict.advice,
+      "No winning or losing memory was added.",
+      "Choose a new test only after reviewing what remains unknown.",
+    ];
+  if (verdict.assessment === "early")
+    return [
+      "Keep the agreed test unchanged until its final window.",
+      "Record only metrics you actually measured.",
+      "Early progress is not proof of a winning angle.",
+    ];
+  if (verdict.assessment)
+    return [
+      verdict.advice,
+      "Compare the stored primary signal with its target and any comparable baseline; do not substitute conversions for a different goal.",
+      "Confirm one follow-up test or pause. A single result cannot establish the cause.",
+    ];
   const nextChannel = strategy?.recommendations.find(
     (r) => r.platformId !== exp.platformId && r.priority !== "low"
   );
@@ -434,14 +496,9 @@ export function nextActionsAfter(
 
 /** Direction handed to the copilot rewrite when generating the follow-up variant. */
 export function variantDirection(exp: Experiment, verdict: ExperimentVerdict): string {
-  switch (verdict.call) {
-    case "supported":
-      return `The published version converted (hypothesis: ${exp.hypothesis}). Write a fresh variant of the same angle ("${exp.angle}") suitable for a nearby community — same substance, new opening so it doesn't read as a repost.`;
-    case "promising":
-      return `The post got engagement but no conversions. Keep the hook and angle ("${exp.angle}"), sharpen the call-to-action so interested readers know the one next step.`;
-    default:
-      return `The published angle ("${exp.angle}") didn't land (${verdict.reason}). Write a variant leading with a different pain point or a concrete number — change the angle, keep the facts.`;
-  }
+  if (verdict.assessment)
+    return `Observed assessment: ${verdict.assessment}. ${verdict.reason} Prepare a follow-up for "${exp.angle}" using verified facts only. Do not turn target attainment or a miss into a causal explanation, a conversion claim, or a channel-wide win/loss.`;
+  return `Historical read: ${verdict.call} (${verdict.reason}). The original success rule may be unavailable. Prepare an exploratory alternative for "${exp.angle}"; do not claim this read proves conversion, failure or causality.`;
 }
 
 // ---------------------------------------------------------------------------
@@ -455,6 +512,12 @@ export interface TimelineEvent {
 
 export function timelineEvents(workspace: WorkspaceState): TimelineEvent[] {
   const events: TimelineEvent[] = [];
+  for (const plan of workspace.plannedExperiments ?? [])
+    events.push({
+      at: plan.createdAt,
+      icon: "→",
+      text: `Next experiment confirmed: ${plan.platformName} · ${plan.variable} (${plan.status}). ${plan.opportunity ? `Product trial source: ${plan.opportunity.source.url}; rules user-checked, not independently reviewed.` : `Source execution: ${plan.sourceExperimentId}`}`,
+    });
   for (const exp of workspace.experiments) {
     events.push({
       at: exp.publishedAt,
@@ -466,7 +529,9 @@ export function timelineEvents(workspace: WorkspaceState): TimelineEvent[] {
         at: o.recordedAt,
         icon: "📊",
         text: `Recorded ${o.checkpoint} results for ${exp.platformName}${
-          o.verdict ? ` → ${o.verdict.call}` : ""
+          o.verdict
+            ? ` → ${o.verdict.assessment?.replaceAll("-", " ") ?? o.verdict.call}`
+            : ""
         }`,
       });
     }
@@ -552,21 +617,21 @@ export function weeklyReview(
     };
     row.experiments++;
     row.outcomes += e.outcomes.length;
-    const verdict = effectiveExperimentVerdict(e);
+    const verdict = completedScheduledVerdict(e);
     if (verdict && (!row.bestCall || CALL_RANK[verdict.call] > CALL_RANK[row.bestCall])) {
       row.bestCall = verdict.call;
     }
     byChannel.set(e.platformId, row);
   }
 
-  const best = [...completed].sort(
-    (a, b) => CALL_RANK[b.verdict.call] - CALL_RANK[a.verdict.call]
-  )[0];
+  const best = [...completed]
+    .filter((item) => item.verdict.assessment === "target-reached")
+    .sort((a, b) => CALL_RANK[b.verdict.call] - CALL_RANK[a.verdict.call])[0];
 
   const suggestions: string[] = [];
   if (best && best.verdict.call !== "no-signal") {
     suggestions.push(
-      `Double down on what worked: "${clipString(best.experiment.angle, 70)}" (${best.experiment.platformName}, ${best.verdict.call}).`
+      `Repeat to test reliability: "${clipString(best.experiment.angle, 70)}" reached its stored target on ${best.experiment.platformName}. One result does not prove causality.`
     );
   }
   const unproven = strategy?.recommendations.find(

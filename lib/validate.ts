@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { PLATFORMS } from "./platforms";
 import { PublicError, publicMessage, publicStatus } from "./errors";
+import { normalizePlannedExperiments, normalizePublishSnapshot } from "./experimentQueue";
+import { trialResearchInputSchema } from "./opportunityResearch";
 
 /**
  * Runtime validation for every API request body. Server-only.
@@ -114,13 +116,34 @@ const profileSchema = z.object({
   publisherVoice: z.enum(["brand", "founder"]).optional(),
 });
 
-export const successContractSchema = z.object({
-  primaryGoal: s(500).min(1),
-  primarySignal: z.enum(["impressions", "replies", "clicks", "signups", "revenue"]),
-  baseline: z.number().finite().min(0).max(1_000_000_000).optional(),
-  minimumResult: z.number().finite().positive().max(1_000_000_000),
-  evaluationWindow: z.enum(["24h", "72h"]),
-});
+export const successContractSchema = z
+  .object({
+    primaryGoal: s(500).min(1),
+    primarySignal: z.enum([
+      "impressions",
+      "replies",
+      "clicks",
+      "signups",
+      "revenue",
+      "stars",
+      "issues",
+      "repoVisits",
+      "upvotes",
+      "comments",
+      "qualifiedReplies",
+      "visits",
+      "custom",
+    ]),
+    customSignalLabel: s(80).optional(),
+    baseline: z.number().finite().min(0).max(1_000_000_000).optional(),
+    minimumResult: z.number().finite().positive().max(1_000_000_000),
+    evaluationWindow: z.enum(["24h", "72h"]),
+  })
+  .refine(
+    (contract) =>
+      contract.primarySignal !== "custom" || Boolean(contract.customSignalLabel?.trim()),
+    "Name the custom signal"
+  );
 
 /** Fact Ledger entries as the wire accepts them (M13). The server re-derives
  *  what matters (verifyFacts / evidenceQuality); this just bounds the shape. */
@@ -137,6 +160,16 @@ const factSchema = z.object({
 });
 
 const factsFieldSchema = z.array(factSchema).max(20).optional();
+
+export const opportunityResearchBodySchema = z.object({
+  provider: z.enum(["openai", "deepseek"]),
+  productUrl: s(2048).min(1),
+  profile: profileSchema,
+  facts: z.array(factSchema).min(1).max(60),
+  successContract: successContractSchema,
+  input: trialResearchInputSchema,
+  bannedClaims: z.array(s(200)).max(20).default([]),
+});
 
 /** Output provenance stamp (M13). */
 const generationMetaSchema = z.object({
@@ -242,6 +275,11 @@ const strategySchema = z.object({
         why: s(1000).default(""),
         source: s(100).default(""),
         validated: z.boolean().optional(),
+        searchBacked: z.boolean().optional(),
+        reachable: z.boolean().optional(),
+        sourceId: s(80).optional(),
+        contentRead: z.boolean().optional(),
+        rulesReviewed: z.boolean().optional(),
       })
     )
     .max(20)
@@ -366,16 +404,33 @@ export const regenerateBodySchema = z.object({
 const metricSchema = z
   .number()
   .nullish()
-  .transform((v) => (typeof v === "number" && Number.isFinite(v) ? v : undefined));
+  .transform((v) =>
+    typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : undefined
+  );
 
 const workspaceVerdictSchema = z.object({
   call: z.enum(["supported", "promising", "weak", "no-signal"]),
   reason: s(500).default(""),
   advice: s(500).default(""),
   decidedAt: s(40).default(""),
+  assessment: z
+    .enum([
+      "target-reached",
+      "improved",
+      "early",
+      "target-missed",
+      "insufficient",
+      "invalidated",
+    ])
+    .optional(),
 });
 
 const copilotWorkspaceSchema = z.object({
+  plannedExperiments: z
+    .array(z.unknown())
+    .max(40)
+    .transform(normalizePlannedExperiments)
+    .optional(),
   successContract: successContractSchema.optional(),
   experiments: z
     .array(
@@ -391,6 +446,8 @@ const copilotWorkspaceSchema = z.object({
         publishedAt: s(40).default(""),
         status: z.enum(["live", "analyzed", "stopped"]).catch("live"),
         postIdx: z.number().int().min(0).max(50).catch(0),
+        plannedExperimentId: s(80).optional(),
+        snapshot: z.unknown().transform(normalizePublishSnapshot).optional(),
         outcomes: z
           .array(
             z.object({
@@ -405,6 +462,43 @@ const copilotWorkspaceSchema = z.object({
               clicks: metricSchema,
               signups: metricSchema,
               revenue: metricSchema,
+              stars: metricSchema,
+              issues: metricSchema,
+              repoVisits: metricSchema,
+              upvotes: metricSchema,
+              comments: metricSchema,
+              qualifiedReplies: metricSchema,
+              visits: metricSchema,
+              custom: metricSchema,
+              unavailableMetrics: z
+                .array(
+                  z.enum([
+                    "impressions",
+                    "replies",
+                    "clicks",
+                    "signups",
+                    "revenue",
+                    "stars",
+                    "issues",
+                    "repoVisits",
+                    "upvotes",
+                    "comments",
+                    "qualifiedReplies",
+                    "visits",
+                    "custom",
+                  ])
+                )
+                .max(13)
+                .optional(),
+              invalidatedReason: z
+                .enum([
+                  "post-removed",
+                  "tracking-broken",
+                  "wrong-audience",
+                  "external-event",
+                  "other",
+                ])
+                .optional(),
               qualitativeFeedback: s(4000).optional(),
               verdict: workspaceVerdictSchema.optional(),
             })
@@ -434,7 +528,12 @@ const memorySchema = z.object({
       z.object({
         angle: s(300),
         platformId: s(64),
-        verdict: z.enum(["winning", "losing"]),
+        verdict: z.enum(["winning", "losing", "inconclusive"]),
+        evidenceState: z
+          .enum(["early evidence", "repeated evidence", "conflicting evidence"])
+          .optional(),
+        outcomeId: s(80).optional(),
+        historical: z.boolean().optional(),
         experimentId: s(80),
         at: s(40).default(""),
       })
@@ -480,6 +579,7 @@ export const copilotBodySchema = z.object({
   ]),
   question: s(8000).optional(),
   targetPlatformId: s(64).optional(),
+  targetPostIdx: z.number().int().min(0).max(11).optional(),
   history: z
     .array(
       z.object({

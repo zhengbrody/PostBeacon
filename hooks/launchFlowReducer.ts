@@ -10,9 +10,23 @@ import { orderByRecommendation, scheduleEntryFor, sortSchedule } from "@/lib/pla
 import { verdictFor } from "@/lib/today";
 import { migrateWorkspaceHistory } from "@/lib/experimentHistory";
 import { draftExecutionKey } from "@/lib/experimentIdentity";
+import { auditDraftSafety } from "@/lib/contentSafety";
 import { normalizeAnalysisReceipt } from "@/lib/sourceCoverage";
 import { defaultSuccessContract, normalizeSuccessContract } from "@/lib/successContract";
 import { rankRecommendations, recommendedPlatformId } from "@/lib/strategyDecision";
+import { refreshLearningMemory } from "@/lib/learningEvidence";
+import {
+  normalizeOpportunityResearch,
+  researchContextKey,
+  trialSafety,
+  trialPublicationIssues,
+} from "@/lib/opportunityResearch";
+import {
+  normalizePlannedExperiments,
+  normalizePublishSnapshot,
+  comparisonBoundary,
+  MAX_PLANNED_EXPERIMENTS,
+} from "@/lib/experimentQueue";
 import type {
   AuditEntry,
   AnalysisReceipt,
@@ -23,6 +37,8 @@ import type {
   GenerationMeta,
   MarketingStrategy,
   Outcome,
+  OpportunityResearch,
+  PlannedExperiment,
   PlatformPlaybook,
   PlatformPost,
   PlatformRecommendation,
@@ -187,6 +203,23 @@ export type FlowAction =
   | { type: "EXPERIMENT_CREATED"; experiment: Experiment; taskId?: string }
   | { type: "OUTCOME_RECORDED"; experimentId: string; outcome: Outcome }
   | { type: "EXPERIMENT_STOPPED"; experimentId: string }
+  | { type: "EXPERIMENT_PLANNED"; plan: PlannedExperiment }
+  | { type: "PLANNED_EXPERIMENT_CANCELLED"; id: string }
+  | { type: "PLANNED_DRAFT_PREPARED"; id: string; post: PlatformPost }
+  | {
+      type: "OPPORTUNITY_RESEARCH_RECEIVED";
+      projectId: string;
+      research: OpportunityResearch;
+    }
+  | { type: "OPPORTUNITY_RESEARCH_CLEARED" }
+  | {
+      type: "OPPORTUNITY_QUEUED";
+      researchId: string;
+      opportunityId: string;
+      rulesUserChecked: boolean;
+      trialUserChecked: boolean;
+      at: string;
+    }
   | { type: "VARIANT_ADDED"; platformId: string; post: PlatformPost; note: string }
   // ---- memory + audit (M16) ----
   | { type: "MEMORY_TONE_SET"; tone?: string }
@@ -254,11 +287,22 @@ export function normalize(s: FlowState): FlowState {
   }
   if (
     !next.result &&
-    (next.workspace.experiments.length || next.workspace.taskLog.length)
+    (next.workspace.experiments.length ||
+      next.workspace.taskLog.length ||
+      next.workspace.plannedExperiments?.length)
   ) {
     // No generated plan ⇒ no workspace history (fresh analyze / rebuilt
     // strategy start a fresh campaign; per-channel edits never clear this).
-    next = { ...next, workspace: { ...next.workspace, experiments: [], taskLog: [] } };
+    next = {
+      ...next,
+      workspace: {
+        ...next.workspace,
+        experiments: [],
+        taskLog: [],
+        plannedExperiments: [],
+        opportunityResearch: undefined,
+      },
+    };
   }
   if (next.result && Object.keys(next.posted).length) {
     const valid = new Set(
@@ -348,7 +392,7 @@ function transition(s: FlowState, a: FlowAction): FlowState {
         // pre-M15 saves have neither → empty loop history.
         workspace,
         // Memory: v5 flat field or meta; pre-M16 saves → empty memory.
-        memory: p.memory ?? p.meta?.memory ?? emptyMemory,
+        memory: refreshLearningMemory(p.memory ?? p.meta?.memory ?? emptyMemory, workspace),
         demo: a.demo,
         // Open at the deepest step the loaded data supports.
         ...(p.result
@@ -742,12 +786,69 @@ function transition(s: FlowState, a: FlowAction): FlowState {
       };
 
     case "EXPERIMENT_CREATED": {
+      if (s.workspace.experiments.some((experiment) => experiment.id === a.experiment.id))
+        return s;
+      const plan = s.workspace.plannedExperiments?.find(
+        (item) =>
+          (!a.experiment.plannedExperimentId ||
+            item.id === a.experiment.plannedExperimentId) &&
+          item.status === "ready" &&
+          item.platformId === a.experiment.platformId &&
+          item.postIdx === a.experiment.postIdx
+      );
+      if (a.experiment.plannedExperimentId && !plan) return s;
+      if (
+        s.workspace.experiments.some(
+          (item) =>
+            item.platformId === a.experiment.platformId &&
+            item.postIdx === a.experiment.postIdx
+        )
+      )
+        return s;
       // Publishing by hand: the experiment starts the loop, the draft is
       // marked posted, and the Today card (if any) is logged done — one
       // transition so they can never drift apart.
-      const experiment = a.experiment.successContract
-        ? a.experiment
-        : { ...a.experiment, successContract: s.workspace.successContract };
+      const baseExperiment = plan
+        ? {
+            ...a.experiment,
+            plannedExperimentId: plan.id,
+            successContract: plan.successContract,
+            opportunity: plan.opportunity,
+          }
+        : a.experiment.successContract
+          ? a.experiment
+          : { ...a.experiment, successContract: s.workspace.successContract };
+      const draft = s.result?.content.find(
+        (item) => item.platformId === a.experiment.platformId
+      )?.posts[a.experiment.postIdx];
+      if (!draft) return s;
+      if (
+        plan?.opportunity &&
+        (trialPublicationIssues(plan.opportunity, draft, s.memory.bannedClaims).length ||
+          !s.profile ||
+          !auditDraftSafety(draft, s.facts, s.profile, plan.platformId).ready)
+      )
+        return s;
+      let snapshot = normalizePublishSnapshot({
+        audience: plan?.opportunity?.audience ?? s.profile?.audience ?? "",
+        publisherVoice: s.profile?.publisherVoice ?? "brand",
+        facts: s.facts,
+        draft,
+        variable: plan?.variable ?? a.experiment.snapshot?.variable ?? "exploratory",
+        heldConstant: "Intended variable only; no controlled comparison claimed",
+        successContract: baseExperiment.successContract,
+      })!;
+      if (plan)
+        snapshot = {
+          ...snapshot,
+          ...comparisonBoundary(
+            s.workspace.experiments.find((item) => item.id === plan.sourceExperimentId),
+            snapshot,
+            baseExperiment.community,
+            baseExperiment.angle
+          ),
+        };
+      const experiment: Experiment = { ...baseExperiment, snapshot };
       const taskLog = a.taskId
         ? [
             ...s.workspace.taskLog.filter((t) => t.id !== a.taskId),
@@ -770,6 +871,11 @@ function transition(s: FlowState, a: FlowAction): FlowState {
         workspace: {
           ...s.workspace,
           experiments: [...s.workspace.experiments, experiment],
+          plannedExperiments: (s.workspace.plannedExperiments ?? []).map((item) =>
+            item.id === plan?.id
+              ? { ...item, status: "published", executionId: experiment.id }
+              : item
+          ),
           taskLog,
         },
       };
@@ -787,40 +893,200 @@ function transition(s: FlowState, a: FlowAction): FlowState {
         successContract: target.successContract,
       });
       const outcome = { ...a.outcome, verdict };
-      // Product memory learns which angles win or lose, citing the experiment.
-      // no-signal at 24h means "too early", not a loss.
-      const angleVerdict =
-        verdict.call === "supported" || verdict.call === "promising"
-          ? ("winning" as const)
-          : verdict.call === "weak" || a.outcome.checkpoint === "72h"
-            ? ("losing" as const)
-            : null;
-      const angles = angleVerdict
-        ? [
-            ...s.memory.angles,
-            {
-              angle: target.angle,
-              platformId: target.platformId,
-              verdict: angleVerdict,
-              experimentId: target.id,
-              at: a.outcome.recordedAt,
-            },
-          ].slice(-MEMORY_CAPS.angles)
-        : s.memory.angles;
+      const workspace: WorkspaceState = {
+        ...s.workspace,
+        experiments: s.workspace.experiments.map((e) =>
+          e.id !== a.experimentId
+            ? e
+            : {
+                ...e,
+                outcomes: [...e.outcomes.filter((item) => item.id !== outcome.id), outcome],
+                verdict,
+                status:
+                  e.status === "stopped" || outcome.invalidatedReason
+                    ? "stopped"
+                    : "analyzed",
+              }
+        ),
+      };
       return {
         ...s,
-        memory: { ...s.memory, angles },
+        memory: refreshLearningMemory(s.memory, workspace),
+        workspace,
+      };
+    }
+
+    case "OPPORTUNITY_RESEARCH_RECEIVED": {
+      const research = normalizeOpportunityResearch(a.research);
+      if (
+        !research ||
+        !s.profile ||
+        !s.result ||
+        a.projectId !== s.projectId ||
+        research.contextKey !==
+          researchContextKey(
+            s.profile,
+            s.facts,
+            s.workspace.successContract,
+            s.url,
+            s.memory.bannedClaims
+          )
+      )
+        return s;
+      return { ...s, workspace: { ...s.workspace, opportunityResearch: research } };
+    }
+    case "OPPORTUNITY_RESEARCH_CLEARED":
+      return { ...s, workspace: { ...s.workspace, opportunityResearch: undefined } };
+    case "OPPORTUNITY_QUEUED": {
+      const research = s.workspace.opportunityResearch;
+      const opportunity = research?.opportunities.find((o) => o.id === a.opportunityId);
+      const source = research?.sources.find((item) => item.id === opportunity?.sourceId);
+      const queue = s.workspace.plannedExperiments ?? [];
+      if (
+        !s.profile ||
+        !s.result ||
+        !s.workspace.successContract ||
+        !research ||
+        !opportunity ||
+        !source ||
+        research.id !== a.researchId ||
+        !a.rulesUserChecked ||
+        !a.trialUserChecked ||
+        research.contextKey !==
+          researchContextKey(
+            s.profile,
+            s.facts,
+            s.workspace.successContract,
+            s.url,
+            s.memory.bannedClaims
+          ) ||
+        trialSafety(research, opportunity.id, s.facts, s.profile, s.memory.bannedClaims)
+          .length ||
+        queue.length >= MAX_PLANNED_EXPERIMENTS ||
+        queue.some((p) => p.id === opportunity.id)
+      )
+        return s;
+      const platform = PLATFORMS.find((p) => p.id === research.input.platformId);
+      if (!platform) return s;
+      const channel = s.result.content.find((c) => c.platformId === platform.id);
+      const postIdx = channel?.posts.length ?? 0;
+      if (postIdx >= 12) return s;
+      const plan: PlannedExperiment = {
+        id: opportunity.id,
+        templateId: "product-trial",
+        sourceExperimentId: "",
+        platformId: platform.id,
+        platformName: platform.name,
+        venue: research.input.venue,
+        angle: research.input.task,
+        variable: "exploratory",
+        heldConstant:
+          "Exploratory product trial. Source excerpt is not proof of demand, current venue rules or causality.",
+        successContract: s.workspace.successContract,
+        status: "ready",
+        postIdx,
+        createdAt: a.at,
+        opportunity: {
+          researchId: research.id,
+          source,
+          audience: research.input.audience,
+          task: research.input.task,
+          entryUrl: research.input.entryUrl,
+          steps: research.input.steps,
+          feedbackQuestion: research.input.feedbackQuestion,
+          rulesUserCheckedAt: a.at,
+        },
+      };
+      return {
+        ...s,
+        result: {
+          ...s.result,
+          content: channel
+            ? s.result.content.map((c) =>
+                c.platformId === platform.id
+                  ? { ...c, posts: [...c.posts, opportunity.draft] }
+                  : c
+              )
+            : [
+                ...s.result.content,
+                {
+                  platformId: platform.id,
+                  platformName: platform.name,
+                  posts: [opportunity.draft],
+                },
+              ],
+        },
+        workspace: { ...s.workspace, plannedExperiments: [...queue, plan] },
+      };
+    }
+    case "EXPERIMENT_PLANNED": {
+      const plan = normalizePlannedExperiments([a.plan])[0];
+      const queue = s.workspace.plannedExperiments ?? [];
+      if (
+        !plan ||
+        plan.status !== "planned" ||
+        !s.workspace.experiments.some(
+          (item) =>
+            item.id === plan.sourceExperimentId &&
+            (!plan.sourceOutcomeId ||
+              item.outcomes.some((outcome) => outcome.id === plan.sourceOutcomeId))
+        ) ||
+        queue.length >= MAX_PLANNED_EXPERIMENTS ||
+        queue.some(
+          (item) =>
+            item.id === plan.id ||
+            (item.status !== "published" &&
+              item.status !== "cancelled" &&
+              item.sourceExperimentId === plan.sourceExperimentId &&
+              item.templateId === plan.templateId &&
+              item.platformId === plan.platformId &&
+              item.venue === plan.venue)
+        )
+      )
+        return s;
+      return { ...s, workspace: { ...s.workspace, plannedExperiments: [...queue, plan] } };
+    }
+    case "PLANNED_EXPERIMENT_CANCELLED":
+      return {
+        ...s,
         workspace: {
           ...s.workspace,
-          experiments: s.workspace.experiments.map((e) =>
-            e.id !== a.experimentId
-              ? e
-              : {
-                  ...e,
-                  outcomes: [...e.outcomes, outcome],
-                  verdict,
-                  status: e.status === "stopped" ? e.status : ("analyzed" as const),
-                }
+          plannedExperiments: s.workspace.plannedExperiments?.map((item) =>
+            item.id === a.id && item.status !== "published"
+              ? { ...item, status: "cancelled" }
+              : item
+          ),
+        },
+      };
+    case "PLANNED_DRAFT_PREPARED": {
+      const plan = s.workspace.plannedExperiments?.find(
+        (item) => item.id === a.id && item.status === "planned"
+      );
+      if (!plan || !s.result) return s;
+      const content = s.result.content.find((item) => item.platformId === plan.platformId);
+      const postIdx = content?.posts.length ?? 0;
+      if (postIdx >= 12) return s;
+      const nextContent = content
+        ? s.result.content.map((item) =>
+            item.platformId === plan.platformId
+              ? { ...item, posts: [...item.posts, a.post] }
+              : item
+          )
+        : [
+            ...s.result.content,
+            {
+              platformId: plan.platformId,
+              platformName: plan.platformName,
+              posts: [a.post],
+            },
+          ];
+      return {
+        ...s,
+        result: { ...s.result, content: nextContent },
+        workspace: {
+          ...s.workspace,
+          plannedExperiments: s.workspace.plannedExperiments?.map((item) =>
+            item.id === plan.id ? { ...item, status: "ready", postIdx } : item
           ),
         },
       };

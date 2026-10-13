@@ -311,8 +311,8 @@ function NicheChannels({ strategy }: { strategy: MarketingStrategy }) {
       <h2 className="text-lg font-semibold">Niche venues to verify</h2>
       {discoveries.some((discovery) => !discovery.validated) && (
         <p className="mb-3 text-xs text-neutral-500">
-          Unchecked links are model suggestions. Verify the venue and its rules before
-          posting.
+          Search-backed and reachable are separate checks. No community content or current
+          posting rules have been reviewed here. Verify them before posting.
         </p>
       )}
       <ul className="space-y-2 text-sm">
@@ -330,9 +330,11 @@ function NicheChannels({ strategy }: { strategy: MarketingStrategy }) {
             ) : (
               <span className="font-medium text-accent-300">{discovery.name}</span>
             )}
-            {discovery.validated && (
+            {(discovery.searchBacked || discovery.reachable) && (
               <span className="ml-2 align-middle text-xs text-emerald-400">
-                ✓ link checked
+                {discovery.searchBacked ? "Search-backed" : "Model suggestion"} ·{" "}
+                {discovery.reachable ? "reachable" : "reachability unknown"} · rules not
+                reviewed
               </span>
             )}
             <span className="text-neutral-400"> — {discovery.why}</span>

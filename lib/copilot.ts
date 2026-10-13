@@ -2,7 +2,7 @@ import { generateJsonMeta } from "./llm";
 import { ANTI_AI_RULES } from "./voice";
 import { factsForPrompt } from "./facts";
 import { effectiveExperimentVerdict, hasHistoricalFinalVerdict } from "./experimentHistory";
-import { successContractSummary } from "./successContract";
+import { successContractSummary, OUTCOME_METRICS, outcomeSignal } from "./successContract";
 import { getPlatforms, type PlatformDef } from "./platforms";
 import { scheduleDate } from "./dates";
 import { validateProposedActions, type ActionContext } from "./copilotActions";
@@ -159,6 +159,24 @@ function buildContext(req: CopilotRequest): string {
 
   // Workspace: real experiments + recorded outcomes → evidence refs [exp:id].
   const experiments = list(req.workspace?.experiments);
+  const queued = list(req.workspace?.plannedExperiments).filter(
+    (item) => item.status === "planned" || item.status === "ready"
+  );
+  if (queued.length)
+    out.push(
+      "",
+      "CONFIRMED QUEUE (not published; do not invent outcomes):",
+      ...queued
+        .slice(0, 6)
+        .map(
+          (item) =>
+            `[planned:${item.id}] ${item.platformName} · ${item.status} · intended variable ${item.variable} · venue ${clip(item.venue, 100)} · source execution ${item.sourceExperimentId}. Continue this confirmed work before suggesting unrelated tasks.`
+        )
+    );
+  out.push(
+    "",
+    "Context is a bounded recent-history window, not the complete project archive. Missing records and observations are unknown, never zero."
+  );
   if (experiments.length) {
     out.push(
       "",
@@ -170,12 +188,26 @@ function buildContext(req: CopilotRequest): string {
       out.push(
         `[exp:${e.id}] ${e.platformName}${e.community ? " · " + e.community : ""} — angle: ${clip(e.angle, 90)} · status ${e.status}` +
           (verdict
-            ? ` · ${hasHistoricalFinalVerdict(e) ? "historical final verdict (checkpoint unavailable)" : "verdict"} ${verdict.call} (${clip(verdict.reason, 110)})`
+            ? ` · ${hasHistoricalFinalVerdict(e) ? "historical final verdict (checkpoint unavailable)" : "verdict"} ${verdict.assessment || verdict.call} (${clip(verdict.reason, 110)})`
             : "") +
           (latest
-            ? ` · last ${latest.checkpoint}: impressions ${latest.impressions ?? "?"}, replies ${latest.replies ?? "?"}, clicks ${latest.clicks ?? "?"}, signups ${latest.signups ?? "?"}`
+            ? ` · last ${latest.checkpoint}: ${
+                OUTCOME_METRICS.filter(
+                  (metric) => outcomeSignal(latest, metric) !== undefined
+                )
+                  .map((metric) => `${metric}=${outcomeSignal(latest, metric)}`)
+                  .join(", ") || "no measured values"
+              }${latest.unavailableMetrics?.length ? `; unavailable: ${latest.unavailableMetrics.join(", ")}` : ""}${latest.invalidatedReason ? `; invalidated: ${latest.invalidatedReason}; do not learn from it` : ""}`
             : " · no outcomes recorded yet")
       );
+      if (e.successContract)
+        out.push(
+          `  Published rule: ${successContractSummary(e.successContract)}. Current project settings cannot rewrite this execution.`
+        );
+      if (e.snapshot)
+        out.push(
+          `  Published snapshot: audience ${clip(e.snapshot.audience, 160)}; voice ${e.snapshot.publisherVoice}; tested variable ${e.snapshot.variable}; ${clip(e.snapshot.heldConstant, 240)}. Do not assume today's facts match this snapshot.`
+        );
     }
   }
 
@@ -194,7 +226,7 @@ function buildContext(req: CopilotRequest): string {
       .slice(-8)
       .forEach((a, i) =>
         out.push(
-          `- [mem:angle:${mem.angles.length - Math.min(8, mem.angles.length) + i}] ${a.verdict === "winning" ? "WINNING" : "LOSING"} angle on ${a.platformId}: ${clip(a.angle, 90)} (evidence exp ${a.experimentId})`
+          `- [mem:angle:${mem.angles.length - Math.min(8, mem.angles.length) + i}] ${a.evidenceState ?? "historical read — not calibrated"}; recorded direction ${a.verdict} on ${a.platformId}: ${clip(a.angle, 90)} (evidence exp ${a.experimentId}). Do not claim causality or a proven channel winner.`
         )
       );
     const fb = mem.rewriteFeedback.slice(-5);
@@ -265,7 +297,7 @@ function actionInstruction(req: CopilotRequest, platform?: PlatformDef): string 
     case "improve-posts":
       return `Audit every drafted post above against the writing rules. Pick the 2-3 that most smell like AI or marketing (banned phrases, tidy triads, claims with no product-specific fact) and rewrite them fully in that platform's native voice, keeping the same core message and every real fact. In "reply": one line per pick — its [tag] and the exact tell, quoting the offending phrase. Emit one generate_variant action per pick with matching platformId + postIdx and the FULL new hook and body. If fewer than 2 genuinely need work, say so and rewrite only what does.`;
     case "rewrite":
-      return `Rewrite every drafted ${platform?.name} post above from scratch. ${q ? `The founder's direction: «${q}»` : "Same core message, better execution — cut anything that smells like marketing."} Keep every real product fact; invent nothing. One generate_variant action per post (platformId + postIdx matching its [tag]) with the FULL new hook and body. In "reply", 2-3 lines on what changed and why it lands better on ${platform?.name}, referencing this channel's angle from the plan.`;
+      return `${req.targetPostIdx !== undefined ? `Rewrite only bound draft ${req.targetPlatformId}#${req.targetPostIdx}` : `Rewrite every drafted ${platform?.name} post`} from scratch. ${q ? `The founder's direction: «${q}»` : "Same core message, better execution — cut anything that smells like marketing."} Keep every real product fact; invent nothing. One generate_variant action per targeted post (platformId + postIdx matching its [tag]) with the FULL new hook and body. In "reply", 2-3 lines on what changed and why it lands better on ${platform?.name}, referencing this channel's angle from the plan.`;
     case "first-replies":
       return `The ${platform?.name} post is about to go up. Write 4 short replies the founder can drop into the thread over the first two hours: (1) a concrete technical or context detail that pre-empts the most likely skeptical question; (2) an honest answer to "how is this different?" using the differentiators; (3) a limitation admitted plainly, plus what's next; (4) a genuine question back to the thread. Same voice as the post's author. Number them in "reply". No actions needed.`;
     case "review-feedback":
@@ -328,6 +360,8 @@ export async function runCopilot(req: CopilotRequest): Promise<CopilotReplyV2> {
 
 ${buildContext(req)}${historyBlock(req.history)}
 
+${req.targetPostIdx !== undefined ? `BOUND DRAFT: ${req.targetPlatformId}#${req.targetPostIdx}. Work only on this draft. Any generate_variant MUST use this exact platformId and zero-based postIdx. Do not rewrite other posts.` : ""}
+
 ${actionInstruction(req, platform)}
 
 ${SHAPE}`;
@@ -358,6 +392,8 @@ ${SHAPE}`;
       userEditedFields: [],
     },
     launchDate: req.launchDate,
+    targetPlatformId: req.targetPlatformId,
+    targetPostIdx: req.targetPostIdx,
   };
   const { actions, blocked } = validateProposedActions(data?.actions, ctx);
 

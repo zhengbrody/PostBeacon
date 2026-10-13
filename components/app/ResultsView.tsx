@@ -13,9 +13,14 @@ import { ReviewTab } from "@/components/app/results/ReviewTab";
 import { DemoGuide, type DemoGuideStep } from "@/components/app/DemoGuide";
 import { PublishDialog, type PublishDetails } from "@/components/app/results/PublishDialog";
 import { OutcomePanel } from "@/components/app/results/OutcomePanel";
+import { OpportunityWorkbench } from "@/components/app/results/OpportunityWorkbench";
 import { deriveToday, type TodayAction } from "@/lib/today";
 import { latestRelevantExperiment } from "@/lib/execution";
 import { successContractSummary } from "@/lib/successContract";
+import {
+  NextExperimentChoices,
+  PlannedExperimentQueue,
+} from "@/components/app/results/NextExperimentChoices";
 import type {
   Experiment,
   AnalysisReceipt,
@@ -31,6 +36,9 @@ import type {
   TaskRecord,
   ProductMemory,
   WorkspaceState,
+  PlannedExperiment,
+  Provider,
+  TrialResearchInput,
 } from "@/lib/types";
 
 type Surface = "today" | "plan" | "timeline" | "review";
@@ -72,6 +80,14 @@ export function ResultsView({
   onAskCopilot,
   emailRemindersAvailable,
   onToggleEmailReminders,
+  onPlanExperiment,
+  onPreparePlanned,
+  onCancelPlanned,
+  productUrl,
+  provider,
+  onResearchOpportunities,
+  onClearOpportunityResearch,
+  onQueueOpportunity,
 }: {
   result: GenerateResult;
   strategy: MarketingStrategy | null;
@@ -105,14 +121,28 @@ export function ResultsView({
   loading: boolean;
   demo: boolean;
   onReset: () => void;
-  onAskCopilot: (prompt: string, targetPlatformId?: string) => void;
+  onAskCopilot: (prompt: string, targetPlatformId?: string, postIdx?: number) => void;
   emailRemindersAvailable: boolean;
   onToggleEmailReminders: (enabled: boolean, timezone?: string) => void;
+  onPlanExperiment: (plan: PlannedExperiment) => void;
+  onPreparePlanned: (id: string) => void;
+  onCancelPlanned: (id: string) => void;
+  productUrl?: string;
+  provider: Provider;
+  onResearchOpportunities: (input: TrialResearchInput) => void;
+  onClearOpportunityResearch: () => void;
+  onQueueOpportunity: (
+    researchId: string,
+    opportunityId: string,
+    rulesChecked: boolean,
+    trialChecked: boolean
+  ) => void;
 }) {
   const [surface, setSurface] = useState<Surface>("today");
   const [publishFor, setPublishFor] = useState<{
     platformId: string;
     postIdx: number;
+    plannedExperimentId?: string;
   } | null>(null);
   const [outcomeFor, setOutcomeFor] = useState<{
     experimentId: string;
@@ -121,10 +151,33 @@ export function ResultsView({
   const [notice, setNotice] = useState<{ title: string; detail: string } | null>(null);
   const [demoGuideOpen, setDemoGuideOpen] = useState(demo);
   const [demoPrepared, setDemoPrepared] = useState(false);
+  const [focusedPlanId, setFocusedPlanId] = useState<string>();
 
-  const today = useMemo(
+  const derivedToday = useMemo(
     () => deriveToday({ launchDate, strategy, result, workspace }, new Date()),
     [launchDate, strategy, result, workspace]
+  );
+  const focusedPlan = workspace.plannedExperiments?.find(
+    (item) => item.id === focusedPlanId && item.status === "ready"
+  );
+  const today = focusedPlan
+    ? {
+        ...derivedToday,
+        primaryAction: {
+          id: `planned:${focusedPlan.id}`,
+          kind: "post" as const,
+          title: `Review next experiment — ${focusedPlan.platformName}`,
+          whyNow: focusedPlan.heldConstant,
+          estMinutes: 20,
+          due: true,
+          platformId: focusedPlan.platformId,
+          postIdx: focusedPlan.postIdx,
+          plannedExperimentId: focusedPlan.id,
+        },
+      }
+    : derivedToday;
+  const primaryPlan = workspace.plannedExperiments?.find(
+    (item) => item.id === today.primaryAction.plannedExperimentId
   );
 
   // Print / Cmd+P: force-mount the FULL report so the PDF is the whole plan.
@@ -187,7 +240,10 @@ export function ResultsView({
     const rec = strategy?.recommendations.find(
       (r) => r.platformId === publishContent.platformId
     );
-    const successContract = workspace.successContract;
+    const plan = workspace.plannedExperiments?.find(
+      (item) => item.id === publishFor?.plannedExperimentId
+    );
+    const successContract = plan?.successContract ?? workspace.successContract;
     const goal = successContract?.primaryGoal || profile?.conversionGoal || "conversion";
     const experiment: Experiment = {
       id: crypto.randomUUID(),
@@ -207,6 +263,16 @@ export function ResultsView({
       postIdx: details.postIdx,
       outcomes: [],
       successContract,
+      plannedExperimentId: plan?.id,
+      snapshot: {
+        audience: profile?.audience ?? "",
+        publisherVoice: profile?.publisherVoice ?? "brand",
+        facts,
+        draft: publishContent.posts[details.postIdx],
+        variable: details.variable,
+        heldConstant: details.heldConstant,
+        successContract,
+      },
     };
     onPublishExperiment(experiment, postTaskId(publishContent.platformId, details.postIdx));
     setNotice({
@@ -222,6 +288,7 @@ export function ResultsView({
     setPublishFor(null);
     setOutcomeFor(null);
     setSurface("today");
+    setFocusedPlanId(undefined);
   }
 
   function demoGuideAction(step: DemoGuideStep) {
@@ -275,6 +342,15 @@ export function ResultsView({
     });
 
   const skipTask = (a: TodayAction) => {
+    if (a.plannedExperimentId) {
+      onCancelPlanned(a.plannedExperimentId);
+      setFocusedPlanId(undefined);
+      setNotice({
+        title: "Planned experiment cancelled",
+        detail: "The published history and other experiments remain unchanged.",
+      });
+      return;
+    }
     onActTask({
       id: a.id,
       kind: a.kind === "record" ? "record" : a.kind === "post" ? "post" : "custom",
@@ -318,6 +394,26 @@ export function ResultsView({
         }
         onStop={() => onStopExperiment(outcomeExperiment.id)}
         onClose={() => setOutcomeFor(null)}
+        nextExperimentControls={
+          <NextExperimentChoices
+            experiment={outcomeExperiment}
+            evidenceState={
+              memory.angles.find((item) => item.experimentId === outcomeExperiment.id)
+                ?.evidenceState
+            }
+            strategy={strategy}
+            queue={workspace.plannedExperiments ?? []}
+            loading={loading}
+            onPlan={(plan) => {
+              onPlanExperiment(plan);
+              setNotice({
+                title: "Next experiment confirmed",
+                detail: `${plan.platformName} · ${plan.variable}. Saved in your queue; preparing a draft is a separate action.`,
+              });
+            }}
+            onStop={() => onStopExperiment(outcomeExperiment.id)}
+          />
+        }
       />
     ) : undefined;
 
@@ -355,6 +451,9 @@ export function ResultsView({
           productName={profile?.name}
           primaryGoal={profile?.conversionGoal}
           successContract={workspace.successContract}
+          productUrl={productUrl}
+          primaryPlan={primaryPlan}
+          onPreparePlanned={onPreparePlanned}
           facts={facts}
           profile={profile}
           loading={loading}
@@ -365,6 +464,12 @@ export function ResultsView({
             setPublishFor({
               platformId,
               postIdx: requestedPostIdx ?? Math.max(0, firstUnposted),
+              plannedExperimentId: workspace.plannedExperiments?.find(
+                (item) =>
+                  item.status === "ready" &&
+                  item.platformId === platformId &&
+                  item.postIdx === requestedPostIdx
+              )?.id,
             });
           }}
           onRecord={(a) => {
@@ -376,19 +481,28 @@ export function ResultsView({
           onDoneCustom={doneCustom}
           onOpenContent={() => setSurface("plan")}
           onOpenReview={() => setSurface("review")}
-          onAskCopilot={(action, direction) => {
+          onAskCopilot={(action, direction, postIdx) => {
             if (demo) return demoOnlyNotice("Copilot");
             onAskCopilot(
               direction
                 ? `My current next best move is “${action.title}”. ${direction} Use evidence from my plan and propose only changes I can review before applying.`
                 : `Help me execute my current next best move: “${action.title}”. Explain the sharpest way to do it for this product, use evidence from my plan, and propose only changes I can review before applying.`,
-              action.platformId
+              action.platformId,
+              postIdx
             );
           }}
           onRegenerate={demo ? () => demoOnlyNotice("Regeneration") : onRegenerate}
           onUpdatePost={onUpdatePost}
           primaryContent={primaryContent}
-          primaryRecommendation={primaryRecommendation}
+          primaryRecommendation={
+            primaryPlan && primaryRecommendation
+              ? {
+                  ...primaryRecommendation,
+                  angle: primaryPlan.angle,
+                  venue: primaryPlan.venue,
+                }
+              : primaryRecommendation
+          }
           posted={posted}
           activeExperiment={activeExperiment}
           primaryExperiment={primaryExperiment}
@@ -418,6 +532,55 @@ export function ResultsView({
           }
         />
       )}
+
+      {(surface === "today" || surface === "review") && !printing && (
+        <PlannedExperimentQueue
+          queue={workspace.plannedExperiments ?? []}
+          loading={loading}
+          demo={demo}
+          onPrepare={onPreparePlanned}
+          onOpen={(plan) => {
+            setFocusedPlanId(plan.id);
+            setSurface("today");
+            setOutcomeFor(null);
+          }}
+          onCancel={(id) => {
+            onCancelPlanned(id);
+            setFocusedPlanId(undefined);
+            setNotice({
+              title: "Planned experiment cancelled",
+              detail:
+                "No post or historical result was changed. Your remaining queue is preserved.",
+            });
+          }}
+        />
+      )}
+
+      {surface === "today" &&
+        !printing &&
+        profile &&
+        workspace.successContract &&
+        productUrl && (
+          <OpportunityWorkbench
+            key={`${productUrl}:${demo}`}
+            profile={profile}
+            facts={facts}
+            contract={workspace.successContract}
+            bannedClaims={memory.bannedClaims}
+            productUrl={productUrl}
+            provider={provider}
+            research={workspace.opportunityResearch}
+            queue={workspace.plannedExperiments ?? []}
+            draftCounts={Object.fromEntries(
+              result.content.map((c) => [c.platformId, c.posts.length])
+            )}
+            loading={loading}
+            demo={demo}
+            onResearch={onResearchOpportunities}
+            onClear={onClearOpportunityResearch}
+            onQueue={onQueueOpportunity}
+          />
+        )}
 
       {(surface === "plan" || printing) && (
         <PlanReport
@@ -454,26 +617,50 @@ export function ResultsView({
       )}
 
       {surface === "review" && !printing && (
-        <ReviewTab
-          workspace={workspace}
-          strategy={strategy}
-          onGoToday={() => setSurface("today")}
-          onRecord={(experimentId, checkpoint) => {
-            setOutcomeFor({ experimentId, checkpoint });
-            setSurface("today");
-          }}
-          onSchedule={(platformId) => {
-            const content = result.content.find(
-              (candidate) => candidate.platformId === platformId
-            );
-            if (content?.posts.length) {
-              setPublishFor({ platformId, postIdx: 0 });
-            } else {
-              onAddChannel(platformId);
-              setSurface("plan");
-            }
-          }}
-        />
+        <>
+          {activeExperiment && activeExperiment.outcomes.length > 0 && (
+            <NextExperimentChoices
+              experiment={activeExperiment}
+              evidenceState={
+                memory.angles.find((item) => item.experimentId === activeExperiment.id)
+                  ?.evidenceState
+              }
+              strategy={strategy}
+              queue={workspace.plannedExperiments ?? []}
+              loading={loading}
+              onPlan={(plan) => {
+                onPlanExperiment(plan);
+                setSurface("today");
+                setNotice({
+                  title: "Next experiment confirmed",
+                  detail:
+                    "Your decision is queued. Prepare the draft when ready; publishing remains manual.",
+                });
+              }}
+              onStop={() => onStopExperiment(activeExperiment.id)}
+            />
+          )}
+          <ReviewTab
+            workspace={workspace}
+            strategy={strategy}
+            onGoToday={() => setSurface("today")}
+            onRecord={(experimentId, checkpoint) => {
+              setOutcomeFor({ experimentId, checkpoint });
+              setSurface("today");
+            }}
+            onSchedule={(platformId) => {
+              const content = result.content.find(
+                (candidate) => candidate.platformId === platformId
+              );
+              if (content?.posts.length) {
+                setPublishFor({ platformId, postIdx: 0 });
+              } else {
+                onAddChannel(platformId);
+                setSurface("plan");
+              }
+            }}
+          />
+        </>
       )}
 
       {publishFor && publishContent && profile && (
@@ -481,11 +668,52 @@ export function ResultsView({
           content={publishContent}
           facts={facts}
           profile={profile}
-          successContract={workspace.successContract}
+          bannedClaims={memory.bannedClaims}
+          successContract={
+            workspace.plannedExperiments?.find(
+              (item) => item.id === publishFor.plannedExperimentId
+            )?.successContract ?? workspace.successContract
+          }
           rec={strategy?.recommendations.find(
             (r) => r.platformId === publishFor.platformId
           )}
           defaultPostIdx={publishFor.postIdx}
+          lockedDraft={Boolean(publishFor.plannedExperimentId)}
+          trial={
+            workspace.plannedExperiments?.find(
+              (item) => item.id === publishFor.plannedExperimentId
+            )?.opportunity
+          }
+          publishedPostIndices={workspace.experiments
+            .filter((item) => item.platformId === publishFor.platformId)
+            .map((item) => item.postIdx)}
+          initialVariable={
+            workspace.plannedExperiments?.find(
+              (item) => item.id === publishFor.plannedExperimentId
+            )?.variable
+          }
+          initialCommunity={
+            workspace.plannedExperiments?.find(
+              (item) => item.id === publishFor.plannedExperimentId
+            )?.venue
+          }
+          initialAngle={
+            workspace.plannedExperiments?.find(
+              (item) => item.id === publishFor.plannedExperimentId
+            )?.angle
+          }
+          heldConstant={
+            workspace.plannedExperiments?.find(
+              (item) => item.id === publishFor.plannedExperimentId
+            )?.heldConstant
+          }
+          sourceExperiment={workspace.experiments.find(
+            (item) =>
+              item.id ===
+              workspace.plannedExperiments?.find(
+                (plan) => plan.id === publishFor.plannedExperimentId
+              )?.sourceExperimentId
+          )}
           demo={demo}
           onConfirm={confirmPublish}
           onClose={() => setPublishFor(null)}

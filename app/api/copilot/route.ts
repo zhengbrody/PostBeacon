@@ -50,6 +50,7 @@ export async function POST(req: NextRequest) {
       action,
       question,
       targetPlatformId,
+      targetPostIdx: body.targetPostIdx,
       history: (body.history ?? []).slice(-6),
     });
     return NextResponse.json(reply);

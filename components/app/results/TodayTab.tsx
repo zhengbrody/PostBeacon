@@ -17,6 +17,7 @@ import type {
   PlatformRecommendation,
   ProductProfile,
   SuccessContract,
+  PlannedExperiment,
 } from "@/lib/types";
 
 interface TodayActions {
@@ -27,9 +28,10 @@ interface TodayActions {
   onDoneCustom: (action: TodayAction) => void;
   onOpenContent: (platformId?: string) => void;
   onOpenReview: () => void;
-  onAskCopilot: (action: TodayAction, direction?: string) => void;
+  onAskCopilot: (action: TodayAction, direction?: string, postIdx?: number) => void;
   onRegenerate: (platformId: string) => void;
   onUpdatePost: (platformId: string, idx: number, patch: Partial<PlatformPost>) => void;
+  onPreparePlanned: (id: string) => void;
 }
 
 function ActionButtons({
@@ -57,6 +59,14 @@ function ActionButtons({
       {a.kind === "record" && (
         <Button disabled={loading} onClick={() => onRecord(a)}>
           Record results
+        </Button>
+      )}
+      {a.kind === "prepare" && a.plannedExperimentId && (
+        <Button
+          disabled={loading}
+          onClick={() => handlers.onPreparePlanned(a.plannedExperimentId!)}
+        >
+          Prepare this experiment
         </Button>
       )}
       {a.kind === "post" && a.platformId && (
@@ -204,6 +214,8 @@ export function TodayTab({
   notice,
   onDismissNotice,
   recordEditor,
+  productUrl,
+  primaryPlan,
   onAskExperiment,
   onRecordEarly,
   onOpenProgress,
@@ -213,6 +225,8 @@ export function TodayTab({
   productName?: string;
   primaryGoal?: string;
   successContract?: SuccessContract;
+  productUrl?: string;
+  primaryPlan?: PlannedExperiment;
   facts: Fact[];
   profile?: ProductProfile | null;
   emailRemindersAvailable: boolean;
@@ -358,14 +372,18 @@ export function TodayTab({
               facts={facts}
               profile={profile}
               recommendation={primaryRecommendation}
-              successContract={successContract}
+              successContract={primaryPlan?.successContract ?? successContract}
+              productUrl={productUrl}
+              plan={primaryPlan}
               posted={posted}
               defaultPostIdx={primary.postIdx}
               loading={handlers.loading}
               onUpdatePost={handlers.onUpdatePost}
               onRegenerate={handlers.onRegenerate}
               onPublish={(platformId, postIdx) => handlers.onPublish(platformId, postIdx)}
-              onAskCopilot={(direction) => handlers.onAskCopilot(primary, direction)}
+              onAskCopilot={(direction, postIdx) =>
+                handlers.onAskCopilot(primary, direction, postIdx)
+              }
               onOpenLibrary={() => handlers.onOpenContent(primary.platformId)}
             />
           ) : (

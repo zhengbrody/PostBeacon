@@ -37,6 +37,8 @@ export interface ActionContext {
   workspace: WorkspaceState;
   memory: ProductMemory;
   launchDate?: string;
+  targetPlatformId?: string;
+  targetPostIdx?: number;
 }
 
 export const emptyMemory: ProductMemory = {
@@ -189,7 +191,15 @@ function idsResolve(a: ProposedAction, ctx: ActionContext): boolean {
       return inStrategy(a.platformId);
     case "create_experiment":
     case "generate_variant":
-      return knownPlatform(a.platformId) && hasContent(a.platformId);
+      return (
+        knownPlatform(a.platformId) &&
+        hasContent(a.platformId) &&
+        Boolean(
+          ctx.result?.content.find((item) => item.platformId === a.platformId)?.posts[
+            a.postIdx ?? 0
+          ]
+        )
+      );
     case "record_outcome":
     case "diagnose_outcome":
       return knownExperiment(a.experimentId);
@@ -248,6 +258,17 @@ export function validateProposedActions(
       blocked++;
       continue;
     }
+    if (
+      draft.tool === "generate_variant" &&
+      ctx.targetPostIdx !== undefined &&
+      (draft.platformId !== ctx.targetPlatformId ||
+        (draft.postIdx ?? 0) !== ctx.targetPostIdx ||
+        !draft.hook ||
+        !draft.body)
+    ) {
+      blocked++;
+      continue;
+    }
 
     // Evidence is EARNED: refs that don't resolve are dropped and counted;
     // confidence is recomputed here, whatever the model claimed.
@@ -258,6 +279,12 @@ export function validateProposedActions(
       droppedEvidence: cited.length - verified.length,
       confidence: verified.length > 0 ? "grounded" : "unknown",
     };
+    if (action.tool === "generate_variant") {
+      const source = ctx.result?.content.find(
+        (item) => item.platformId === action.platformId
+      )?.posts[action.postIdx ?? 0];
+      if (source) action.sourceDraft = { hook: source.hook, body: source.body };
+    }
     // A validation experiment must itself point somewhere real.
     if (
       action.validationExperiment &&
@@ -361,6 +388,7 @@ export function summaryOf(a: ProposedAction): string {
 // Apply mapping — the ONLY proposal → state bridge, used on explicit confirm.
 
 export type ApplyKind =
+  | "blocked"
   | "dispatch" // maps directly to reducer actions (returned below)
   | "open-publish" // create_experiment → prefilled publish dialog
   | "open-outcome" // record_outcome → outcome form
@@ -388,6 +416,7 @@ export function applyKindOf(a: ProposedAction): ApplyKind {
 
 /** Reducer dispatches for a CONFIRMED "dispatch"-kind action. Pure. */
 export function applyActionPlan(a: ProposedAction, ctx: ActionContext): FlowAction[] {
+  if (proposalStale(a, ctx)) return [];
   switch (a.tool) {
     case "update_positioning": {
       const patch: { positioning?: string; antiPositioning?: string } = {};
@@ -442,6 +471,15 @@ export function applyActionPlan(a: ProposedAction, ctx: ActionContext): FlowActi
     default:
       return [];
   }
+}
+
+export function proposalStale(action: ProposedAction, ctx: ActionContext): boolean {
+  if (action.tool !== "generate_variant" || !action.sourceDraft) return false;
+  const post = ctx.result?.content.find((item) => item.platformId === action.platformId)
+    ?.posts[action.postIdx ?? 0];
+  return (
+    !post || post.hook !== action.sourceDraft.hook || post.body !== action.sourceDraft.body
+  );
 }
 
 function currentPlanDay(launchDate?: string): number {

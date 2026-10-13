@@ -417,12 +417,23 @@ describe("memory + audit through the reducer", () => {
     expect(s.memory.userEditedFields).not.toContain("antiPositioning");
   });
 
-  it("verdicts append winning/losing angles citing the experiment", () => {
+  it("a final target-based observation adds explicitly early evidence", () => {
     const s = seq(
       analyzed,
       built,
       generated,
-      { type: "EXPERIMENT_CREATED", experiment },
+      {
+        type: "EXPERIMENT_CREATED",
+        experiment: {
+          ...experiment,
+          successContract: {
+            primaryGoal: "Signups",
+            primarySignal: "signups",
+            minimumResult: 1,
+            evaluationWindow: "24h",
+          },
+        },
+      },
       {
         type: "OUTCOME_RECORDED",
         experimentId: "exp-1",
@@ -439,6 +450,7 @@ describe("memory + audit through the reducer", () => {
       verdict: "winning",
       experimentId: "exp-1",
       platformId: P0,
+      evidenceState: "early evidence",
     });
   });
 

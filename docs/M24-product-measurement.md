@@ -12,7 +12,8 @@ therefore split into two narrow layers:
    outcome numbers are structurally dropped.
 2. **Operator-only lifecycle counts** from the normalized Supabase mirrors already required
    by the workspace. `GET /api/metrics` uses the existing service role behind
-   `CRON_SECRET`, reads only user keys and timestamps needed to deduplicate/count, discards
+   `CRON_SECRET`, reads only user keys, timestamps and the bounded Verdict assessment
+   needed to deduplicate/count and exclude unknown/invalid tests, discards
    them before the response, and returns no content or outcome values. It creates no table.
 
 The Vercel funnel is:
@@ -30,17 +31,22 @@ retention north star.
 - **Saved-project users**: distinct owners with at least one project.
 - **Generated-plan users**: distinct owners with a project whose generated result exists.
 - **Published users**: distinct owners with at least one normalized experiment.
-- **Measured users**: distinct owners with at least one outcome.
+- **Measured users**: distinct owners with at least one eligible observation, excluding
+  new insufficient/invalidated reads. Outcomes Recorded still counts all submitted
+  observations, including unavailable/invalid attempts; it is not proof of measurement.
 - **Completed-loop users**: distinct owners with an analyzed experiment and a non-manual
-  outcome.
+  outcome, excluding insufficient evidence and any invalidated execution. Historical
+  reads without the new assessment retain their prior counting rule.
 - **Weekly active**: an owner with a project/campaign update, publish, outcome, or task action
   in the half-open seven-day window `[from, to)`.
 - **Weekly retained**: active in both the previous and current seven-day windows.
 - **Weekly retention**: retained users divided by previous-window active users. It is `null`
   when there is no baseline; fewer than 10 previous users is explicitly labelled
   `directional`, not statistically reliable.
-- **Weekly completed loops**: unique analyzed experiments with a non-manual outcome recorded
-  in the window.
+- **Weekly completed loops**: unique eligible analyzed experiments with a non-manual outcome
+  recorded in the window. A new lifecycle event is emitted only on the first qualifying
+  scheduled read, not again at 72h. Event counters cannot retract past events on later
+  invalidation; the operator report recomputes current eligibility.
 
 The endpoint response states its privacy properties and never includes raw keys. Pagination
 fails rather than silently truncating at the Supabase row limit.

@@ -175,30 +175,29 @@ const facts: Fact[] = [
   },
 ];
 
-// Validated niche channels (what the live discovery pass would find). These
-// are what GROUND the "✓ sourced" chips — venue text matching one of these
-// names earns provenance "grounded"; everything else stays "inferred".
+// Fictional suggestions only; this walkthrough has no real search receipt.
+// Reachability and community rules are not asserted by a baked example.
 const discoveries = [
   {
     name: "r/selfhosted",
     url: "https://www.reddit.com/r/selfhosted/",
     why: "Self-hosters run fleets of unattended jobs and adopt tools with a self-host story fast.",
     source: "subreddit",
-    validated: true,
+    validated: false,
   },
   {
     name: "r/devops",
     url: "https://www.reddit.com/r/devops/",
     why: "Where the 'how do you monitor cron' complaint thread already exists.",
     source: "subreddit",
-    validated: true,
+    validated: false,
   },
   {
     name: "awesome-selfhosted",
     url: "https://github.com/awesome-selfhosted/awesome-selfhosted",
     why: "A PR into the monitoring section reaches self-hosters searching for exactly this.",
     source: "GitHub list",
-    validated: true,
+    validated: false,
   },
 ];
 

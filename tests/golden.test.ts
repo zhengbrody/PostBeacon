@@ -412,6 +412,8 @@ describe("source grounding (hallucinated links can never show as verified)", () 
     why: "",
     source: "subreddit",
     validated,
+    searchBacked: validated,
+    sourceId: validated ? "search:1" : undefined,
   });
 
   it("grounds a venue that matches a VALIDATED discovery, with the discovery's URL", () => {
@@ -499,12 +501,12 @@ describe("demo plan integrity (assembled with production functions)", () => {
     }
   });
 
-  it("demo grounding: reddit is sourced via a validated discovery; HN stays inferred", () => {
+  it("fictional demo links do not pretend to have live search evidence", () => {
     const reddit = DEMO_PROJECT.strategy.recommendations.find(
       (r) => r.platformId === "reddit"
     )!;
-    expect(reddit.provenance).toBe("grounded");
-    expect(reddit.sources?.[0]).toContain("reddit.com/r/selfhosted");
+    expect(reddit.provenance).toBe("inferred");
+    expect(reddit.sources).toBeUndefined();
     const hn = DEMO_PROJECT.strategy.recommendations.find(
       (r) => r.platformId === "hackernews"
     )!;

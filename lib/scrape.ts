@@ -64,13 +64,13 @@ function looksEmpty(page: ScrapedPage): boolean {
   return page.text.length < 400 && page.headings.length === 0;
 }
 
-async function fetchStatic(url: string) {
+async function fetchStatic(url: string, timeoutMs = 15000, maxRedirects = 3) {
   const res = await safeFetch(url, {
     headers: {
       "User-Agent": "Mozilla/5.0 (compatible; PostBeaconBot/1.0; +https://postbeacon.app)",
     },
-    timeoutMs: 15000,
-    maxRedirects: 3,
+    timeoutMs,
+    maxRedirects,
     maxBytes: 2_000_000,
     // A landing page must be text; anything else (pdf, zip, image) is useless
     // to the extractor and shouldn't be pulled at all.
@@ -119,4 +119,11 @@ export async function scrapeUrl(rawUrl: string): Promise<ScrapedPage> {
     if (staticPage) return staticPage; // degrade to the static result
     throw err;
   }
+}
+
+/** Explicit research sources never invoke a paid renderer or crawl neighbors. */
+export async function scrapeStaticSource(url: string): Promise<ScrapedPage> {
+  // No redirect may transfer this permission to a different/restricted host.
+  const response = await fetchStatic(assertPublicHttpUrl(url).toString(), 8000, 0);
+  return extract(response.body, response.finalUrl, false, response.truncated);
 }

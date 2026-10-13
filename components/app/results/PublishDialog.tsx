@@ -8,7 +8,13 @@ import { ExecutionProgress } from "./ExecutionProgress";
 import { DraftSafetyNotice } from "./DraftSafetyNotice";
 import { auditDraftSafety } from "@/lib/contentSafety";
 import { normalizeTrackedUrl } from "@/lib/trackedUrl";
+import { trialPublicationIssues } from "@/lib/opportunityResearch";
 import { projectExperimentContract } from "@/lib/experimentContract";
+import {
+  TESTED_VARIABLES,
+  VARIABLE_LABELS,
+  comparisonBoundary,
+} from "@/lib/experimentQueue";
 import type { ExecutionStep } from "@/lib/execution";
 import type {
   Fact,
@@ -16,6 +22,9 @@ import type {
   PlatformRecommendation,
   ProductProfile,
   SuccessContract,
+  TestedVariable,
+  Experiment,
+  TrialOpportunitySnapshot,
 } from "@/lib/types";
 
 const PUBLISH_STEPS: ExecutionStep[] = [
@@ -31,6 +40,8 @@ export interface PublishDetails {
   postIdx: number;
   variant: string; // the hook actually used
   trackedUrl: string;
+  variable: TestedVariable;
+  heldConstant: string;
 }
 
 /**
@@ -46,6 +57,13 @@ export function PublishDialog({
   defaultPostIdx,
   initialCommunity,
   initialAngle,
+  initialVariable,
+  heldConstant,
+  sourceExperiment,
+  trial,
+  bannedClaims = [],
+  lockedDraft = false,
+  publishedPostIndices = [],
   demo = false,
   onConfirm,
   onClose,
@@ -59,6 +77,13 @@ export function PublishDialog({
   /** Optional prefills (e.g. from a confirmed create_experiment proposal). */
   initialCommunity?: string;
   initialAngle?: string;
+  initialVariable?: TestedVariable;
+  heldConstant?: string;
+  sourceExperiment?: Experiment;
+  trial?: TrialOpportunitySnapshot;
+  bannedClaims?: string[];
+  lockedDraft?: boolean;
+  publishedPostIndices?: number[];
   demo?: boolean;
   onConfirm: (details: PublishDetails) => void;
   onClose: () => void;
@@ -71,15 +96,40 @@ export function PublishDialog({
     Math.min(defaultPostIdx, Math.max(0, content.posts.length - 1))
   );
   const [trackedUrl, setTrackedUrl] = useState("");
+  const [variable, setVariable] = useState<TestedVariable>(
+    initialVariable ?? "exploratory"
+  );
   const normalizedTrackedUrl = normalizeTrackedUrl(trackedUrl);
   const trackedUrlInvalid = trackedUrl.trim() !== "" && !normalizedTrackedUrl;
   const selectedPost = content.posts[postIdx];
+  const comparison =
+    sourceExperiment && selectedPost
+      ? comparisonBoundary(
+          sourceExperiment,
+          {
+            audience: profile.audience,
+            publisherVoice: profile.publisherVoice ?? "brand",
+            facts,
+            draft: selectedPost,
+            variable,
+            heldConstant: heldConstant ?? "",
+            successContract,
+          },
+          community.trim(),
+          angle.trim()
+        )
+      : {
+          variable,
+          heldConstant: "Intended variable only; no controlled comparison claimed.",
+        };
   const safety = selectedPost
     ? auditDraftSafety(selectedPost, facts, profile, content.platformId)
     : { ready: false, issues: [] };
+  const trialIssues =
+    trial && selectedPost ? trialPublicationIssues(trial, selectedPost, bannedClaims) : [];
   const experimentContract = selectedPost
     ? projectExperimentContract({
-        profile,
+        profile: trial ? { ...profile, audience: trial.audience } : profile,
         recommendation: rec
           ? {
               ...rec,
@@ -90,6 +140,7 @@ export function PublishDialog({
         content,
         post: selectedPost,
         successContract,
+        variable: comparison.variable,
       })
     : undefined;
 
@@ -99,6 +150,9 @@ export function PublishDialog({
       onClick={onClose}
     >
       <Card
+        role="dialog"
+        aria-modal="true"
+        aria-label="Confirm manual publish"
         className="max-h-[90vh] w-full max-w-lg overflow-y-auto p-6"
         onClick={(e) => e.stopPropagation()}
       >
@@ -156,8 +210,8 @@ export function PublishDialog({
               </div>
             </dl>
             <p className="mt-1 text-[11px] text-neutral-500">
-              The venue, angle, selected hook and Success Contract are saved with the
-              experiment. Later workspace edits cannot rewrite this run.
+              The full draft, audience, publishing voice, product facts and Success Contract
+              are saved as this execution&apos;s snapshot. No causal conclusion is implied.
             </p>
           </div>
         )}
@@ -166,12 +220,13 @@ export function PublishDialog({
           <label className="mb-3 block text-xs text-neutral-400">
             Which draft did you post?
             <select
+              disabled={lockedDraft || Boolean(sourceExperiment)}
               value={postIdx}
               onChange={(e) => setPostIdx(Number(e.target.value))}
               className="mt-1 block w-full rounded-md border border-line bg-surface-2 px-2 py-1.5 text-sm text-neutral-100 outline-none focus:border-accent-500"
             >
               {content.posts.map((p, i) => (
-                <option key={i} value={i}>
+                <option key={i} value={i} disabled={publishedPostIndices.includes(i)}>
                   {p.hook.length > 60 ? p.hook.slice(0, 60) + "…" : p.hook}
                 </option>
               ))}
@@ -184,15 +239,84 @@ export function PublishDialog({
             <DraftSafetyNotice report={safety} />
           </div>
         )}
+        {trialIssues.length > 0 && (
+          <p role="alert" className="mb-4 text-sm text-amber-300">
+            Trial publish blocked: {trialIssues.join("; ")}. Restore the reviewed entry and
+            remove banned claims, or prepare a new trial.
+          </p>
+        )}
+
+        {trial && (
+          <div className="mb-4 rounded-lg border border-line p-3 text-xs text-neutral-300">
+            <p className="font-semibold">Product trial provenance · exploratory</p>
+            <p className="mt-2">Trial audience: {trial.audience}</p>
+            <p className="mt-2 break-all">
+              Demand source: {trial.source.url} · {trial.source.verification}. This is not
+              the publishing venue.
+            </p>
+            <p className="mt-2">
+              Venue rules: user checked at {trial.rulesUserCheckedAt}; not independently
+              reviewed.
+            </p>
+            <ol className="ml-5 mt-2 list-decimal space-y-1">
+              {trial.steps.map((step, i) => (
+                <li key={i}>{step}</li>
+              ))}
+            </ol>
+            <p className="mt-2">Ask: {trial.feedbackQuestion}</p>
+            <p className="mt-2">
+              Recording a publish is your report; it does not prove anyone tried the
+              product. Product activation is still unmeasured.
+            </p>
+          </div>
+        )}
 
         <div className="space-y-3">
-          <Field
-            label="Community / venue (where exactly)"
-            value={community}
-            onChange={setCommunity}
-            placeholder="e.g. r/selfhosted"
-          />
-          <Field label="Angle you led with" value={angle} onChange={setAngle} />
+          <label className="block text-xs text-neutral-400">
+            What variable are you testing?
+            <select
+              disabled={Boolean(initialVariable)}
+              value={variable}
+              onChange={(event) => setVariable(event.target.value as TestedVariable)}
+              className="mt-1 min-h-11 w-full rounded-md border border-line bg-surface-2 px-2"
+            >
+              {TESTED_VARIABLES.map((item) => (
+                <option key={item} value={item}>
+                  {VARIABLE_LABELS[item]}
+                </option>
+              ))}
+            </select>
+          </label>
+          <p className="text-xs text-neutral-500">{comparison.heldConstant}</p>
+          {selectedPost && (
+            <details>
+              <summary className="min-h-11 cursor-pointer text-xs text-neutral-400">
+                Review the exact published draft snapshot
+              </summary>
+              <p className="whitespace-pre-wrap break-words text-sm">{selectedPost.hook}</p>
+              <p className="mt-2 whitespace-pre-wrap break-words text-sm">
+                {selectedPost.body}
+              </p>
+            </details>
+          )}
+          {!trial ? (
+            <Field
+              label="Community / venue (where exactly)"
+              value={community}
+              onChange={setCommunity}
+              placeholder="e.g. r/selfhosted"
+            />
+          ) : (
+            <p className="text-xs text-neutral-400">
+              Approved publishing venue: {community}. To change it, prepare and review a new
+              trial.
+            </p>
+          )}
+          {!trial ? (
+            <Field label="Angle you led with" value={angle} onChange={setAngle} />
+          ) : (
+            <p className="text-xs text-neutral-400">Trial task: {angle}</p>
+          )}
           <Field
             label="Link to the live post (optional)"
             value={trackedUrl}
@@ -208,8 +332,19 @@ export function PublishDialog({
         </div>
 
         <div className="mt-5 flex gap-2">
+          {publishedPostIndices.includes(postIdx) && (
+            <p className="text-xs text-amber-300" role="status">
+              This draft is already tracked. Prepare a new follow-up draft instead of
+              creating a duplicate execution.
+            </p>
+          )}
           <Button
-            disabled={!safety.ready || trackedUrlInvalid}
+            disabled={
+              !safety.ready ||
+              trialIssues.length > 0 ||
+              trackedUrlInvalid ||
+              publishedPostIndices.includes(postIdx)
+            }
             title={!safety.ready ? "Fix the truth-check issues before tracking" : undefined}
             onClick={() =>
               onConfirm({
@@ -218,6 +353,8 @@ export function PublishDialog({
                 postIdx,
                 variant: content.posts[postIdx]?.hook ?? "",
                 trackedUrl: normalizedTrackedUrl ?? "",
+                variable: comparison.variable,
+                heldConstant: comparison.heldConstant,
               })
             }
           >

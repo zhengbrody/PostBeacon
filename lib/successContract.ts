@@ -7,6 +7,14 @@ export const OUTCOME_METRICS: OutcomeMetric[] = [
   "clicks",
   "signups",
   "revenue",
+  "stars",
+  "issues",
+  "repoVisits",
+  "upvotes",
+  "comments",
+  "qualifiedReplies",
+  "visits",
+  "custom",
 ];
 
 export const SIGNAL_LABELS: Record<OutcomeMetric, string> = {
@@ -15,12 +23,25 @@ export const SIGNAL_LABELS: Record<OutcomeMetric, string> = {
   clicks: "Qualified visits / clicks",
   signups: "Signups / installs",
   revenue: "Revenue ($)",
+  stars: "GitHub stars",
+  issues: "GitHub issues",
+  repoVisits: "Repository visits",
+  upvotes: "Upvotes",
+  comments: "Comments",
+  qualifiedReplies: "Qualified replies",
+  visits: "Product visits",
+  custom: "Custom signal",
 };
 
 const WINDOWS = new Set<SuccessWindow>(["24h", "72h"]);
 const METRICS = new Set<OutcomeMetric>(OUTCOME_METRICS);
 
 function boundedNumber(value: unknown): number | undefined {
+  if (
+    (typeof value !== "number" && typeof value !== "string") ||
+    (typeof value === "string" && !value.trim())
+  )
+    return undefined;
   const number = typeof value === "number" ? value : Number(value);
   if (!Number.isFinite(number) || number < 0) return undefined;
   return Math.min(number, 1_000_000_000);
@@ -80,12 +101,14 @@ export function normalizeSuccessContract(value: unknown): SuccessContract | null
   const evaluationWindow = asString(root.evaluationWindow) as SuccessWindow;
   const minimumResult = boundedNumber(root.minimumResult);
   const baseline = boundedNumber(root.baseline);
+  const customSignalLabel = asString(root.customSignalLabel).trim().slice(0, 80);
   if (
     !primaryGoal ||
     !METRICS.has(primarySignal) ||
     !WINDOWS.has(evaluationWindow) ||
     minimumResult === undefined ||
-    minimumResult <= 0
+    minimumResult <= 0 ||
+    (primarySignal === "custom" && !customSignalLabel)
   ) {
     return null;
   }
@@ -95,17 +118,49 @@ export function normalizeSuccessContract(value: unknown): SuccessContract | null
     minimumResult,
     evaluationWindow,
     ...(baseline === undefined ? {} : { baseline }),
+    ...(primarySignal === "custom" ? { customSignalLabel } : {}),
   };
 }
 
 export function successContractSummary(contract: SuccessContract): string {
   const unit = contract.primarySignal === "revenue" ? "$" : "";
-  return `${SIGNAL_LABELS[contract.primarySignal]} ≥ ${unit}${contract.minimumResult} by ${contract.evaluationWindow}`;
+  return `${signalLabel(contract)} ≥ ${unit}${contract.minimumResult} by ${contract.evaluationWindow}`;
+}
+
+export function signalLabel(contract: SuccessContract): string {
+  return contract.primarySignal === "custom"
+    ? contract.customSignalLabel || "Custom signal"
+    : SIGNAL_LABELS[contract.primarySignal];
+}
+
+export function channelMetrics(
+  platformId: string,
+  primary?: OutcomeMetric
+): OutcomeMetric[] {
+  const metrics: OutcomeMetric[] =
+    platformId === "github"
+      ? ["stars", "issues", "repoVisits"]
+      : platformId === "reddit"
+        ? ["upvotes", "comments", "qualifiedReplies"]
+        : platformId === "producthunt"
+          ? ["visits", "upvotes", "signups"]
+          : ["impressions", "replies", "clicks"];
+  return Array.from(
+    new Set([
+      ...(primary ? [primary] : []),
+      ...metrics,
+      "signups",
+      "revenue",
+    ] as OutcomeMetric[])
+  );
 }
 
 export function outcomeSignal(outcome: Outcome, signal: OutcomeMetric): number | undefined {
+  if (outcome.unavailableMetrics?.includes(signal)) return undefined;
   const value = outcome[signal];
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+  return typeof value === "number" && Number.isFinite(value) && value >= 0
+    ? value
+    : undefined;
 }
 
 export function isFinalContractCheckpoint(

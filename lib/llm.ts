@@ -105,7 +105,8 @@ async function callRaw(
   provider: Provider,
   system: string,
   user: string,
-  maxTokens: number
+  maxTokens: number,
+  singleAttempt = false
 ): Promise<string> {
   if (provider === "claude") {
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -127,6 +128,7 @@ async function callRaw(
   const client = new OpenAI({
     apiKey: isDeepseek ? process.env.DEEPSEEK_API_KEY : process.env.OPENAI_API_KEY,
     baseURL: isDeepseek ? DEEPSEEK_BASE_URL : undefined,
+    ...(singleAttempt ? { maxRetries: 0, timeout: 20_000 } : {}),
   });
   const res = await client.chat.completions.create({
     model: isDeepseek ? DEEPSEEK_MODEL : OPENAI_MODEL,
@@ -281,4 +283,31 @@ export async function generateJson(opts: {
   maxTokens?: number;
 }): Promise<any> {
   return (await generateJsonMeta(opts)).data;
+}
+
+/** Bounded source-research slice: one raw request, no SDK retry, JSON repair or
+ * fallback. Other routes retain their existing provider resilience contract. */
+export async function generateJsonOnce(opts: {
+  provider: "openai" | "deepseek";
+  system: string;
+  user: string;
+  maxTokens: number;
+}): Promise<{ data: unknown; meta: LlmCallMeta }> {
+  if (!availableProviders().includes(opts.provider)) {
+    throw new PublicError("The selected research provider is not configured.", 503);
+  }
+  if (opts.user.length > 24_000 || opts.maxTokens < 1 || opts.maxTokens > 3000) {
+    throw new PublicError("Research exceeds its per-request budget.", 400);
+  }
+  try {
+    const raw = await callRaw(opts.provider, opts.system, opts.user, opts.maxTokens, true);
+    const data: unknown = extractJson(raw);
+    return { data, meta: { provider: opts.provider, model: modelFor(opts.provider) } };
+  } catch (err) {
+    logProviderFailure(opts.provider, err);
+    throw new PublicError(
+      "Research did not complete within its one-request budget. Your existing plan is unchanged. Retry explicitly or use another configured provider.",
+      503
+    );
+  }
 }

@@ -334,12 +334,12 @@ describe("verdictFor (rule-based, absent ≠ 0)", () => {
   it("nothing measured → no-signal with checkpoint-aware advice", () => {
     const v24 = verdictFor(outcome({}), ctx);
     expect(v24.call).toBe("no-signal");
-    expect(v24.advice).toMatch(/72h/);
+    expect(v24.assessment).toBe("insufficient");
     const v72 = verdictFor(outcome({ checkpoint: "72h" }), ctx);
-    expect(v72.advice).toMatch(/stopping/i);
+    expect(v72.assessment).toBe("insufficient");
+    expect(v72.advice).not.toMatch(/stop this channel/i);
     const early = verdictFor(outcome({ checkpoint: "manual" }), ctx);
-    expect(early.reason).toMatch(/early/i);
-    expect(early.advice).toMatch(/24h/i);
+    expect(early.assessment).toBe("insufficient");
   });
   it("explicit observed zeros remain a truthful no-response signal", () => {
     const v24 = verdictFor(

@@ -101,6 +101,7 @@ describe("M25.3 experiment contract and share kit", () => {
       content,
       post: content.posts[0],
       successContract,
+      variable: "hook",
     });
     expect(contract).toMatchObject({
       audience: "Solo software founders",
@@ -125,19 +126,21 @@ describe("M25.3 experiment contract and share kit", () => {
     );
   });
 
-  it("builds exactly three bounded X posts and an honest screenshot plan", () => {
+  it("keeps the product draft and gives honest screenshot instructions", () => {
     const kit = buildShareKit({
       profile,
       recommendation,
       content,
       post: content.posts[0],
       successContract,
+      productUrl: "https://example.com",
     });
     expect(kit.screenshots).toHaveLength(3);
     expect(kit.xPosts).toHaveLength(3);
     expect(kit.xPosts.every((post) => post.length <= 280)).toBe(true);
-    expect(kit.xPosts[2]).toContain("record what actually happened");
-    expect(kit.linkedIn).toContain("No automatic posting and no invented results.");
+    expect(kit.xPosts[0]).toBe(content.posts[0].hook);
+    expect(kit.xPosts[1]).toBe(content.posts[0].body);
+    expect(kit.xPosts[2]).toContain("https://example.com");
     expect(kit.privacyReminder).toContain("hide email addresses");
   });
 

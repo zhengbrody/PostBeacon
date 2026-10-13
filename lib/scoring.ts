@@ -377,7 +377,9 @@ export function groundRecommendations(
   recs: PlatformRecommendation[],
   discoveries: DiscoveredChannel[] | undefined
 ): PlatformRecommendation[] {
-  const validated = (discoveries ?? []).filter((d) => d.validated && d.url && d.name);
+  const validated = (discoveries ?? []).filter(
+    (d) => d.searchBacked && d.sourceId && d.url && d.name
+  );
   if (!validated.length) return recs;
   return recs.map((rec) => {
     const haystack = norm(`${rec.venue ?? ""} ${rec.bestMove ?? ""}`);

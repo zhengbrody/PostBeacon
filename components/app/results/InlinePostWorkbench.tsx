@@ -37,6 +37,8 @@ export function InlinePostWorkbench({
   onPublish,
   onAskCopilot,
   onOpenLibrary,
+  productUrl,
+  plan,
 }: {
   content: PlatformContent;
   facts: Fact[];
@@ -49,8 +51,10 @@ export function InlinePostWorkbench({
   onUpdatePost: (platformId: string, idx: number, patch: Partial<PlatformPost>) => void;
   onRegenerate: (platformId: string) => void;
   onPublish: (platformId: string, postIdx: number) => void;
-  onAskCopilot: (direction: string) => void;
+  onAskCopilot: (direction: string, postIdx?: number) => void;
   onOpenLibrary: () => void;
+  productUrl?: string;
+  plan?: import("@/lib/types").PlannedExperiment;
 }) {
   const requestedIsAvailable =
     defaultPostIdx !== undefined &&
@@ -172,6 +176,9 @@ export function InlinePostWorkbench({
         profile={profile}
         recommendation={recommendation}
         successContract={successContract}
+        productUrl={productUrl}
+        variable={plan?.variable}
+        heldConstant={plan?.heldConstant}
         hookChange={hookChange}
       />
 
@@ -293,11 +300,12 @@ export function InlinePostWorkbench({
             variant="outline"
             onClick={() =>
               onAskCopilot(
-                `Repair the current ${content.platformName} draft so it passes the deterministic Truth Gate. Fix only these issue codes: ${safety.issues
+                `Repair the selected draft [${content.platformId} #${postIdx}] so it passes the deterministic Truth Gate. Fix only these issue codes: ${safety.issues
                   .map((issue) => issue.code)
                   .join(
                     ", "
-                  )}. Preserve every supported factual claim and the selected angle. Propose exactly one generate_variant action with the complete replacement hook and body. Show the before/after diff and do not change the draft until I explicitly apply it.`
+                  )}. Preserve every supported factual claim and the selected angle. Propose exactly one generate_variant action with postIdx ${postIdx} and the complete replacement hook and body. Show the before/after diff and do not change the draft until I explicitly apply it.`,
+                postIdx
               )
             }
           >
@@ -358,7 +366,8 @@ export function InlinePostWorkbench({
           className="text-accent-300 hover:underline"
           onClick={() =>
             onAskCopilot(
-              "Remove AI tells from this draft without changing any factual claim."
+              `Remove AI tells from draft ${postIdx + 1} without changing any factual claim.`,
+              postIdx
             )
           }
         >
@@ -369,7 +378,8 @@ export function InlinePostWorkbench({
           className="text-accent-300 hover:underline"
           onClick={() =>
             onAskCopilot(
-              "Give this draft a sharper, platform-native hook and explain why it is stronger."
+              `Give draft ${postIdx + 1} a sharper, platform-native hook and explain why it is stronger.`,
+              postIdx
             )
           }
         >

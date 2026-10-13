@@ -1,6 +1,6 @@
 import { generateJson } from "./llm";
 import { asRecordList, asString } from "./coerce";
-import { searchWeb, searchConfigured } from "./search";
+import { searchWeb, searchConfigured, type SearchResult } from "./search";
 import { safeFetch } from "./safeFetch";
 import { BlockedUrlError, PublicError } from "./errors";
 import { isPublicHttpUrl } from "./urlPolicy";
@@ -12,9 +12,9 @@ import type { DiscoveredChannel, ProductProfile, Provider } from "./types";
  * and newsletters where this product's audience already gathers.
  *
  * Grounded path (SEARCH_API_KEY set): run real web searches, then have the model
- * SELECT from real results (never invent URLs) → these come back `validated`.
+ * SELECT from real results; code enforces URL membership → `searchBacked`.
  * Fallback path (no key): the model names channels from its own knowledge, and
- * we tag each as validated only if its URL is reachable. Best-effort throughout.
+ * reachability is separate from evidence and never verifies community rules.
  */
 export async function discoverChannels(
   profile: ProductProfile,
@@ -66,23 +66,63 @@ Return JSON: { "channels": [ { "name": string, "url": string, "why": string, "so
       }))
       // Model/search output is untrusted: drop anything that isn't a plain
       // public http(s) URL before it's probed, rendered as a link, or saved.
-      .filter((c: DiscoveredChannel) => isPublicHttpUrl(c.url))
+      .filter(
+        (c: DiscoveredChannel) =>
+          isPublicHttpUrl(c.url) &&
+          (!hasGrounding || searchSourceId(c.url, grounded) !== undefined)
+      )
       .slice(0, 10) as DiscoveredChannel[];
 
     const liveness = await Promise.all(normalized.map((c) => checkUrl(c.url)));
 
     if (hasGrounding) {
-      // Grounded URLs come from a real search index → trust them, just drop any
-      // that are now definitively gone (404/410).
+      // Search membership is proven, not page content or current venue rules.
       return normalized
         .filter((_, i) => liveness[i] !== "dead")
-        .map((c) => ({ ...c, validated: true }));
+        .map((c) => ({
+          ...c,
+          name: (
+            grounded.find(
+              (source) =>
+                searchSourceId(source.url, grounded) === searchSourceId(c.url, grounded)
+            )?.title || new URL(c.url).hostname + new URL(c.url).pathname
+          ).slice(0, 300),
+          validated: false,
+          searchBacked: true,
+          sourceId: searchSourceId(c.url, grounded),
+          reachable: liveness[normalized.indexOf(c)] === "live",
+          contentRead: false,
+          rulesReviewed: false,
+        }));
     }
-    // LLM-only: a URL the model invented is only trustworthy if it actually resolves.
-    return normalized.map((c, i) => ({ ...c, validated: liveness[i] === "live" }));
+    // A reachable model suggestion remains ungrounded.
+    return normalized.map((c, i) => ({
+      ...c,
+      validated: false,
+      searchBacked: false,
+      reachable: liveness[i] === "live",
+      contentRead: false,
+      rulesReviewed: false,
+    }));
   } catch {
     return []; // discovery is best-effort; never block the strategy on it
   }
+}
+
+/** Source membership is enforced in code, not by asking the model nicely. */
+export function searchSourceId(url: string, sources: SearchResult[]): string | undefined {
+  const canonical = (value: string) => {
+    try {
+      const parsed = new URL(value);
+      parsed.hash = "";
+      return parsed.href;
+    } catch {
+      return "";
+    }
+  };
+  const key = canonical(url);
+  const index = key ? sources.findIndex((source) => canonical(source.url) === key) : -1;
+  return index < 0 ? undefined : `search:${index + 1}`;
 }
 
 /** A few targeted search queries derived from the product profile. */

@@ -1,5 +1,8 @@
 import { PLATFORMS } from "./platforms";
 import { successContractSummary } from "./successContract";
+import { auditDraftSafety } from "./contentSafety";
+import { normalizeTrackedUrl } from "./trackedUrl";
+import { VARIABLE_LABELS } from "./experimentQueue";
 import type {
   Fact,
   PlatformContent,
@@ -7,12 +10,13 @@ import type {
   PlatformRecommendation,
   ProductProfile,
   SuccessContract,
+  TestedVariable,
 } from "./types";
 
 export interface ExperimentContractProjection {
   audience: string;
   venue: string;
-  variable: "Hook";
+  variable: string;
   candidate: string;
   angle: string;
   decisionRule: string;
@@ -36,6 +40,8 @@ export interface ShareKit {
   xPosts: string[];
   linkedIn: string;
   privacyReminder: string;
+  copyReady: boolean;
+  issues: string[];
 }
 
 interface DraftDecisionInput {
@@ -44,6 +50,10 @@ interface DraftDecisionInput {
   content: PlatformContent;
   post: Pick<PlatformPost, "hook" | "body">;
   successContract?: SuccessContract;
+  variable?: TestedVariable;
+  productUrl?: string;
+  facts?: Fact[];
+  shareMode?: "product" | "process";
 }
 
 const fallback = (value: string | undefined, label: string) => value?.trim() || label;
@@ -56,22 +66,18 @@ function clip(value: string, max: number): string {
   return `${candidate.slice(0, boundary > max * 0.6 ? boundary : candidate.length)}…`;
 }
 
-function fitX(value: string): string {
-  if (value.length <= 280) return value;
-  return clip(value, 280);
-}
-
 export function projectExperimentContract({
   profile,
   recommendation,
   content,
   post,
   successContract,
+  variable = "exploratory",
 }: DraftDecisionInput): ExperimentContractProjection {
   return {
     audience: fallback(profile.audience, "Audience not confirmed"),
     venue: fallback(recommendation?.venue, content.platformName),
-    variable: "Hook",
+    variable: VARIABLE_LABELS[variable],
     candidate: fallback(post.hook, "No hook selected"),
     angle: fallback(recommendation?.angle, "Angle not recorded"),
     decisionRule: successContract
@@ -135,45 +141,82 @@ export function buildShareKit(input: DraftDecisionInput): ShareKit {
   const venue = clip(contract.venue, 60);
   const rule = clip(contract.decisionRule, 110);
 
-  const xPosts = [
-    fitX(
-      `1/3\n\nI’m testing a clearer growth loop for ${name}: verified product facts → one channel decision → one manual experiment.\n\nPostBeacon chose ${platform}, with ${venue} as the next place to test.`
-    ),
-    fitX(
-      `2/3\n\nThe test is explicit: ${rule}.\n\nThe draft shows its evidence and platform rule, runs a deterministic truth check, and records a hook change before I publish.`
-    ),
-    fitX(
-      `3/3\n\nAfter the result window, I’ll record what actually happened. The verdict stays attached to that checkpoint, so the next experiment changes from evidence instead of a fresh AI guess.\n\nBuilt with PostBeacon.`
-    ),
-  ];
+  const process = input.shareMode === "process";
+  const url = normalizeTrackedUrl(input.productUrl);
+  // Preserve complete claims. Overlong copy is blocked, never silently clipped.
+  const xPosts = process
+    ? [
+        `A growth experiment for ${name}: one channel, one manual test.\n\nThe current plan selects ${platform}; venue: ${venue}.`,
+        `The planned success rule: ${rule}.\n\nEvidence and unknowns are reviewed before publishing.`,
+        "After the result window, record what actually happened. A checkpoint read informs the next experiment; it does not prove causality. Built with PostBeacon.",
+      ]
+    : [
+        input.post.hook,
+        input.post.body,
+        `Try ${name}${url ? `: ${url}` : ". Use the product's confirmed public entry point."}\n\nWhat was useful, and where did you get stuck? Feedback is welcome.`,
+      ];
+  const linkedIn = xPosts.join("\n\n");
+  const issues = Array.from(
+    new Set([
+      ...xPosts.flatMap((text) =>
+        auditDraftSafety(
+          { hook: "", body: text },
+          input.facts ?? [],
+          input.profile,
+          "twitter"
+        ).issues.map((issue) => `${issue.title}: ${issue.fix}`)
+      ),
+      ...auditDraftSafety(
+        { hook: "", body: linkedIn },
+        input.facts ?? [],
+        input.profile,
+        "linkedin"
+      ).issues.map((issue) => `${issue.title}: ${issue.fix}`),
+      ...(xPosts.some((text) => text.length > 280)
+        ? [
+            "One X segment exceeds 280 characters. Edit the source draft; no claim was automatically shortened.",
+          ]
+        : []),
+      ...(!process && !url
+        ? ["Confirm a public product URL before copying this product kit."]
+        : []),
+    ])
+  );
 
   return {
     screenshots: [
       {
-        title: "1 · Decision",
-        focus: `Capture the ${platform} recommendation, venue and why it outranks the alternative.`,
-        altText: `PostBeacon recommending ${platform} for ${name}, with the venue and ranking rationale visible.`,
+        title: process ? "1 · Decision" : "1 · The use case",
+        focus: process
+          ? `Capture the ${platform} recommendation and uncertainty.`
+          : `Capture ${name}'s real starting screen and the task a user can try.`,
+        altText: process
+          ? `PostBeacon channel decision for ${name}.`
+          : `${name}'s starting screen for the demonstrated task.`,
       },
       {
-        title: "2 · Draft proof",
-        focus: "Capture the Experiment Contract, selected hook and passed Truth Gate.",
-        altText: `PostBeacon draft workbench showing the experiment contract and truth check for ${name}.`,
+        title: process ? "2 · Draft proof" : "2 · The interaction",
+        focus: process
+          ? "Capture the contract and Truth Gate."
+          : "Capture the actual product operation. Use clearly labelled sample data; do not invent an interface or user results.",
+        altText: process
+          ? `PostBeacon draft workbench for ${name}.`
+          : `${name} during the actual demonstrated interaction.`,
       },
       {
-        title: "3 · Learning loop",
-        focus:
-          "Capture Prepare → Publish → Measure → Learn and the next result checkpoint.",
-        altText: `PostBeacon progress view for the ${platform} experiment, from preparation through learning.`,
+        title: process ? "3 · Learning loop" : "3 · The result",
+        focus: process
+          ? "Capture the next result checkpoint."
+          : "Capture the real task output and the next usable action. Hide private data and label simulated output.",
+        altText: process
+          ? `PostBeacon experiment progress for ${name}.`
+          : `${name}'s demonstrated task output; sample data must be labelled.`,
       },
     ],
     xPosts,
-    linkedIn: [
-      `I’m testing a more disciplined growth loop for ${name}.`,
-      `PostBeacon verified the product evidence, compared the available channels and selected ${platform} — specifically ${venue} — as one experiment to run next.`,
-      `Before publishing, the workspace makes the contract visible: ${contract.decisionRule}. It also shows which facts and platform rules support the draft, runs a deterministic truth check and records a hook change instead of silently replacing it.`,
-      "After the result window, I’ll record the real outcome. The verdict remains attached to that checkpoint, and the evidence shapes the next experiment.",
-      "No automatic posting and no invented results.",
-    ].join("\n\n"),
+    linkedIn,
+    copyReady: issues.length === 0,
+    issues,
     privacyReminder:
       "Before sharing, hide email addresses, private project tabs, live-post URLs and any unannounced metrics.",
   };

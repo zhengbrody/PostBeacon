@@ -1,13 +1,20 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useReducer, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { clearDraft, loadDraft } from "@/lib/storage";
 import { DEMO_PROJECT } from "@/lib/demo";
 import { PLATFORMS } from "@/lib/platforms";
 import type { ContextField } from "@/lib/facts";
 import { variantDirection } from "@/lib/today";
-import { effectiveExperimentVerdict } from "@/lib/experimentHistory";
+import { followUpDirection } from "@/lib/experimentQueue";
+import { exampleOpportunityResearch, researchContextKey } from "@/lib/opportunityResearch";
+import { proposalStale } from "@/lib/copilotActions";
+import {
+  effectiveExperimentVerdict,
+  completedScheduledVerdict,
+} from "@/lib/experimentHistory";
+import { verdictFor } from "@/lib/today";
 import { PRODUCT_EVENTS, trackProductEvent } from "@/lib/productAnalytics";
 import {
   applyActionPlan,
@@ -37,6 +44,8 @@ import type {
   ProviderRunMeta,
   EvidenceSourceInput,
   SuccessContract,
+  PlannedExperiment,
+  TrialResearchInput,
 } from "@/lib/types";
 
 export type { Step };
@@ -49,6 +58,8 @@ export type { Step };
  */
 export function useLaunchFlow() {
   const [state, dispatch] = useReducer(flowReducer, initialFlowState);
+  const currentState = useRef(state);
+  currentState.current = state;
   const [provider, setProvider] = useState<Provider>("claude");
   const [availProviders, setAvailProviders] = useState<Provider[]>([]);
   const [loading, setLoading] = useState(false);
@@ -134,6 +145,61 @@ export function useLaunchFlow() {
         provider: strategy.meta?.provider ?? provider,
       });
     }, "Scanning every platform & ranking your channels…");
+
+  const researchOpportunities = (input: TrialResearchInput) =>
+    run(
+      async () => {
+        if (!state.profile || !state.workspace.successContract || !state.result)
+          throw new Error(
+            "Prepare a plan and success definition before researching trials."
+          );
+        if (!state.demo && provider === "claude")
+          throw new Error(
+            "Choose OpenAI or DeepSeek for source research. Claude is not enabled for this workflow."
+          );
+        const research = state.demo
+          ? exampleOpportunityResearch(
+              state.profile,
+              state.facts,
+              state.workspace.successContract,
+              state.url,
+              state.memory.bannedClaims
+            )
+          : await api.opportunities({
+              provider: provider === "deepseek" ? "deepseek" : "openai",
+              productUrl: state.url,
+              profile: state.profile,
+              facts: state.facts,
+              successContract: state.workspace.successContract,
+              input,
+              bannedClaims: state.memory.bannedClaims,
+            });
+        const current = currentState.current;
+        if (
+          !current.profile ||
+          current.projectId !== state.projectId ||
+          research.contextKey !==
+            researchContextKey(
+              current.profile,
+              current.facts,
+              current.workspace.successContract,
+              current.url,
+              current.memory.bannedClaims
+            )
+        )
+          throw new Error(
+            "The project or evidence changed while research was running. The old response was discarded; review the current context and retry."
+          );
+        dispatch({
+          type: "OPPORTUNITY_RESEARCH_RECEIVED",
+          projectId: state.projectId,
+          research,
+        });
+      },
+      state.demo
+        ? "Loading fictional trial data — no model call…"
+        : "Checking only your submitted sources and preparing tentative invitations…"
+    );
 
   const generate = () =>
     run(async () => {
@@ -270,6 +336,104 @@ export function useLaunchFlow() {
     }, `Writing a follow-up variant for ${experiment.platformName}…`);
   };
 
+  const preparePlannedExperiment = (id: string) =>
+    run(async () => {
+      const plan = state.workspace.plannedExperiments?.find(
+        (item) => item.id === id && item.status === "planned"
+      );
+      const source = state.workspace.experiments.find(
+        (item) => item.id === plan?.sourceExperimentId
+      );
+      if (!plan || !source || !profile || !state.strategy || !state.result) return;
+      const sourcePost =
+        source.snapshot?.draft ??
+        state.result.content.find((item) => item.platformId === source.platformId)?.posts[
+          source.postIdx
+        ];
+      if (!sourcePost)
+        throw new Error(
+          "The source draft is unavailable. Choose an exploratory experiment instead."
+        );
+      const existing = state.result.content.find(
+        (item) => item.platformId === plan.platformId
+      );
+      if ((existing?.posts.length ?? 0) >= 12)
+        throw new Error(
+          "This channel has reached the 12-draft limit. Export your history and start a new plan."
+        );
+      let post: PlatformPost;
+      if (state.demo) {
+        post = {
+          hook: "Example follow-up: try another opening",
+          body: sourcePost.body,
+          imageSuggestion: "Example data only",
+          bestTime: "",
+          caveats: "Fictional walkthrough; nothing is posted or sent to a model.",
+        };
+      } else {
+        const seed = { ...sourcePost, imageSuggestion: "", bestTime: "", caveats: "" };
+        const contextResult = {
+          ...state.result,
+          content: [
+            ...state.result.content.filter((item) => item.platformId !== plan.platformId),
+            { platformId: plan.platformId, platformName: plan.platformName, posts: [seed] },
+          ],
+        };
+        const res = await api.copilot({
+          provider,
+          profile: {
+            ...profile,
+            audience: source.snapshot?.audience ?? profile.audience,
+            publisherVoice: source.snapshot?.publisherVoice ?? profile.publisherVoice,
+          },
+          strategy: state.strategy,
+          result: contextResult,
+          facts: source.snapshot?.facts ?? facts,
+          workspace: {
+            ...state.workspace,
+            experiments: [
+              ...state.workspace.experiments
+                .filter((item) => item.id !== source.id)
+                .slice(-29),
+              source,
+            ],
+          },
+          memory: state.memory,
+          launchDate: state.launchDate,
+          action: "rewrite",
+          targetPlatformId: plan.platformId,
+          targetPostIdx: 0,
+          question: followUpDirection(plan, source),
+        });
+        adoptFallback(res.meta);
+        const proposal = res.actions.find(
+          (item) =>
+            item.tool === "generate_variant" &&
+            item.platformId === plan.platformId &&
+            item.hook &&
+            item.body
+        );
+        if (
+          !proposal ||
+          proposal.tool !== "generate_variant" ||
+          !proposal.hook ||
+          !proposal.body
+        )
+          throw new Error(
+            "No complete draft was returned. The experiment is still queued; retry when ready."
+          );
+        post = {
+          hook: plan.variable === "cta" ? sourcePost.hook : proposal.hook,
+          body:
+            plan.variable === "hook" && source.snapshot ? sourcePost.body : proposal.body,
+          imageSuggestion: "",
+          bestTime: "",
+          caveats: "Manual experiment; no causal inference is claimed.",
+        };
+      }
+      dispatch({ type: "PLANNED_DRAFT_PREPARED", id, post });
+    }, "Preparing the queued experiment — nothing will be posted…");
+
   // ---- Copilot action engine (M16). The ONLY bridge from a proposal to
   // ---- state, and it only runs from an explicit user confirmation.
 
@@ -305,6 +469,10 @@ export function useLaunchFlow() {
    *  kind so the panel can open dialogs / trigger the rewrite call. */
   const applyAction = (a: ProposedAction): ApplyKind => {
     const ctx = actionCtx();
+    if (proposalStale(a, ctx)) {
+      auditBlocked(1);
+      return "blocked";
+    }
     const kind = applyKindOf(a);
     for (const action of applyActionPlan(a, ctx)) {
       dispatch(
@@ -509,6 +677,27 @@ export function useLaunchFlow() {
     snapshot,
     // ---- workspace (M15) ----
     workspace: state.workspace,
+    planExperiment: (plan: PlannedExperiment) =>
+      dispatch({ type: "EXPERIMENT_PLANNED", plan }),
+    cancelPlannedExperiment: (id: string) =>
+      dispatch({ type: "PLANNED_EXPERIMENT_CANCELLED", id }),
+    preparePlannedExperiment,
+    researchOpportunities,
+    clearOpportunityResearch: () => dispatch({ type: "OPPORTUNITY_RESEARCH_CLEARED" }),
+    queueOpportunity: (
+      researchId: string,
+      opportunityId: string,
+      rulesUserChecked: boolean,
+      trialUserChecked: boolean
+    ) =>
+      dispatch({
+        type: "OPPORTUNITY_QUEUED",
+        researchId,
+        opportunityId,
+        rulesUserChecked,
+        trialUserChecked,
+        at: new Date().toISOString(),
+      }),
     successContract: state.workspace.successContract,
     setSuccessContract: (contract: SuccessContract) =>
       dispatch({ type: "SUCCESS_CONTRACT_SET", contract }),
@@ -545,7 +734,26 @@ export function useLaunchFlow() {
         });
         // Manual early reads are useful, but the retention north star counts
         // only a scheduled 24h/72h learning loop.
-        if (outcome.checkpoint !== "manual") {
+        const source = state.workspace.experiments.find((item) => item.id === experimentId);
+        const read = source
+          ? verdictFor(outcome, {
+              platformName: source.platformName,
+              angle: source.angle,
+              successContract: source.successContract,
+            })
+          : undefined;
+        if (
+          outcome.checkpoint !== "manual" &&
+          read &&
+          read.assessment !== "insufficient" &&
+          read.assessment !== "invalidated" &&
+          source &&
+          !completedScheduledVerdict(source) &&
+          completedScheduledVerdict({
+            ...source,
+            outcomes: [...source.outcomes, { ...outcome, verdict: read }],
+          })
+        ) {
           trackProductEvent(PRODUCT_EVENTS.learningLoopCompleted, {
             mode: "signed-in",
             checkpoint: outcome.checkpoint,

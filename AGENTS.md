@@ -55,6 +55,8 @@ app/
     metrics/route.ts                   CRON_SECRET-gated aggregate funnel/weekly-retention
                                        report; no identities, content, or outcome values
     copilot/route.ts                                                 Launch Copilot (plan-scoped CMO chat)
+    opportunities/route.ts      C.1 signed-in, explicit-source trial research; one model
+                                 request, no automatic fallback or autonomous publishing
     billing/{checkout,webhook}/route.ts                              Polar checkout + webhook
 lib/
   types.ts              All shared types (Provider, ProductProfile, MarketingStrategy, ...)
@@ -121,6 +123,14 @@ lib/
                         effort and observable-signal projection
   experimentContract.ts M25.3 pure Prepare/Publish contract, draft provenance and bounded
                         X/LinkedIn share-kit projections from canonical plan state
+  experimentQueue.ts    M26 A/B bounded planned-test normalization and deterministic
+                        comparison boundary; changed held conditions become exploratory
+  learningEvidence.ts   M26 A/B Outcome-referenced, final-window angle evidence and
+                        observed 72h-minus-24h deltas; unknown/invalid tests excluded
+  opportunityResearch.ts C.1 bounded saved receipts, eligible product facts, current-context
+                         trial gate and confirmed trial provenance; not AgentRun jobs
+  opportunityResearchServer.ts Explicit source-only safe fetch and single-request provider
+                              orchestration; quote verification is not demand/rules review
   execution.ts          M19 Prepare→Publish→Measure→Learn lifecycle projection,
                         countdowns and operator-controlled platform destinations
   experimentHistory.ts M24.1 Outcome-owned verdict reads, honest legacy-final fallback
@@ -148,7 +158,8 @@ lib/
   api.ts                Browser→server typed client (used by the hook)
   projectSaveError.ts   Bounded Supabase/PostgREST project-save error copy
   storage.ts            Versioned localStorage draft (DRAFT_SCHEMA_VERSION + migrateDraft;
-                        v9 includes receipt + Success Contract; projects.meta carries it)
+                        v11 includes receipts, Success Contract, queue, publish snapshots and trial provenance;
+                        projects.meta carries the authoritative workspace)
   supabase/client.ts    Browser Supabase client (graceful if unconfigured)
   supabase/server.ts    Service-role client (server-only; trust-counts usage)
 hooks/
@@ -196,6 +207,14 @@ docs/M25-evidence-receipt.md Server-authored source coverage, multi-page evidenc
 docs/M25.1-success-contract.md Compact Diagnose, measurable success definition and v9 contract
 docs/M25.2-focused-strategy.md One-decision Strategy, deterministic rank/migration contract
 docs/M25.3-experiment-contract.md Auditable Prepare/Publish contract, repair Diff and Share Kit
+docs/M26-calibrated-continuity.md A/B delivery: honest observations, graded learning,
+                                confirmed queue, frozen publish history and QA boundary
+docs/M26.C1-source-trials.md Source→trial-kit→confirm→queue slice; budgets, provenance,
+                           no-background-job boundary and pending production acceptance
+docs/M26-release-acceptance.md Explicit release scope, signed-out smoke evidence,
+                              required real-provider/cloud/account acceptance
+scripts/release-smoke.mjs  Credential-free public release gates; never labels smoke
+                          as full production acceptance or invokes a model/deletion
 tests/                  vitest suites: urlPolicy, safeFetch, billing, webhook route, validate,
                         golden (12-fixture offline evals), generateRoute, flowReducer
                         (state-machine invariants), storage (draft migrations), workspace
@@ -273,6 +292,7 @@ npm test                 # vitest (offline suites in tests/; no API keys needed)
 npm run lint             # eslint . (flat config, non-interactive)
 npm run format:check     # prettier --check . (CI-enforced)
 npm run build            # must stay green
+npm run release:smoke -- https://postbeacon.app # signed-out public gates, not full acceptance
 RUN_LIVE_EVAL=1 npx vitest run tests/eval.live.test.ts   # live provider eval → eval-results/
 ```
 
@@ -314,6 +334,67 @@ cross-origin 403. Aggregate product-health reporting is operator-only at `/api/m
 Redeploy: `npx vercel --prod --yes`. Push env from `.env.local`: `~/push-env.sh`.
 
 ## Status / changelog
+- **2026-10-12**: **A/B + C.1 release acceptance preparation.** Added a portable native-fetch
+  release checker with fixed, credential-free probes, no redirects, request/body bounds
+  and non-sensitive JSON results. A passing public smoke explicitly does not imply full
+  production acceptance; real provider/cloud persistence/account isolation remain required.
+  Eight checker regressions cover missing/disabled routes, stale privacy text, redirects,
+  credential-free behavior and bounded/redacted failures. A fresh production read found
+  `/app` 200 and existing export/metrics auth gates 401, but `/api/opportunities` 404 for
+  both unsigned and cross-origin requests and the trial-research privacy notice absent.
+  No production writes/model calls/deletion/deployment were performed. Release promotion
+  was subsequently authorized by the user after smoke; C.2 jobs/budgets are not
+  part of this release. Deployment results are recorded separately below when verified.
+  The built local app passed all six probes at its canonical `localhost` origin;
+  the `127.0.0.1` alias was rejected by the same-origin check, which was not weakened.
+  Final candidate gates: 505 offline tests passed, two live tests skipped; typecheck,
+  lint, formatting, production build and diff checks passed. This does not replace
+  authenticated production, provider, cloud persistence or retention acceptance.
+- **2026-10-12**: **C.1 — source-backed product-trial preparation (local, not deployed).**
+  Today exposes an explicit-source workbench: up to three short demand excerpts, a
+  same-origin product trial, founder-provided three steps and feedback question, and a
+  publication venue separate from the evidence source. Optional static fetch is SSRF-safe,
+  redirect-free, renderer-free and bounded; receipts distinguish quote found/not found,
+  fetch failure and unverified submitted excerpts. Fit remains a hypothesis; freshness,
+  demand and venue permission are not invented. One selected OpenAI/DeepSeek model request
+  has no SDK retry/provider fallback; Claude is not enabled. Truth/approved-link/literal
+  banned-claim gates, stale-context/form guards and two founder acknowledgements precede
+  atomic ready-queue confirmation. Publication freezes the trial audience/source/steps
+  alongside existing draft/fact/voice/goal history; discard does not erase confirmed trials.
+  Schema v11 stays in owner-scoped project JSON, exports and existing deletion/retention.
+  No SQL/env/vendor change; privacy notice/inventory updated. A hostname-only demo bug
+  caught by browser QA was fixed with a regression; the Copilot route's missing draft-index
+  forwarding was also repaired. Resumable Agent jobs, atomic global spend budgets,
+  real activation/retention and connectors/MCP remain pending. See C.1 delivery doc.
+  Final gates: 497 offline tests passed, two live tests skipped; typecheck, lint,
+  format, production build and diff checks passed. Desktop 1440×1000 and real mobile
+  375×812 development-browser source→review→dual-confirm→queue→publish paths passed
+  with no model requests, warnings/errors or horizontal overflow; A/B continuity was
+  rechecked. Direct local research probes returned signed-out 401 and cross-origin 403.
+  These are local/mock/fictional checks, not fresh production/provider/account acceptance.
+- **2026-10-11**: **M26 A/B — calibrated learning and continuous experiments (local,
+  not deployed in this turn).** Unknown/unavailable observations no longer become zero,
+  invalid tests retain history but do not become losing memory, and channel-specific
+  signals/custom labels/72h deltas lead Measure. Angle memory is rebuilt from eligible
+  final Outcome reads, distinguishing early/repeated/conflicting evidence rather than
+  promoting promising reads into wins. Search-result URL membership is enforced separately
+  from reachability; community content/rules are not claimed as reviewed. Share Kit defaults
+  to the user's product and blocks unsafe or overlong copy instead of clipping claims.
+  Copilot variants bind platform/index and source text; stale Apply is blocked. Publish
+  freezes audience, voice, facts, draft and success rule. Explicit follow-up confirmation
+  creates an independently identified planned test, preparation appends a new draft, and
+  publishing consumes the queue atomically; cancel/duplicate/late-response paths are tested.
+  Changed held conditions downgrade comparisons to exploratory. Schema v10 uses existing
+  owner-scoped project JSON; no SQL, environment, vendor, billing or posting integration
+  was added. Aggregate counts exclude insufficient/invalidated reads and fetch only a
+  bounded assessment label, never metric values. Growth Agent research/jobs/connectors
+  remain future stages, not implemented by this milestone. 451 offline tests pass
+  (two live tests skipped); typecheck, lint, format and production build are green.
+  Desktop 1440×1000 and mobile 375×812 fictional walkthroughs exercised a confirmed
+  second experiment and unavailable-result handling without model calls or horizontal
+  overflow. Dev browser runs were clean; local production runs encountered the absent
+  Vercel Analytics endpoint, so production assets/account/provider acceptance remains
+  a release check rather than a claimed live verification.
 - **2026-08-12**: **M25.3 — Prepare and Publish are auditable.** The primary
   draft now opens with one Experiment Contract assembled from canonical profile,
   recommendation and Success Contract state: audience/venue, one tested Hook,

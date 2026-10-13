@@ -130,6 +130,9 @@ export function LaunchSetup({
                     setSuccessContract({
                       ...successContract,
                       primarySignal: event.target.value as OutcomeMetric,
+                      baseline: undefined,
+                      customSignalLabel:
+                        event.target.value === "custom" ? "My signal" : undefined,
                     })
                   }
                   className="mt-1.5 min-h-11 w-full rounded-md border border-line bg-surface-2 px-3 text-sm text-neutral-100 outline-none focus:border-accent-500"
@@ -141,6 +144,23 @@ export function LaunchSetup({
                   ))}
                 </select>
               </label>
+              {successContract.primarySignal === "custom" && (
+                <label className="text-xs text-neutral-400">
+                  Name the observable signal
+                  <input
+                    maxLength={80}
+                    value={successContract.customSignalLabel ?? ""}
+                    onChange={(event) =>
+                      setSuccessContract({
+                        ...successContract,
+                        customSignalLabel: event.target.value,
+                      })
+                    }
+                    className="mt-1 min-h-11 w-full rounded-md border border-line bg-surface-2 px-3 text-sm"
+                    placeholder="e.g. Completed demo tasks"
+                  />
+                </label>
+              )}
               <label className="text-xs text-neutral-400">
                 Meaningful minimum result
                 <input

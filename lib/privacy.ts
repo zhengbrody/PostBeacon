@@ -9,11 +9,11 @@ import type { Provider } from "./types";
 import { guestPreviewQuotaConfigured } from "./guestPreviewQuota";
 
 /** Bump when the published policy text meaningfully changes. */
-export const PRIVACY_LAST_UPDATED = "2026-07-25";
+export const PRIVACY_LAST_UPDATED = "2026-10-12";
 
 /**
  * How each LLM provider handles API data, per its PUBLIC policy as of
- * PRIVACY_LAST_UPDATED (re-verify before changing provider configuration or
+ * 2026-07-25 (not a fresh vendor-policy audit; re-verify before changing provider configuration or
  * publishing these statements outside the private beta).
  * `clearPolicy: false` means training use isn't clearly excluded — such a
  * provider is never picked as the code default (see availableProviders) and
@@ -136,7 +136,7 @@ export const SUBPROCESSORS: Subprocessor[] = [
   {
     name: "OpenAI",
     role: "AI model (GPT)",
-    data: "Your product page text, profile, plan context, and anything you paste to the copilot",
+    data: "Your product page text, profile, plan context, Copilot input, and submitted demand excerpts/trial instructions during explicit source research",
     region: PROVIDER_PRIVACY.openai.region,
     when: "Only if configured, and when selected as primary or used as a clear-policy fallback",
     policyUrl: PROVIDER_PRIVACY.openai.policyUrl,
@@ -144,7 +144,7 @@ export const SUBPROCESSORS: Subprocessor[] = [
   {
     name: "DeepSeek",
     role: "AI model",
-    data: "Your product page text, profile, plan context, and anything you paste to the copilot",
+    data: "Your product page text, profile, plan context, Copilot input, and submitted demand excerpts/trial instructions during explicit source research",
     region: PROVIDER_PRIVACY.deepseek.region,
     when: deepseekAutomaticFallbackEnabled()
       ? "When selected as primary, or as the explicitly enabled beta fallback after another provider fails"
@@ -335,7 +335,7 @@ export const DATA_CATEGORIES: DataCategory[] = [
     deletion: "Delete project (×) or delete account",
   },
   {
-    what: "Workspace data (experiments, outcomes/metrics you type, tasks, audit log, product memory)",
+    what: "Workspace data (planned experiments, published draft/fact/voice snapshots, submitted public source URLs/short demand excerpts and source-research receipts, founder-supplied trial instructions, outcomes/metrics you type, unavailable or invalid measurements, tasks, audit log, product memory)",
     where: "Supabase, same owner-only rules",
     why: "The publish → measure → learn loop",
     retention: "With its project",

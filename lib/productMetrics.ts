@@ -29,6 +29,7 @@ export interface OutcomeMetricRow {
   user_id: string;
   checkpoint: string;
   recorded_at: string;
+  assessment?: string | null;
 }
 
 export interface TaskMetricRow {
@@ -106,7 +107,7 @@ async function allRows<T>(
   throw new Error("Product metrics query exceeded its safe row limit.");
 }
 
-/** Load only identity keys and lifecycle timestamps; never plan/draft/outcome content. */
+/** Load keys, timestamps and the bounded verdict assessment, never content or values. */
 export async function loadProductMetricRows(
   sb: SupabaseClient
 ): Promise<ProductMetricRows> {
@@ -151,7 +152,9 @@ export async function loadProductMetricRows(
         (from, to) =>
           sb
             .from("outcomes")
-            .select("id,experiment_id,user_id,checkpoint,recorded_at")
+            .select(
+              "id,experiment_id,user_id,checkpoint,recorded_at,assessment:verdict->>assessment"
+            )
             .order("id", { ascending: true })
             .range(from, to) as unknown as PromiseLike<PageResult<OutcomeMetricRow>>
       ),
@@ -206,9 +209,16 @@ function completedLoopIds(
   from?: number,
   to?: number
 ): Set<string> {
+  const invalidated = new Set(
+    rows.outcomes
+      .filter((item) => item.assessment === "invalidated")
+      .map((item) => item.experiment_id)
+  );
   const analyzed = new Set(
     rows.experiments
-      .filter((experiment) => experiment.status === "analyzed")
+      .filter(
+        (experiment) => experiment.status === "analyzed" && !invalidated.has(experiment.id)
+      )
       .map((experiment) => experiment.id)
   );
   return new Set(
@@ -217,6 +227,8 @@ function completedLoopIds(
         (outcome) =>
           analyzed.has(outcome.experiment_id) &&
           outcome.checkpoint !== "manual" &&
+          outcome.assessment !== "insufficient" &&
+          outcome.assessment !== "invalidated" &&
           (from === undefined || to === undefined || within(outcome.recorded_at, from, to))
       )
       .map((outcome) => outcome.experiment_id)
@@ -238,7 +250,11 @@ export function buildProductMetrics(
   const projectUsers = ids(rows.projects);
   const planUsers = ids(rows.generatedPlans);
   const publishUsers = ids(rows.experiments);
-  const measureUsers = ids(rows.outcomes);
+  const measureUsers = ids(
+    rows.outcomes.filter(
+      (item) => item.assessment !== "insufficient" && item.assessment !== "invalidated"
+    )
+  );
   const allLoopIds = completedLoopIds(rows);
   const loopUsers = ids(
     rows.experiments.filter((experiment) => allLoopIds.has(experiment.id))

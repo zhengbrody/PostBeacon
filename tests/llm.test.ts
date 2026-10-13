@@ -4,6 +4,7 @@ const sdk = vi.hoisted(() => ({
   anthropicCreate: vi.fn(),
   openaiCreate: vi.fn(),
   deepseekCreate: vi.fn(),
+  options: vi.fn(),
 }));
 
 vi.mock("@anthropic-ai/sdk", () => ({
@@ -17,6 +18,7 @@ vi.mock("openai", () => ({
     chat: { completions: { create: typeof sdk.openaiCreate } };
 
     constructor(opts: { baseURL?: string }) {
+      sdk.options(opts);
       this.chat = {
         completions: {
           create: opts.baseURL ? sdk.deepseekCreate : sdk.openaiCreate,
@@ -26,7 +28,7 @@ vi.mock("openai", () => ({
   },
 }));
 
-import { generateJsonMeta } from "@/lib/llm";
+import { generateJsonMeta, generateJsonOnce } from "@/lib/llm";
 import { PublicError } from "@/lib/errors";
 
 const KEY_ENVS = [
@@ -55,6 +57,7 @@ beforeEach(() => {
   sdk.anthropicCreate.mockReset();
   sdk.openaiCreate.mockReset();
   sdk.deepseekCreate.mockReset();
+  sdk.options.mockReset();
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
 
@@ -136,5 +139,65 @@ describe("automatic provider failover", () => {
     expect(result.data).toEqual({ repairedByFallback: true });
     expect(result.meta).toMatchObject({ provider: "openai", fallbackFrom: "claude" });
     expect(sdk.anthropicCreate).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("single-attempt research budget", () => {
+  it("sets a 20s SDK timeout and zero retries, returning actual provider metadata", async () => {
+    sdk.openaiCreate.mockResolvedValue(openAiJson({ opportunities: [] }));
+    const result = await generateJsonOnce({
+      provider: "openai",
+      system: "system",
+      user: "bounded",
+      maxTokens: 2600,
+    });
+    expect(result.meta.provider).toBe("openai");
+    expect(sdk.openaiCreate).toHaveBeenCalledOnce();
+    expect(sdk.options).toHaveBeenCalledWith(
+      expect.objectContaining({ timeout: 20_000, maxRetries: 0 })
+    );
+  });
+  it.each(["invalid-json", "credit"])(
+    "does not repair, retry or fallback on %s",
+    async (mode) => {
+      process.env.NEXT_PUBLIC_DEEPSEEK_FALLBACK = "true";
+      if (mode === "credit") sdk.openaiCreate.mockRejectedValue(upstreamError(402));
+      else
+        sdk.openaiCreate.mockResolvedValue({
+          choices: [{ message: { content: "private non-JSON output" } }],
+        });
+      await expect(
+        generateJsonOnce({
+          provider: "openai",
+          system: "system",
+          user: "bounded",
+          maxTokens: 2600,
+        })
+      ).rejects.toMatchObject({ status: 503 });
+      expect(sdk.openaiCreate).toHaveBeenCalledOnce();
+      expect(sdk.deepseekCreate).not.toHaveBeenCalled();
+      expect(sdk.anthropicCreate).not.toHaveBeenCalled();
+    }
+  );
+  it("rejects over-budget or unconfigured requests without provider substitution", async () => {
+    await expect(
+      generateJsonOnce({
+        provider: "openai",
+        system: "system",
+        user: "x".repeat(24_001),
+        maxTokens: 2600,
+      })
+    ).rejects.toMatchObject({ status: 400 });
+    delete process.env.OPENAI_API_KEY;
+    await expect(
+      generateJsonOnce({
+        provider: "openai",
+        system: "system",
+        user: "bounded",
+        maxTokens: 2600,
+      })
+    ).rejects.toMatchObject({ status: 503 });
+    expect(sdk.options).not.toHaveBeenCalled();
+    expect(sdk.anthropicCreate).not.toHaveBeenCalled();
   });
 });

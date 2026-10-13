@@ -9,7 +9,8 @@ import type {
   WorkspaceState,
 } from "./types";
 import { scheduleDate } from "./dates";
-import { successContractSummary } from "./successContract";
+import { successContractSummary, OUTCOME_METRICS, outcomeSignal } from "./successContract";
+import { VARIABLE_LABELS } from "./experimentQueue";
 
 export interface ExportSnapshot {
   url?: string;
@@ -97,6 +98,49 @@ export function toMarkdown(snap: ExportSnapshot): string {
   }
 
   if (workspace?.experiments.length) appendExperiments(out, workspace);
+  if (workspace?.plannedExperiments?.length) {
+    out.push("## Planned experiment queue", "");
+    for (const plan of workspace.plannedExperiments) {
+      out.push(
+        `- **${plan.platformName}** (${plan.status}) — ${plan.angle}; ${VARIABLE_LABELS[plan.variable]}; venue: ${plan.venue || "unconfirmed"}; source: ${plan.sourceExperimentId || "user-selected trial opportunity"}; plan: ${plan.id}${plan.executionId ? `; execution: ${plan.executionId}` : ""}`
+      );
+      if (plan.opportunity) {
+        const trial = plan.opportunity;
+        out.push(
+          `  - Source: ${trial.source.url} (${trial.source.verification}); rules: user checked ${trial.rulesUserCheckedAt}, not independently reviewed.`,
+          `  - Demand excerpt: “${trial.source.quote}”`,
+          `  - Trial audience: ${trial.audience}`,
+          `  - Trial entry: ${trial.entryUrl}`
+        );
+        trial.steps.forEach((step, i) => out.push(`  - Trial step ${i + 1}: ${step}`));
+        out.push(`  - Feedback question: ${trial.feedbackQuestion}`);
+      }
+    }
+    out.push("");
+  }
+
+  const research = workspace?.opportunityResearch;
+  if (research) {
+    out.push(
+      "## Product trial research — hypotheses, not verified demand",
+      "",
+      `Task: ${research.input.task}`,
+      `Audience: ${research.input.audience}`,
+      `Entry: ${research.input.entryUrl}`,
+      `Provider: ${research.example ? "fictional example; no model call" : research.meta ? `${research.meta.provider} / ${research.meta.model}` : "none; no usable source"}`,
+      ""
+    );
+    for (const source of research.sources)
+      out.push(
+        `- ${source.url} — ${source.verification}; rules unknown; checked ${source.checkedAt}`,
+        `  - Excerpt: “${source.quote}”`
+      );
+    for (const opportunity of research.opportunities)
+      out.push(
+        `- Fit hypothesis: ${opportunity.whyFit}; product facts: ${opportunity.factIds.join(", ")}`
+      );
+    out.push("");
+  }
 
   for (const c of result?.content || []) {
     out.push(`## ${c.platformName}`, "");
@@ -202,24 +246,46 @@ function appendExperiments(out: string[], workspace: WorkspaceState) {
       out.push(`*Success contract:* ${successContractSummary(e.successContract)}`);
     }
     if (e.angle) out.push(`*Angle:* ${e.angle}`);
+    if (e.snapshot) {
+      out.push(
+        `*Published comparison:* ${VARIABLE_LABELS[e.snapshot.variable]} — ${e.snapshot.heldConstant}`,
+        `*Published audience / voice:* ${e.snapshot.audience} / ${e.snapshot.publisherVoice}`,
+        `*Published hook:* ${e.snapshot.draft.hook}`,
+        "",
+        e.snapshot.draft.body,
+        ""
+      );
+      for (const fact of e.snapshot.facts)
+        out.push(`- Published fact [${fact.status}] ${fact.id}: ${fact.claim}`);
+    }
+    if (e.opportunity) {
+      out.push(
+        `*Trial source:* ${e.opportunity.source.url} (${e.opportunity.source.verification}); venue rules user-checked, not independently reviewed.`,
+        `*Trial task:* ${e.opportunity.task}`,
+        `*Trial audience:* ${e.opportunity.audience}`,
+        `*Trial entry:* ${e.opportunity.entryUrl}`,
+        `*Feedback question:* ${e.opportunity.feedbackQuestion}`
+      );
+      e.opportunity.steps.forEach((step, i) => out.push(`- Trial step ${i + 1}: ${step}`));
+    }
     for (const o of e.outcomes) {
-      const metrics = (
-        [
-          [o.impressions, "impressions"],
-          [o.replies, "replies"],
-          [o.clicks, "clicks"],
-          [o.signups, "signups"],
-          [o.revenue, "$ revenue"],
-        ] as const
-      )
-        .filter(([v]) => typeof v === "number")
-        .map(([v, label]) => `${v} ${label}`)
-        .join(" · ");
+      const metrics = OUTCOME_METRICS.flatMap((metric) => {
+        const value = outcomeSignal(o, metric);
+        return value === undefined
+          ? []
+          : [
+              `${value} ${metric === "custom" ? e.successContract?.customSignalLabel || "custom signal" : metric}`,
+            ];
+      }).join(" · ");
       out.push(
         `- **${o.checkpoint}**: ${metrics || "no metrics recorded"}${
           o.qualitativeFeedback ? ` — “${o.qualitativeFeedback}”` : ""
         }`
       );
+      if (o.unavailableMetrics?.length)
+        out.push(`  - Unavailable: ${o.unavailableMetrics.join(", ")}`);
+      if (o.invalidatedReason)
+        out.push(`  - Invalidated: ${o.invalidatedReason}; excluded from learning memory.`);
       if (o.verdict) {
         out.push(`  - **Verdict:** ${o.verdict.call} — ${o.verdict.reason}`);
       }

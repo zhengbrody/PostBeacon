@@ -64,6 +64,16 @@ export default function PrivacyPage() {
             or outcome-benchmark datasets.
           </li>
           <li>
+            Explicit trial research sends your short demand excerpts, verified product
+            facts, claims to avoid and proposed trial instructions to the OpenAI or DeepSeek
+            model you select, without automatic provider fallback. Source fetching is off
+            unless you authorize each page; the fetched page body is not saved or sent to
+            the model. Saved source URLs, excerpts and trial receipts follow your project’s
+            export, deletion and retention rules. Remove identifying or confidential details
+            before submitting. A matching quote does not verify demand or publishing
+            permission.
+          </li>
+          <li>
             You can export everything as JSON and delete a project or your whole account
             from inside the app.
           </li>

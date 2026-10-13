@@ -17,6 +17,8 @@ import type {
   GuestPreviewProviderCapability,
   GuestPreviewResult,
   SuccessContract,
+  OpportunityResearch,
+  TrialResearchInput,
 } from "./types";
 
 export interface UsageInfo {
@@ -82,6 +84,25 @@ async function postGuest<T>(path: string, body: unknown, signal?: AbortSignal): 
 
 // Single typed surface for the browser → server calls. Keeps fetch boilerplate
 // out of components and the hook.
+/** Bound model context without changing durable/exported project history. */
+export function boundedCopilotRequest(body: CopilotRequest): CopilotRequest {
+  return {
+    ...body,
+    workspace: body.workspace
+      ? {
+          ...body.workspace,
+          experiments: body.workspace.experiments.slice(-30).map((experiment) => ({
+            ...experiment,
+            outcomes: experiment.outcomes.slice(-6),
+          })),
+          taskLog: [],
+          auditLog: [],
+          opportunityResearch: undefined,
+        }
+      : undefined,
+  };
+}
+
 export const api = {
   providers: () =>
     fetch("/api/providers").then((r) => r.json()) as Promise<{
@@ -139,7 +160,17 @@ export const api = {
       "/api/regenerate",
       { profile, platformId, provider, facts, successContract }
     ),
-  copilot: (body: CopilotRequest) => post<CopilotReplyV2>("/api/copilot", body),
+  copilot: (body: CopilotRequest) =>
+    post<CopilotReplyV2>("/api/copilot", boundedCopilotRequest(body)),
+  opportunities: (body: {
+    provider: "openai" | "deepseek";
+    productUrl: string;
+    profile: ProductProfile;
+    facts: Fact[];
+    successContract: SuccessContract;
+    input: TrialResearchInput;
+    bannedClaims?: string[];
+  }) => post<OpportunityResearch>("/api/opportunities", body),
   usage: async (): Promise<UsageInfo> => {
     const res = await fetch("/api/usage", { headers: { ...(await authHeader()) } });
     return res.json();

@@ -72,7 +72,10 @@ export function experimentLifecycle(exp: Experiment, now: Date): ExperimentLifec
   if (exp.status === "stopped") {
     return {
       steps: stepsFor(measured, learned, "learn"),
-      headline: "Experiment stopped",
+      headline:
+        verdict?.assessment === "invalidated"
+          ? "Experiment invalidated"
+          : "Experiment stopped",
       detail: verdictDetail ?? "This channel experiment was stopped.",
       due: false,
       complete: true,
@@ -82,7 +85,10 @@ export function experimentLifecycle(exp: Experiment, now: Date): ExperimentLifec
   if (has72) {
     return {
       steps: stepsFor(true, learned, "learn"),
-      headline: "Experiment complete",
+      headline:
+        verdict?.assessment === "insufficient"
+          ? "Measurement incomplete — evidence unavailable"
+          : "Experiment complete",
       detail: verdictDetail ?? "The final 72h result is recorded.",
       due: false,
       complete: true,

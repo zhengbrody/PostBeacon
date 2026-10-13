@@ -12,6 +12,7 @@ import {
   applyKindOf,
   impactOf,
   isDestructive,
+  proposalStale,
   type ActionContext,
 } from "@/lib/copilotActions";
 import { PublishDialog, type PublishDetails } from "@/components/app/results/PublishDialog";
@@ -53,6 +54,7 @@ export interface CopilotOpenRequest {
   id: number;
   prompt: string;
   targetPlatformId?: string;
+  targetPostIdx?: number;
 }
 
 const QUICK_ACTIONS: { label: string; action: CopilotAction }[] = [
@@ -126,6 +128,7 @@ export function CopilotPanel({
   const [input, setInput] = useState("");
   const [feedbackMode, setFeedbackMode] = useState(false);
   const [target, setTarget] = useState(result.content[0]?.platformId ?? "");
+  const [targetPostIdx, setTargetPostIdx] = useState<number>();
   const [msgs, setMsgs] = useState<PanelMessage[]>([]);
   const [decisions, setDecisions] = useState<Record<string, "applied" | "rejected">>({});
   const [view, setView] = useState<"chat" | "memory" | "audit">("chat");
@@ -183,6 +186,7 @@ export function CopilotPanel({
       setTarget(openRequest.targetPlatformId);
     }
     setInput(openRequest.prompt);
+    setTargetPostIdx(openRequest.targetPostIdx);
   }, [openRequest, result.content]);
 
   // Proactive opener: a deterministic briefing computed from the plan —
@@ -220,7 +224,10 @@ export function CopilotPanel({
         action,
         question,
         targetPlatformId:
-          action === "rewrite" || action === "first-replies" ? validTarget : undefined,
+          action === "rewrite" || action === "first-replies" || targetPostIdx !== undefined
+            ? validTarget
+            : undefined,
+        targetPostIdx,
         history,
       });
       const providerNote = res.meta?.fallbackFrom
@@ -260,6 +267,12 @@ export function CopilotPanel({
 
   function handleApply(a: ProposedAction) {
     const kind = applyAction(a);
+    if (kind === "blocked") {
+      setError(
+        "This proposal refers to an older draft. Request a fresh repair; your current draft was not changed."
+      );
+      return;
+    }
     setDecisions((d) => ({ ...d, [a.id]: "applied" }));
     if (kind === "open-publish" && a.tool === "create_experiment") {
       setPublishFor({
@@ -474,7 +487,10 @@ export function CopilotPanel({
                   <>
                     <select
                       value={validTarget}
-                      onChange={(e) => setTarget(e.target.value)}
+                      onChange={(e) => {
+                        setTarget(e.target.value);
+                        setTargetPostIdx(undefined);
+                      }}
                       aria-label="Target platform"
                       className="rounded-lg border border-line bg-surface-2 px-2 py-1.5 text-xs text-neutral-100 outline-none transition-colors focus:border-accent-500"
                     >
@@ -517,6 +533,21 @@ export function CopilotPanel({
                   </>
                 )}
               </div>
+              {targetPostIdx !== undefined && (
+                <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-neutral-400">
+                  <span>
+                    Scoped to {targetName} · draft {targetPostIdx + 1}
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="min-h-11"
+                    onClick={() => setTargetPostIdx(undefined)}
+                  >
+                    Clear draft scope
+                  </Button>
+                </div>
+              )}
               <textarea
                 rows={2}
                 value={input}
@@ -577,6 +608,9 @@ export function CopilotPanel({
           successContract={workspace.successContract}
           rec={strategy.recommendations.find((r) => r.platformId === publishFor.platformId)}
           defaultPostIdx={publishFor.postIdx}
+          publishedPostIndices={workspace.experiments
+            .filter((item) => item.platformId === publishFor.platformId)
+            .map((item) => item.postIdx)}
           initialCommunity={publishFor.community}
           initialAngle={publishFor.angle}
           onConfirm={confirmPublish}
@@ -650,6 +684,12 @@ function ActionCard({
 
       <ActionBody action={action} ctx={ctx} />
 
+      {proposalStale(action, ctx) && !decision && (
+        <p className="mt-2 text-xs text-amber-300" role="status">
+          This draft changed after the proposal. Request a fresh proposal before applying.
+        </p>
+      )}
+
       <p className="mt-2 text-xs text-neutral-400">
         <span className="text-neutral-500">Why: </span>
         {action.rationale}
@@ -708,9 +748,10 @@ function ActionCard({
           <>
             <Button
               size="sm"
-              disabled={busy}
+              disabled={busy || proposalStale(action, ctx)}
               className={armed ? "bg-red-700 hover:bg-red-600" : ""}
               onClick={() => {
+                if (proposalStale(action, ctx)) return;
                 if (destructive && !armed) return setArmed(true);
                 onApply();
               }}
@@ -767,9 +808,10 @@ function ActionBody({ action, ctx }: { action: ProposedAction; ctx: ActionContex
     }
     case "generate_variant":
       if (action.hook && action.body) {
-        const current = ctx.result?.content.find(
-          (content) => content.platformId === action.platformId
-        )?.posts[action.postIdx ?? 0];
+        const current =
+          action.sourceDraft ??
+          ctx.result?.content.find((content) => content.platformId === action.platformId)
+            ?.posts[action.postIdx ?? 0];
         return (
           <div className="mt-2 space-y-2 rounded-md bg-surface p-2.5 text-xs">
             <Diff label="Hook" from={current?.hook ?? ""} to={action.hook} />
@@ -929,7 +971,12 @@ function MemoryView({
                     a.verdict === "winning" ? "text-emerald-400" : "text-amber-400"
                   }
                 >
-                  {a.verdict}
+                  {a.evidenceState ?? "historical read"} ·{" "}
+                  {a.verdict === "winning"
+                    ? "target reached"
+                    : a.verdict === "losing"
+                      ? "target missed"
+                      : "inconclusive"}
                 </span>{" "}
                 on {a.platformId}: {a.angle}
               </li>

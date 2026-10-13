@@ -318,6 +318,11 @@ export interface DiscoveredChannel {
   why: string;
   source: string; // how it was found (e.g. "Tavily" when grounded, "AI" otherwise)
   validated?: boolean; // true if the URL was confirmed reachable / came from live search
+  searchBacked?: boolean;
+  reachable?: boolean;
+  sourceId?: string;
+  contentRead?: boolean;
+  rulesReviewed?: boolean;
 }
 
 // ---- Launch Copilot (M10): a CMO assistant scoped to the CURRENT plan ----
@@ -348,6 +353,7 @@ export interface CopilotRequest {
   action: CopilotAction;
   question?: string; // free question / rewrite direction / pasted feedback
   targetPlatformId?: string; // required for "rewrite" and "first-replies"
+  targetPostIdx?: number;
   history?: CopilotMessage[]; // last few turns, session-scoped (not persisted)
 }
 
@@ -358,7 +364,20 @@ export interface CopilotRequest {
 export type ExperimentStatus = "live" | "analyzed" | "stopped";
 export type OutcomeCheckpoint = "24h" | "72h" | "manual";
 export type VerdictCall = "supported" | "promising" | "weak" | "no-signal";
-export type OutcomeMetric = "impressions" | "replies" | "clicks" | "signups" | "revenue";
+export type OutcomeMetric =
+  | "impressions"
+  | "replies"
+  | "clicks"
+  | "signups"
+  | "revenue"
+  | "stars"
+  | "issues"
+  | "repoVisits"
+  | "upvotes"
+  | "comments"
+  | "qualifiedReplies"
+  | "visits"
+  | "custom";
 export type SuccessWindow = "24h" | "72h";
 
 /** The founder's explicit definition of a meaningful experiment result.
@@ -370,6 +389,7 @@ export interface SuccessContract {
   baseline?: number;
   minimumResult: number;
   evaluationWindow: SuccessWindow;
+  customSignalLabel?: string;
 }
 
 /** One check-in's results. Absent numbers mean "not measured", never 0. */
@@ -382,6 +402,17 @@ export interface Outcome {
   clicks?: number;
   signups?: number;
   revenue?: number;
+  stars?: number;
+  issues?: number;
+  repoVisits?: number;
+  upvotes?: number;
+  comments?: number;
+  qualifiedReplies?: number;
+  visits?: number;
+  custom?: number;
+  unavailableMetrics?: OutcomeMetric[];
+  invalidatedReason?:
+    "post-removed" | "tracking-broken" | "wrong-audience" | "external-event" | "other";
   qualitativeFeedback?: string; // typed or pasted — comments, DMs, notes
   verdict?: ExperimentVerdict; // the contemporaneous read for THIS checkpoint
 }
@@ -392,6 +423,13 @@ export interface ExperimentVerdict {
   reason: string; // the rule that fired, in plain language
   advice: string; // continue/stop + which angle/channel
   decidedAt: string; // ISO — a completed learning loop counts from here
+  assessment?:
+    | "target-reached"
+    | "improved"
+    | "early"
+    | "target-missed"
+    | "insufficient"
+    | "invalidated";
 }
 
 /** One hand-published post being tracked. Created by the Publish dialog. */
@@ -409,6 +447,9 @@ export interface Experiment {
   postIdx: number; // which draft was published
   outcomes: Outcome[];
   successContract?: SuccessContract; // immutable snapshot for this experiment
+  plannedExperimentId?: string;
+  snapshot?: PublishSnapshot;
+  opportunity?: TrialOpportunitySnapshot; // immutable source/trial provenance on execution
   /** Latest/final summary for compatibility. Historical projects may have
    * only this value; consumers must not pretend it belonged to every Outcome. */
   verdict?: ExperimentVerdict;
@@ -435,8 +476,100 @@ export interface WorkspaceState {
     updatedAt: string;
   };
   experiments: Experiment[];
+  plannedExperiments?: PlannedExperiment[];
+  opportunityResearch?: OpportunityResearch;
   taskLog: TaskRecord[];
   auditLog?: AuditEntry[]; // M16 — copilot proposals and their fates (≤100)
+}
+
+export type TestedVariable = "hook" | "cta" | "venue" | "angle" | "exploratory";
+
+export interface PublishSnapshot {
+  audience: string;
+  publisherVoice: "brand" | "founder";
+  facts: Fact[];
+  draft: Pick<PlatformPost, "hook" | "body">;
+  variable: TestedVariable;
+  heldConstant: string;
+  successContract?: SuccessContract;
+}
+
+export interface PlannedExperiment {
+  id: string;
+  templateId: string;
+  sourceExperimentId: string;
+  sourceOutcomeId?: string;
+  platformId: string;
+  platformName: string;
+  venue: string;
+  angle: string;
+  variable: TestedVariable;
+  heldConstant: string;
+  successContract?: SuccessContract;
+  status: "planned" | "ready" | "published" | "cancelled";
+  postIdx?: number;
+  executionId?: string;
+  createdAt: string;
+  opportunity?: TrialOpportunitySnapshot;
+}
+
+/** Bounded, user-initiated research output; NOT a durable background Agent job. */
+export interface OpportunitySourceInput {
+  url: string;
+  quote: string;
+  fetchAllowed: boolean;
+}
+
+export interface TrialResearchInput {
+  audience: string;
+  task: string;
+  entryUrl: string;
+  platformId: string;
+  steps: [string, string, string];
+  venue: string; // publication venue, distinct from a demand/evidence source URL
+  feedbackQuestion: string;
+  sources: OpportunitySourceInput[];
+}
+
+export interface OpportunitySource {
+  id: string;
+  url: string;
+  quote: string;
+  verification: "user-provided" | "quote-found" | "quote-not-found" | "fetch-failed";
+  checkedAt: string;
+  title?: string;
+  truncated?: boolean;
+  rules: "unknown";
+}
+
+export interface TrialOpportunity {
+  id: string;
+  sourceId: string;
+  whyFit: string; // explicitly a hypothesis, never observed demand/permission
+  factIds: string[];
+  draft: PlatformPost;
+}
+
+export interface OpportunityResearch {
+  id: string;
+  contextKey: string; // exact canonical product/contract version; not authorization
+  input: TrialResearchInput;
+  sources: OpportunitySource[];
+  opportunities: TrialOpportunity[];
+  completedAt: string;
+  meta?: ProviderRunMeta;
+  example?: boolean;
+}
+
+export interface TrialOpportunitySnapshot {
+  researchId: string;
+  source: OpportunitySource;
+  audience: string;
+  task: string;
+  entryUrl: string;
+  steps: [string, string, string];
+  feedbackQuestion: string;
+  rulesUserCheckedAt: string;
 }
 
 // ---- Copilot action engine (M16): the model proposes, the user disposes ----
@@ -498,6 +631,7 @@ export type ProposedAction = ProposedBase &
         direction?: string;
         hook?: string;
         body?: string;
+        sourceDraft?: Pick<PlatformPost, "hook" | "body">;
       }
     | { tool: "record_outcome"; experimentId: string; checkpoint: "24h" | "72h" | "manual" }
     | {
@@ -526,7 +660,10 @@ export interface CopilotReplyV2 {
 export interface AngleRecord {
   angle: string;
   platformId: string;
-  verdict: "winning" | "losing";
+  verdict: "winning" | "losing" | "inconclusive";
+  evidenceState?: "early evidence" | "repeated evidence" | "conflicting evidence";
+  outcomeId?: string;
+  historical?: boolean;
   experimentId: string; // the evidence
   at: string;
 }

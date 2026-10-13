@@ -59,6 +59,20 @@ function fixture(): ProductMetricRows {
 }
 
 describe("product funnel and weekly retention", () => {
+  it("unknown and invalidated evidence never inflates completed loops", () => {
+    const rows = fixture();
+    rows.outcomes[0].assessment = "insufficient";
+    expect(buildProductMetrics(rows).funnel.learningLoopsCompleted).toBe(0);
+    expect(buildProductMetrics(rows).funnel.measuredUsers).toBe(1); // only the other user's valid manual observation
+    rows.outcomes[0].assessment = "target-reached";
+    rows.outcomes.push({
+      ...rows.outcomes[0],
+      id: "invalid",
+      checkpoint: "manual",
+      assessment: "invalidated",
+    });
+    expect(buildProductMetrics(rows).funnel.learningLoopsCompleted).toBe(0);
+  });
   it("counts the real lifecycle and excludes manual early reads from completed loops", () => {
     const metrics = buildProductMetrics(fixture(), new Date("2026-07-25T00:00:00.000Z"));
     expect(metrics.funnel).toMatchObject({
