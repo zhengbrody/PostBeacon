@@ -334,6 +334,18 @@ cross-origin 403. Aggregate product-health reporting is operator-only at `/api/m
 Redeploy: `npx vercel --prod --yes`. Push env from `.env.local`: `~/push-env.sh`.
 
 ## Status / changelog
+- **2026-10-12**: **A/B + C.1 deployed after authorized smoke.** App revision
+  `93bae90` was committed/pushed to main; GitHub CI 38331172722 and the commit-linked
+  Vercel deployment passed. Fresh post-deployment public smoke passed all six gates
+  on postbeacon.app at 2026-10-13T01:15:48.902Z: new research route and trial privacy
+  text are live; unsigned research/export and public metrics remain closed, foreign
+  research origins are rejected. Fictional online browser QA verified kit review,
+  dual confirmation, independent ready queue, cancel-without-consumption and simulated
+  publish into Measure. Actual runtime widths 643 and 341 px had no horizontal overflow
+  or captured warnings/errors; requested mobile size was not treated as observed size.
+  No real model call, source fetch, cloud save/delete, account switch, social posting,
+  new SQL or environment change occurred. Real provider/persistence/account/retention
+  acceptance and C.2 jobs/budgets remain pending; see the release acceptance record.
 - **2026-10-12**: **A/B + C.1 release acceptance preparation.** Added a portable native-fetch
   release checker with fixed, credential-free probes, no redirects, request/body bounds
   and non-sensitive JSON results. A passing public smoke explicitly does not imply full

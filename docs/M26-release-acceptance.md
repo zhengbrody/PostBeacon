@@ -44,6 +44,41 @@ was performed. The deployed Git revision was **not** independently verified. The
 observations are consistent with C.1 not being deployed; the existing page does not
 prove that the new feature is live.
 
+### Authorized release and post-deployment smoke
+
+The user subsequently authorized release after smoke. Local smoke passed again at
+**2026-10-13T01:13:33.444Z**. App revision
+`93bae90cdd2780dd33da30565f0da7d3ac35d41c` was committed and pushed to `main`.
+[GitHub CI run 38331172722](https://github.com/zhengbrody/PostBeacon/actions/runs/38331172722)
+passed every gate, and the commit's Vercel status reported
+[deployment complete](https://vercel.com/zhengbrodys-projects/postbeacon/2wbyMFsJ8wprfXFHiWKhhWoYDkuM).
+The local Vercel CLI credential was expired; the existing Git integration deployed
+the pushed revision without any credential, environment or permission change.
+
+Post-deployment public smoke at **2026-10-13T01:15:48.902Z** on
+`https://postbeacon.app` passed **all six checks**: `/app` 200; new trial notice present;
+unsigned research 401; foreign-origin research 403; export 401; metrics 401.
+The earlier 404/old-notice failures above are retained as pre-release evidence,
+not the current result. `productionAccepted` remains **false** because the smoke
+does not verify authenticated models, persistence, accounts or real activation.
+
+Online fictional browser QA verified opportunity load → kit review → both required
+acknowledgements → ready queue/second draft → publish-dialog cancel (queue retained)
+→ simulated publish (queue consumed, independent experiment and Measure card created).
+The example explicitly remained unsaved and made no source/model calls or real posts.
+Browser-reported viewports were **643×848** and **341×738**, not the requested
+375×812 override; neither had horizontal overflow. No browser warnings/errors were
+captured. The viewport override was reset after testing. This is responsive
+fictional production-assets QA, **not** a signed-in real-product acceptance.
+Screenshots are local artifacts under `artifacts/release-93bae90/` and are not uploaded
+as release source. Unrelated `.claude/`, `artifacts/` and `tmp/` files were not committed.
+
+Still required: real OpenAI and explicitly chosen DeepSeek runs; a dedicated QA
+project's save/refresh/export; two-account isolation; failure handling; genuine
+trial feedback and repeat-experiment retention. C.2 and new SQL remain out of scope.
+CI passed with runner/action-runtime deprecation notices; these are a follow-up
+maintenance item, not failing gates or evidence that production acceptance is complete.
+
 ## Release sequence
 
 1. Confirm commit/push/production-deployment scope. Include A/B and C.1 app/lib/hooks,
