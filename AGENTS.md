@@ -215,6 +215,9 @@ docs/M26-release-acceptance.md Explicit release scope, signed-out smoke evidence
                               required real-provider/cloud/account acceptance
 scripts/release-smoke.mjs  Credential-free public release gates; never labels smoke
                           as full production acceptance or invokes a model/deletion
+scripts/research-acceptance.ts  Explicit bounded provider acceptance, controlled scenario,
+                               local continuity checks; not authenticated production QA
+docs/M26.C1-provider-acceptance.md Recovery fixes and the exact live-provider evidence boundary
 tests/                  vitest suites: urlPolicy, safeFetch, billing, webhook route, validate,
                         golden (12-fixture offline evals), generateRoute, flowReducer
                         (state-machine invariants), storage (draft migrations), workspace
@@ -293,6 +296,7 @@ npm run lint             # eslint . (flat config, non-interactive)
 npm run format:check     # prettier --check . (CI-enforced)
 npm run build            # must stay green
 npm run release:smoke -- https://postbeacon.app # signed-out public gates, not full acceptance
+npm run release:research # explicit paid OpenAI controlled-scenario test; never runs in npm test
 RUN_LIVE_EVAL=1 npx vitest run tests/eval.live.test.ts   # live provider eval → eval-results/
 ```
 
@@ -334,6 +338,21 @@ cross-origin 403. Aggregate product-health reporting is operator-only at `/api/m
 Redeploy: `npx vercel --prod --yes`. Push env from `.env.local`: `~/push-env.sh`.
 
 ## Status / changelog
+- **2026-10-23**: **C.1 recovery correctness + bounded provider acceptance.** Unchanged
+  project hydration now preserves canonical user-confirmed goal provenance instead of
+  restamping its verification time and invalidating pending research. Changed goals
+  still invalidate old research. Trial source truncation flags survive queue/snapshot
+  normalization. Both issues were reproduced with failing regressions before repair.
+  Added an explicit one-invocation-per-selected-provider acceptance runner: OpenAI
+  default, separately acknowledged DeepSeek only, no Claude/fallback/source fetching,
+  controlled hypothetical demand and simulated local confirmation only. Reports separate
+  protocol/content/local continuity and never claim full production acceptance. One
+  real OpenAI controlled integration passed; its detailed console report was not
+  retained, so no draft-count/content-readiness conclusion is asserted for that run.
+  Future runs persist non-content report files. DeepSeek, real signed-in cloud/account
+  acceptance, real activation/retention and C.2 remain pending. No SQL/env/vendor change.
+  Local gates: 522 offline tests passed, three live tests skipped by default;
+  the separate one-call OpenAI live case passed. Typecheck/lint/format/build passed.
 - **2026-10-12**: **A/B + C.1 deployed after authorized smoke.** App revision
   `93bae90` was committed/pushed to main; GitHub CI 38331172722 and the commit-linked
   Vercel deployment passed. Fresh post-deployment public smoke passed all six gates

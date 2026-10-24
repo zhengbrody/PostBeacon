@@ -360,12 +360,24 @@ function transition(s: FlowState, a: FlowAction): FlowState {
           }
         : null;
       const savedFacts = p.facts ?? p.meta?.facts ?? [];
+      // Hydration is not a new confirmation. Preserve unchanged goal provenance:
+      // research context versions include verification time, so restamping it
+      // would invalidate an otherwise unchanged receipt on every refresh.
+      const savedGoal = savedFacts.find(
+        (fact) =>
+          fact.id === "conversionGoal" &&
+          fact.field === "conversionGoal" &&
+          fact.status === "user-confirmed" &&
+          fact.sourceType === "user" &&
+          fact.claim === workspace.successContract?.primaryGoal
+      );
       const loadedFacts = workspace.successContract
         ? [
             ...savedFacts.filter(
               (fact) => fact.id !== "conversionGoal" && fact.field !== "conversionGoal"
             ),
-            answerFact("conversionGoal", workspace.successContract.primaryGoal),
+            savedGoal ??
+              answerFact("conversionGoal", workspace.successContract.primaryGoal),
           ]
         : savedFacts;
       return {

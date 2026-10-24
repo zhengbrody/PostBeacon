@@ -345,6 +345,70 @@ const confirm = {
 };
 
 describe("review → confirm → independent trial execution", () => {
+  it("still replaces a genuinely changed goal and rejects research for the old goal", () => {
+    const state = withResearch();
+    const restored = flowReducer(initialFlowState, {
+      type: "PROJECT_LOADED",
+      demo: false,
+      project: {
+        ...state,
+        id: state.projectId,
+        workspace: {
+          ...state.workspace,
+          successContract: { ...contract, primaryGoal: "Different goal" },
+        },
+      },
+    });
+    expect(restored.profile?.conversionGoal).toBe("Different goal");
+    expect(restored.facts.find((fact) => fact.id === "conversionGoal")?.claim).toBe(
+      "Different goal"
+    );
+    expect(flowReducer(restored, confirm).workspace.plannedExperiments ?? []).toHaveLength(
+      0
+    );
+  });
+  it("retains a truncated-source warning in confirmed trial provenance after hydration", () => {
+    const pending = withResearch();
+    pending.workspace.opportunityResearch!.sources[0].truncated = true;
+    const queued = flowReducer(pending, confirm);
+    const restored = flowReducer(initialFlowState, {
+      type: "PROJECT_LOADED",
+      demo: false,
+      project: { ...queued, ...migrateDraft(JSON.parse(toJson(queued))) },
+    });
+    expect(restored.workspace.plannedExperiments?.[0].opportunity?.source.truncated).toBe(
+      true
+    );
+  });
+  it.each(["flat", "meta"])(
+    "keeps unchanged research confirmable after %s hydration",
+    (kind) => {
+      vi.useFakeTimers();
+      try {
+        vi.setSystemTime(new Date("2026-10-23T10:00:00.000Z"));
+        const state = withResearch();
+        vi.setSystemTime(new Date("2026-10-23T11:00:00.000Z"));
+        const restored = flowReducer(initialFlowState, {
+          type: "PROJECT_LOADED",
+          demo: false,
+          project:
+            kind === "flat"
+              ? { ...state, id: state.projectId }
+              : {
+                  ...state,
+                  id: state.projectId,
+                  facts: undefined,
+                  workspace: undefined,
+                  meta: { facts: state.facts, workspace: state.workspace },
+                },
+        });
+        expect(restored.facts).toEqual(state.facts);
+        expect(flowReducer(restored, confirm).workspace.plannedExperiments).toHaveLength(1);
+      } finally {
+        vi.useRealTimers();
+      }
+    }
+  );
   it("invalidates pending research when the evidence source changes without changing its claim", () => {
     const state = withResearch();
     const changed = {

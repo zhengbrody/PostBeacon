@@ -132,3 +132,12 @@ to make an alias pass. Neither local run constitutes production acceptance.
 Final candidate gates: **505 offline tests passed, two live tests skipped**; typecheck,
 lint, formatting, production build and diff whitespace checks passed. No live model
 test or new authenticated desktop/mobile production walkthrough was run in this step.
+
+## October 23 continuation
+
+See [bounded provider acceptance and recovery corrections](M26.C1-provider-acceptance.md).
+The public production smoke was rechecked successfully. A single real OpenAI call
+used a controlled, explicitly hypothetical scenario and the local C.1 orchestrator;
+it did not complete authenticated production, real-demand or retention acceptance.
+Recovery regression tests exposed and fixed goal-provenance restamping and loss of
+the source-truncation warning. C.2 remains a separate, unimplemented milestone.

@@ -338,6 +338,7 @@ export function normalizeTrialSnapshot(raw: unknown): TrialOpportunitySnapshot |
         checkedAt: asString(source.checkedAt).slice(0, 40),
         rules: "unknown",
         title: asString(source.title).slice(0, 200) || undefined,
+        truncated: source.truncated === true,
       },
       task: asString(item.task).slice(0, 500),
       entryUrl: researchUrl(asString(item.entryUrl)),

@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "release:smoke": "node scripts/release-smoke.mjs",
+    "release:research": "RUN_RESEARCH_ACCEPTANCE=1 vitest run tests/researchAcceptance.live.test.ts --maxWorkers=1 --no-file-parallelism",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },
