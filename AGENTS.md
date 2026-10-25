@@ -356,6 +356,19 @@ cross-origin 403. Aggregate product-health reporting is operator-only at `/api/m
 Redeploy: `npx vercel --prod --yes`. Push env from `.env.local`: `~/push-env.sh`.
 
 ## Status / changelog
+- **2026-10-24**: **C.2.0 code released, Agent execution deliberately OFF.** User
+  authorized accepted code publication only. App commit `1ed30d5` passed GitHub CI
+  `40161487756`; Vercel `dpl_BWc65fr5iH5XwW6FCvwapXTACC8x` is Ready and owns
+  postbeacon.app/www (Node 24.x, Next.js; build 1m11s). Production has no
+  `AGENT_RUNS_ENABLED` variable; no SQL/env change or paid request was performed.
+  Post-release signed-out smoke passed six checks at `2026-10-25T04:21:22.594Z`;
+  new Agent GET/POST return 401 and foreign-origin POST returns 403. Production
+  fictional UI shows the top-level research entry at actual 1280×720 with no
+  horizontal overflow or captured warning/error logs; no cloud task/account write
+  was used as evidence. Real task enablement and cloud/provider/account acceptance
+  remain separate gates. Full local revalidation: 598 offline tests (three live
+  skipped), typecheck/lint/format/build, zero known dependency advisories and 19
+  isolated PostgreSQL scenarios pass. This is not a fully enabled autonomous Agent.
 - **2026-10-24**: **C.2.0 visible persistent research — local implementation.** Today
   now puts Growth Agent first and gives legacy/unsaved projects explicit setup paths.
   Added flag-closed owner-scoped tasks, composite project-owner FK, transactional
