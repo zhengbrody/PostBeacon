@@ -359,7 +359,9 @@ Redeploy: `npx vercel --prod --yes`. Push env from `.env.local`: `~/push-env.sh`
   checkpoint/loop counting remains unchanged. 569 offline tests pass, three live
   skipped; local typecheck/lint/format/build and dependency scans pass. Production
   release was authorized after acceptance, but push is gated on confirming Node ≥22:
-  Vercel CLI/dashboard require login. No SQL/env/model/credential change, real account
+  the controlled Vercel session remains at login. App candidate `c2fc40c` is locally
+  committed, not pushed; fresh local and old-production public smoke each pass six
+  probes. Direct runtime-version confirmation is pending. No SQL/env/model/credential change, real account
   write/delete, model call or deployment occurred at this checkpoint. See release
   acceptance for the remaining cloud/relational/retention/C.2 boundary.
 - **2026-10-24**: **Approved dependency migration — local, not deployed.** Updated

@@ -184,6 +184,16 @@ project runtime or sign in; no credential, project setting or security policy wa
 changed as a shortcut. The existing Git integration can deploy the authorized push
 once that gate is resolved.
 
+The app candidate is committed locally as `c2fc40c` and is **not pushed/deployed**.
+Built-candidate smoke passed all six probes at `2026-10-25T00:54:24.481Z`; a fresh
+pre-push production smoke also passed at `2026-10-25T00:54:44.206Z` (both October 24
+locally). The production pass exercises the old deployed revision, not this candidate.
+The user reported signing in, but the controlled Vercel tab still showed the login
+page after refresh. A separate browser was being actively used for another task;
+control was stopped without changing it. Direct runtime-version confirmation or a
+settings screenshot is sufficient; no password/token, account creation or new CLI
+login is required. The existing production-release authorization remains valid.
+
 Authenticated cloud save/refresh/export/two-account isolation, fresh paid-provider
 acceptance after this SDK migration, real activation/retention, relational ownership
 constraints and cross-device conflict control remain pending. C.2 is not delivered.
