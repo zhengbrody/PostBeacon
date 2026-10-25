@@ -3,6 +3,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { flushSync } from "react-dom";
 import { Tabs, type TabDef } from "@/components/ui/Tabs";
+import { Card } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
+import type { GrowthAgentControls } from "@/hooks/useGrowthAgent";
 import { FailuresCard } from "@/components/app/results/FailuresCard";
 import { TodayTab } from "@/components/app/results/TodayTab";
 import { PlanReport } from "@/components/app/results/PlanReport";
@@ -88,6 +91,11 @@ export function ResultsView({
   onResearchOpportunities,
   onClearOpportunityResearch,
   onQueueOpportunity,
+  growthAgent,
+  onReviewAgent,
+  projectId,
+  onCompleteSetup,
+  onSaveProject,
 }: {
   result: GenerateResult;
   strategy: MarketingStrategy | null;
@@ -129,7 +137,12 @@ export function ResultsView({
   onCancelPlanned: (id: string) => void;
   productUrl?: string;
   provider: Provider;
-  onResearchOpportunities: (input: TrialResearchInput) => void;
+  onResearchOpportunities: (input: TrialResearchInput, deepseekConsent?: boolean) => void;
+  growthAgent: GrowthAgentControls;
+  onReviewAgent: (id: string) => void;
+  projectId: string;
+  onCompleteSetup: () => void;
+  onSaveProject: () => Promise<boolean>;
   onClearOpportunityResearch: () => void;
   onQueueOpportunity: (
     researchId: string,
@@ -445,6 +458,51 @@ export function ResultsView({
         />
       </div>
 
+      {surface === "today" &&
+        !printing &&
+        (profile && workspace.successContract && productUrl && (demo || projectId) ? (
+          <OpportunityWorkbench
+            key={`${projectId}:${productUrl}:${demo}`}
+            profile={profile}
+            facts={facts}
+            contract={workspace.successContract}
+            bannedClaims={memory.bannedClaims}
+            productUrl={productUrl}
+            provider={provider}
+            research={workspace.opportunityResearch}
+            queue={workspace.plannedExperiments ?? []}
+            draftCounts={Object.fromEntries(
+              result.content.map((c) => [c.platformId, c.posts.length])
+            )}
+            loading={loading}
+            demo={demo}
+            agent={growthAgent}
+            onReviewAgent={onReviewAgent}
+            onResearch={onResearchOpportunities}
+            onClear={onClearOpportunityResearch}
+            onQueue={onQueueOpportunity}
+          />
+        ) : (
+          <Card className="p-5 sm:p-6">
+            <p className="text-xs font-semibold uppercase tracking-wider text-accent-300">
+              Growth Agent
+            </p>
+            <h3 className="mt-2 text-xl font-semibold">
+              Give your next experiment a clear goal
+            </h3>
+            <p className="my-3 text-sm text-neutral-400">
+              {!workspace.successContract || !profile || !productUrl
+                ? "This saved plan needs a product profile and success definition before source-backed research. Your old plan is preserved."
+                : "Save this project to your account before starting a persistent task. No research runs in the background yet."}
+            </p>
+            {!workspace.successContract || !profile || !productUrl ? (
+              <Button onClick={onCompleteSetup}>Complete experiment setup →</Button>
+            ) : (
+              <Button onClick={() => void onSaveProject()}>Save project first →</Button>
+            )}
+          </Card>
+        ))}
+
       {surface === "today" && !printing && (
         <TodayTab
           view={today}
@@ -555,32 +613,6 @@ export function ResultsView({
           }}
         />
       )}
-
-      {surface === "today" &&
-        !printing &&
-        profile &&
-        workspace.successContract &&
-        productUrl && (
-          <OpportunityWorkbench
-            key={`${productUrl}:${demo}`}
-            profile={profile}
-            facts={facts}
-            contract={workspace.successContract}
-            bannedClaims={memory.bannedClaims}
-            productUrl={productUrl}
-            provider={provider}
-            research={workspace.opportunityResearch}
-            queue={workspace.plannedExperiments ?? []}
-            draftCounts={Object.fromEntries(
-              result.content.map((c) => [c.platformId, c.posts.length])
-            )}
-            loading={loading}
-            demo={demo}
-            onResearch={onResearchOpportunities}
-            onClear={onClearOpportunityResearch}
-            onQueue={onQueueOpportunity}
-          />
-        )}
 
       {(surface === "plan" || printing) && (
         <PlanReport

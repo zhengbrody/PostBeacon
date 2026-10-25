@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { api } from "@/lib/api";
+import { useGrowthAgent } from "./useGrowthAgent";
 import { createAsyncScope, StaleRequestError } from "@/lib/asyncScope";
 import { clearDraft, loadDraft } from "@/lib/storage";
 import { DEMO_PROJECT } from "@/lib/demo";
@@ -59,6 +60,7 @@ export type { Step };
  */
 export function useLaunchFlow(accountId?: string | null) {
   const [state, dispatch] = useReducer(flowReducer, initialFlowState);
+  const growthAgent = useGrowthAgent(accountId, state.projectId, state.demo);
   const currentState = useRef(state);
   currentState.current = state;
   const requests = useRef(createAsyncScope());
@@ -189,37 +191,40 @@ export function useLaunchFlow(accountId?: string | null) {
       });
     }, "Scanning every platform & ranking your channels…");
 
-  const researchOpportunities = (input: TrialResearchInput) =>
-    run(
+  const researchOpportunities = (input: TrialResearchInput, deepseekConsent = false) => {
+    if (!state.demo) {
+      if (!state.profile || !state.workspace.successContract || provider === "claude") {
+        setError(
+          "Prepare a success definition and choose OpenAI or DeepSeek before research."
+        );
+        return;
+      }
+      return growthAgent.start(
+        input,
+        provider,
+        researchContextKey(
+          state.profile,
+          state.facts,
+          state.workspace.successContract,
+          state.url,
+          state.memory.bannedClaims
+        ),
+        deepseekConsent
+      );
+    }
+    return run(
       async (check, signal) => {
         if (!state.profile || !state.workspace.successContract || !state.result)
           throw new Error(
             "Prepare a plan and success definition before researching trials."
           );
-        if (!state.demo && provider === "claude")
-          throw new Error(
-            "Choose OpenAI or DeepSeek for source research. Claude is not enabled for this workflow."
-          );
-        const research = state.demo
-          ? exampleOpportunityResearch(
-              state.profile,
-              state.facts,
-              state.workspace.successContract,
-              state.url,
-              state.memory.bannedClaims
-            )
-          : await api.opportunities(
-              {
-                provider: provider === "deepseek" ? "deepseek" : "openai",
-                productUrl: state.url,
-                profile: state.profile,
-                facts: state.facts,
-                successContract: state.workspace.successContract,
-                input,
-                bannedClaims: state.memory.bannedClaims,
-              },
-              signal
-            );
+        const research = exampleOpportunityResearch(
+          state.profile,
+          state.facts,
+          state.workspace.successContract,
+          state.url,
+          state.memory.bannedClaims
+        );
         check();
         const current = currentState.current;
         if (
@@ -247,6 +252,33 @@ export function useLaunchFlow(accountId?: string | null) {
         ? "Loading fictional trial data — no model call…"
         : "Checking only your submitted sources and preparing tentative invitations…"
     );
+  };
+
+  const reviewAgentResearch = (runId: string) => {
+    const research = growthAgent.runs.find((r) => r.id === runId)?.research;
+    if (
+      !research ||
+      !state.profile ||
+      research.contextKey !==
+        researchContextKey(
+          state.profile,
+          state.facts,
+          state.workspace.successContract,
+          state.url,
+          state.memory.bannedClaims
+        )
+    ) {
+      setError(
+        "This task used a different project version. Its historical result is preserved; start a new task with the current facts."
+      );
+      return;
+    }
+    dispatch({
+      type: "OPPORTUNITY_RESEARCH_RECEIVED",
+      projectId: state.projectId,
+      research,
+    });
+  };
 
   const generate = () =>
     run(async (check, signal) => {
@@ -754,6 +786,8 @@ export function useLaunchFlow(accountId?: string | null) {
       dispatch({ type: "PLANNED_EXPERIMENT_CANCELLED", id }),
     preparePlannedExperiment,
     researchOpportunities,
+    growthAgent,
+    reviewAgentResearch,
     clearOpportunityResearch: () => dispatch({ type: "OPPORTUNITY_RESEARCH_CLEARED" }),
     queueOpportunity: (
       researchId: string,

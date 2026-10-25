@@ -13,6 +13,8 @@ import {
 } from "@/lib/opportunityResearch";
 import { isSafeExternalHref } from "@/lib/urlPolicy";
 import { PROVIDER_PRIVACY } from "@/lib/privacy";
+import { AgentRunPanel } from "./AgentRunPanel";
+import type { GrowthAgentControls } from "@/hooks/useGrowthAgent";
 import type {
   Fact,
   OpportunityResearch,
@@ -45,6 +47,8 @@ export function OpportunityWorkbench({
   onResearch,
   onClear,
   onQueue,
+  agent,
+  onReviewAgent,
 }: {
   profile: ProductProfile;
   facts: Fact[];
@@ -57,7 +61,9 @@ export function OpportunityWorkbench({
   loading: boolean;
   demo: boolean;
   draftCounts: Record<string, number>;
-  onResearch: (input: TrialResearchInput) => void;
+  onResearch: (input: TrialResearchInput, deepseekConsent?: boolean) => void;
+  agent: GrowthAgentControls;
+  onReviewAgent: (id: string) => void;
   onClear: () => void;
   onQueue: (
     researchId: string,
@@ -90,6 +96,7 @@ export function OpportunityWorkbench({
   const [rulesChecked, setRulesChecked] = useState(false);
   const [trialChecked, setTrialChecked] = useState(false);
   const [copyStatus, setCopyStatus] = useState("");
+  const [deepseekConsent, setDeepseekConsent] = useState(false);
   const opportunity = research?.opportunities.find((o) => o.id === selected);
   const source = research?.sources.find((s) => s.id === opportunity?.sourceId);
   const stale = Boolean(
@@ -127,18 +134,41 @@ export function OpportunityWorkbench({
       setCopyStatus("Clipboard unavailable. Select the visible text and copy it manually.");
     }
   };
-  const update = (patch: Partial<TrialResearchInput>) =>
+  const update = (patch: Partial<TrialResearchInput>) => {
+    setDeepseekConsent(false);
     setInput((current) => ({ ...current, ...patch }));
+  };
 
   return (
     <Card className="p-5 sm:p-6">
-      <h3 className="text-lg font-semibold">Find people to try one real task</h3>
-      <p className="mt-2 text-sm text-neutral-400">
-        Bring a demand excerpt. Review the evidence, prepare a three-step trial, then
-        confirm one invitation into Today.
+      <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-accent-300">
+        Growth Agent · bounded research
       </p>
+      <h3 className="text-xl font-semibold">Find people to try one real task</h3>
+      <p className="mt-2 text-sm text-neutral-400">
+        Bring a public demand excerpt. Run one source-backed research task, review its
+        evidence, then confirm an invitation into Today. No automatic outreach.
+      </p>
+      {!demo && (
+        <AgentRunPanel
+          agent={agent}
+          onReview={(id) => {
+            const run = agent.runs.find((item) => item.id === id);
+            if (run) setInput(run.input);
+            setSelected(undefined);
+            setRulesChecked(false);
+            setTrialChecked(false);
+            setOpen(true);
+            onReviewAgent(id);
+          }}
+        />
+      )}
       <Button className="mt-4 min-h-11" variant="ghost" onClick={() => setOpen(!open)}>
-        {open ? "Hide trial research" : "Find trial opportunities"}
+        {open
+          ? "Hide task preparation"
+          : demo
+            ? "Try example research"
+            : "Prepare research task"}
       </Button>
       {open && (
         <div className="mt-5 space-y-5">
@@ -149,6 +179,14 @@ export function OpportunityWorkbench({
             No private messages, handles, emails or confidential data. No whole-site
             crawling, automatic posting or outreach.
           </p>
+          {!demo && (
+            <p className="text-xs text-neutral-400">
+              One reservation per task; at most 10 tasks per account and 100 shared tasks
+              per UTC day. Maximum 1 model request and 2,600 output tokens per task.
+              Reservations are not refunded for cancellation or failure. These are request
+              limits, not exact dollar budgets.
+            </p>
+          )}
           {!demo && (
             <div className="space-y-4">
               <Field
@@ -286,25 +324,41 @@ export function OpportunityWorkbench({
               )}
             </div>
           )}
+          {!demo && provider === "deepseek" && (
+            <label className="flex items-start gap-2 text-sm text-amber-300">
+              <input
+                type="checkbox"
+                checked={deepseekConsent}
+                onChange={(e) => setDeepseekConsent(e.target.checked)}
+              />
+              I agree to send these public excerpts and product facts to DeepSeek, which
+              processes data in China. No confidential information.
+            </label>
+          )}
           <Button
             className="min-h-11"
             disabled={
               loading ||
-              (!demo && (provider === "claude" || !normalizeResearchInput(input)))
+              agent.busy ||
+              (!demo &&
+                (!agent.enabled ||
+                  provider === "claude" ||
+                  !normalizeResearchInput(input) ||
+                  (provider === "deepseek" && !deepseekConsent)))
             }
             onClick={() => {
               setSelected(undefined);
               setRulesChecked(false);
               setTrialChecked(false);
               setCopyStatus("");
-              onResearch(input);
+              onResearch(input, deepseekConsent);
             }}
           >
-            {loading
+            {loading || agent.busy
               ? "Research in progress…"
               : demo
                 ? "Load fictional trial opportunity"
-                : "Review submitted opportunities"}
+                : "Start one research task"}
           </Button>
           {!demo && provider === "claude" && (
             <p role="status" className="text-sm text-amber-300">

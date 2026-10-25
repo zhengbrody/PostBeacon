@@ -5,7 +5,7 @@ import { retentionDays } from "@/lib/privacy";
 import { GET as retentionRoute } from "@/app/api/retention/route";
 import type { NextRequest } from "next/server";
 
-function sweepClient() {
+function sweepClient(failTable?: string, code = "XX000") {
   const calls: { table: string; column: string; cutoff: string }[] = [];
   return {
     calls,
@@ -14,7 +14,10 @@ function sweepClient() {
         delete: () => ({
           lt: async (column: string, cutoff: string) => {
             calls.push({ table, column, cutoff });
-            return { count: table === "projects" ? 2 : 5, error: null };
+            return {
+              count: table === "projects" ? 2 : 5,
+              error: table === failTable ? { code } : null,
+            };
           },
         }),
       }),
@@ -56,6 +59,25 @@ describe("retention configuration", () => {
 });
 
 describe("runRetention sweep", () => {
+  it("never reports a failed Agent cleanup as successful", async () => {
+    await expect(runRetention(sweepClient("agent_daily_usage").client, 30)).rejects.toThrow(
+      "could not finish"
+    );
+    const old = await runRetention(sweepClient("agent_daily_usage", "42P01").client, 30);
+    expect(old.enabled).toBe(true); // pre-Agent installs contain no task quota data
+    expect(old.agentUsageDeleted).toBe(0);
+    expect(old.agentCleanupUnavailable).toBe(true);
+    const beforeMigration = await runRetention(
+      sweepClient("agent_daily_usage", "PGRST205").client,
+      30
+    );
+    expect(beforeMigration.agentCleanupUnavailable).toBe(true);
+  });
+  it("stops immediately when project deletion fails", async () => {
+    const mock = sweepClient("projects");
+    await expect(runRetention(mock.client, 30)).rejects.toThrow("incomplete");
+    expect(mock.calls).toHaveLength(1);
+  });
   it("deletes stale projects (cascading the workspace) and old webhook ids at the same cutoff", async () => {
     const mock = sweepClient();
     const out = await runRetention(mock.client, 30, new Date("2026-07-12T00:00:00Z"));
@@ -66,12 +88,16 @@ describe("runRetention sweep", () => {
         column: "received_at",
         cutoff: "2026-06-12T00:00:00.000Z",
       },
+      { table: "agent_daily_usage", column: "day", cutoff: "2026-06-12" },
+      { table: "agent_daily_totals", column: "day", cutoff: "2026-06-12" },
     ]);
     expect(out).toEqual({
       enabled: true,
       cutoff: "2026-06-12T00:00:00.000Z",
       projectsDeleted: 2,
       webhookEventsDeleted: 5,
+      agentUsageDeleted: 5,
+      agentTotalsDeleted: 5,
     });
   });
 });

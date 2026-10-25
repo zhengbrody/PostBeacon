@@ -1,4 +1,5 @@
 import { getSupabase } from "./supabase/client";
+import type { AgentRun, AgentRunList } from "./agentRuns";
 import type { ApiErrorCode } from "./errors";
 import type {
   Provider,
@@ -121,6 +122,24 @@ export function boundedCopilotRequest(body: CopilotRequest): CopilotRequest {
 }
 
 export const api = {
+  agentRuns: async (
+    projectId: string,
+    ownerId: string,
+    signal?: AbortSignal
+  ): Promise<AgentRunList> => {
+    const authorization = await authHeader(ownerId);
+    signal?.throwIfAborted();
+    const res = await fetch(`/api/agent-runs?projectId=${encodeURIComponent(projectId)}`, {
+      headers: authorization,
+      cache: "no-store",
+      signal,
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Agent tasks could not be loaded.");
+    return data;
+  },
+  agentCommand: (body: unknown, ownerId: string, signal?: AbortSignal) =>
+    post<AgentRun>("/api/agent-runs", body, signal, ownerId),
   providers: () =>
     fetch("/api/providers").then((r) => r.json()) as Promise<{
       providers: Provider[];

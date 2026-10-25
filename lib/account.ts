@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { PublicError } from "./errors";
+import { asRecord } from "./coerce";
 
 /**
  * Account data rights (M17): export everything, delete everything.
@@ -11,6 +12,8 @@ import { PublicError } from "./errors";
 
 /** Every user-owned table, child-before-parent so explicit deletes never hit FK errors. */
 export const USER_TABLES_DELETE_ORDER = [
+  "agent_runs",
+  "agent_daily_usage",
   "outcomes",
   "tasks",
   "experiments",
@@ -33,6 +36,8 @@ export interface AccountExport {
   outcomes: unknown[];
   tasks: unknown[];
   entitlement: unknown | null;
+  agentRuns: unknown[];
+  agentUsage: unknown[];
 }
 
 /** Tables the export reads (superset check lives in tests against schema.sql). */
@@ -43,6 +48,8 @@ export const EXPORT_TABLES = [
   "outcomes",
   "tasks",
   "entitlements",
+  "agent_runs",
+  "agent_daily_usage",
 ] as const;
 
 /**
@@ -56,6 +63,7 @@ export async function exportAccountData(
   sb: SupabaseClient,
   user: { id: string; email: string | null }
 ): Promise<AccountExport> {
+  const missingAgentTables = new Set<string>();
   async function rows(table: (typeof EXPORT_TABLES)[number]): Promise<unknown[]> {
     const result: unknown[] = [];
     let expected: number | undefined;
@@ -64,9 +72,24 @@ export async function exportAccountData(
       query =
         table === "tasks"
           ? query.order("campaign_id", { ascending: true }).order("id", { ascending: true })
-          : query.order(table === "entitlements" ? "user_id" : "id", { ascending: true });
+          : query.order(
+              table === "agent_daily_usage"
+                ? "day"
+                : table === "entitlements"
+                  ? "user_id"
+                  : "id",
+              { ascending: true }
+            );
       const { data, error, count } = await query.range(result.length, result.length + 499);
       if (error) {
+        if (
+          ["agent_runs", "agent_daily_usage"].includes(table) &&
+          ["42P01", "PGRST205"].includes(error.code) &&
+          result.length === 0
+        ) {
+          missingAgentTables.add(table);
+          return [];
+        }
         if (error.code === "42P01" && result.length === 0) return [];
         throw new PublicError("Export failed. Try again.", 500);
       }
@@ -104,8 +127,22 @@ export async function exportAccountData(
     );
   }
 
-  const [projects, campaigns, experiments, outcomes, tasks, entitlements] =
-    await Promise.all(EXPORT_TABLES.map(rows));
+  const [
+    projects,
+    campaigns,
+    experiments,
+    outcomes,
+    tasks,
+    entitlements,
+    agentRuns,
+    agentUsage,
+  ] = await Promise.all(EXPORT_TABLES.map(rows));
+
+  if (missingAgentTables.size && asRecord(entitlements[0]).agent_data_initialized === true)
+    throw new PublicError(
+      "Your Agent history could not be read completely. Retry after the database schema is available; no partial export was returned.",
+      503
+    );
 
   return {
     exportedAt: new Date().toISOString(),
@@ -118,6 +155,8 @@ export async function exportAccountData(
     outcomes,
     tasks,
     entitlement: entitlements[0] ?? null,
+    agentRuns,
+    agentUsage,
   };
 }
 
@@ -144,7 +183,11 @@ export async function deleteAccountData(sb: SupabaseClient, userId: string): Pro
     for (const table of USER_TABLES_DELETE_ORDER) {
       const { error } = await sb.from(table).delete().eq("user_id", userId);
       // Missing table (42P01) is fine — older installs never wrote it.
-      if (error && error.code !== "42P01") {
+      if (
+        error &&
+        error.code !== "42P01" &&
+        !(["agent_runs", "agent_daily_usage"].includes(table) && error.code === "PGRST205")
+      ) {
         throw new PublicError(
           "Account deletion stopped before the account record was removed. Some data may already be deleted; retry or contact us.",
           500
@@ -156,7 +199,7 @@ export async function deleteAccountData(sb: SupabaseClient, userId: string): Pro
   const { error } = await sb.auth.admin.deleteUser(userId);
   if (error) {
     throw new PublicError(
-      "Your data was deleted but the account record could not be removed. Contact us to finish.",
+      "Account deletion is not complete because the account record could not be removed. Contact us to finish.",
       500
     );
   }

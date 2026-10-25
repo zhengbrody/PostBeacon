@@ -11,6 +11,11 @@ import {
 } from "@/lib/account";
 import { PublicError } from "@/lib/errors";
 
+const accountSchema = () =>
+  ["schema.sql", "migrations/20261025_agent_runs.sql"]
+    .map((path) => readFileSync(join(__dirname, "../supabase", path), "utf-8"))
+    .join("\n");
+
 /** Minimal thenable-style mock matching the supabase-js call shapes we use. */
 function exportClient(
   rows: Record<string, unknown[]>,
@@ -20,6 +25,7 @@ function exportClient(
     count?: (from: number, total: number) => number | null;
     emptyAfterFirst?: boolean;
     failAfterFirst?: string;
+    missingAgentCode?: string;
   } = {}
 ) {
   const queried: string[] = [];
@@ -37,7 +43,15 @@ function exportClient(
             if (table === failTable)
               return { data: null, error: { code: "XX000" }, count: null };
             if (!(table in rows))
-              return { data: null, error: { code: "42P01" }, count: null };
+              return {
+                data: null,
+                error: {
+                  code: table.startsWith("agent_")
+                    ? (options.missingAgentCode ?? "42P01")
+                    : "42P01",
+                },
+                count: null,
+              };
             if (from > 0 && options.failAfterFirst)
               return { data: null, error: { code: options.failAfterFirst }, count: null };
             return {
@@ -113,14 +127,14 @@ function deleteClient(
 
 describe("deletion cleanup coverage (the 'nothing survives' proof)", () => {
   it("every user table in schema.sql is either wiped on account deletion or explicitly non-personal", () => {
-    const schema = readFileSync(join(__dirname, "../supabase/schema.sql"), "utf-8");
+    const schema = accountSchema();
     const tables = [...schema.matchAll(/create table if not exists public\.(\w+)/g)].map(
       (m) => m[1]
     );
     expect(tables.length).toBeGreaterThanOrEqual(7);
     // webhook_events stores Polar event ids only (no user linkage, no personal
     // data) — it is swept by the retention task instead (tests/retention.test.ts).
-    const nonPersonal = ["webhook_events"];
+    const nonPersonal = ["webhook_events", "agent_daily_totals"];
     for (const table of tables) {
       const covered =
         (USER_TABLES_DELETE_ORDER as readonly string[]).includes(table) ||
@@ -130,15 +144,16 @@ describe("deletion cleanup coverage (the 'nothing survives' proof)", () => {
   });
 
   it("schema user tables all carry a user_id for the explicit wipe to key on", () => {
-    const schema = readFileSync(join(__dirname, "../supabase/schema.sql"), "utf-8");
+    const schema = accountSchema();
     for (const table of USER_TABLES_DELETE_ORDER) {
-      const block = schema.split(`public.${table}`)[1]?.slice(0, 600) ?? "";
+      const block =
+        schema.split(`create table if not exists public.${table}`)[1]?.split(";")[0] ?? "";
       expect(block.includes("user_id"), `${table} lacks user_id`).toBe(true);
     }
   });
 
   it("every user table enables RLS and declares an owner-scoped policy", () => {
-    const schema = readFileSync(join(__dirname, "../supabase/schema.sql"), "utf-8");
+    const schema = accountSchema();
     for (const table of USER_TABLES_DELETE_ORDER) {
       expect(schema).toMatch(
         new RegExp(`alter table public\\.${table} enable row level security`, "i")
@@ -153,14 +168,14 @@ describe("deletion cleanup coverage (the 'nothing survives' proof)", () => {
   });
 
   it("every user table cascades from auth.users and workspace parents cascade", () => {
-    const schema = readFileSync(join(__dirname, "../supabase/schema.sql"), "utf-8");
+    const schema = accountSchema();
     for (const table of USER_TABLES_DELETE_ORDER) {
       const block = schema
         .split(`create table if not exists public.${table}`)[1]
         ?.split(";")[0];
       expect(block, `${table} table definition missing`).toBeTruthy();
       expect(block, `${table} must cascade when its auth user is removed`).toMatch(
-        /user_id uuid[^,]*references auth\.users \(id\) on delete cascade/i
+        /user_id uuid[^,]*references auth\.users\s*\(id\) on delete cascade/i
       );
     }
     expect(schema).toMatch(
@@ -303,6 +318,39 @@ describe("deleteAccountData", () => {
 });
 
 describe("exportAccountData", () => {
+  it("keeps pre-Agent accounts exportable, but fails closed once task data has existed", async () => {
+    const old = exportClient({ projects: [], entitlements: [] }, undefined, 1000, {
+      missingAgentCode: "PGRST205",
+    });
+    expect(
+      (await exportAccountData(old.client, { id: "u", email: null })).agentRuns
+    ).toEqual([]);
+    const used = exportClient(
+      { projects: [], entitlements: [{ agent_data_initialized: true }] },
+      undefined,
+      1000,
+      { missingAgentCode: "PGRST205" }
+    );
+    await expect(exportAccountData(used.client, { id: "u", email: null })).rejects.toThrow(
+      "no partial export"
+    );
+  });
+  it("includes full task snapshots and owner counters when installed", async () => {
+    const runs = [
+      { id: "r", payload: { input: { task: "Try demo" } }, sources: ["receipt"] },
+    ];
+    const usage = [{ day: "2026-10-24", reserved_runs: 1 }];
+    const mock = exportClient({
+      projects: [],
+      entitlements: [{ agent_data_initialized: true }],
+      agent_runs: runs,
+      agent_daily_usage: usage,
+    });
+    const out = await exportAccountData(mock.client, { id: "u", email: null });
+    expect(out.agentRuns).toEqual(runs);
+    expect(out.agentUsage).toEqual(usage);
+    expect(mock.queried).not.toContain("agent_daily_totals");
+  });
   it("honors lower server page caps without skipping offsets", async () => {
     const many = Array.from({ length: 751 }, (_, id) => ({ id }));
     const mock = exportClient({ projects: many }, undefined, 100);

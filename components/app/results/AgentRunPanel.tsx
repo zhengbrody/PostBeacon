@@ -1,0 +1,115 @@
+"use client";
+
+import { Button } from "@/components/ui/Button";
+import { AGENT_PHASES, agentRunMessage } from "@/lib/agentRuns";
+import type { GrowthAgentControls } from "@/hooks/useGrowthAgent";
+
+const labels = {
+  queued: "Task saved",
+  sources: "Sources",
+  model: "One model request",
+  ready: "Your review",
+};
+export function AgentRunPanel({
+  agent,
+  onReview,
+}: {
+  agent: GrowthAgentControls;
+  onReview: (id: string) => void;
+}) {
+  return (
+    <div className="mt-4 space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs text-neutral-400">
+          Saved tasks · latest 5 · refresh restores server receipts
+        </p>
+        <Button variant="ghost" onClick={agent.refresh} disabled={agent.busy}>
+          Refresh tasks
+        </Button>
+      </div>
+      {agent.error && (
+        <p role="alert" className="text-sm text-amber-300">
+          {agent.error}
+        </p>
+      )}
+      {agent.checking && (
+        <p role="status" className="text-sm text-neutral-400">
+          Checking persistent task availability…
+        </p>
+      )}
+      {!agent.checking && !agent.enabled && !agent.error && (
+        <p role="status" className="text-sm text-neutral-400">
+          Persistent Agent tasks are not enabled on this deployment yet. No model will be
+          called. Existing plans remain usable.
+        </p>
+      )}
+      {agent.enabled && !agent.runs.length && (
+        <p className="text-sm text-neutral-400">
+          No research task yet. Prepare one below; nothing runs until you start it.
+        </p>
+      )}
+      {agent.runs.map((run) => (
+        <article key={run.id} className="rounded-xl border border-line bg-surface-2 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h4 className="min-w-0 break-words font-medium">{run.input.task}</h4>
+            <span className="text-xs text-accent-300">
+              {run.interrupted ? "interrupted" : run.status} · {run.provider}
+            </span>
+          </div>
+          <ol
+            aria-label="Recorded Agent steps"
+            className="my-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4"
+          >
+            {AGENT_PHASES.map((phase, index) => (
+              <li
+                key={phase}
+                aria-current={run.phase === phase ? "step" : undefined}
+                className={`rounded-lg border p-2 ${run.phase === phase ? "border-accent-500 text-accent-300" : "border-line text-neutral-400"}`}
+              >
+                {index + 1}. {labels[phase]}
+                {phase === "model" && run.status === "ready" && !run.modelAttempted
+                  ? " · not needed"
+                  : AGENT_PHASES.indexOf(run.phase) > index
+                    ? " · recorded"
+                    : ""}
+              </li>
+            ))}
+          </ol>
+          <p role="status" className="text-sm text-neutral-300">
+            {agentRunMessage(run)}
+          </p>
+          <p className="mt-2 text-xs text-neutral-500">
+            Last server receipt: {run.updatedAt} · {run.checkedSources}/{run.sourceCount}{" "}
+            source receipts ·{" "}
+            {run.modelAttempted
+              ? "1 request reserved (not proof of provider completion)"
+              : "No model request reserved"}
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {run.status === "ready" && run.research && (
+              <Button onClick={() => onReview(run.id)}>Review research →</Button>
+            )}
+            {run.canResume && (
+              <Button
+                variant="ghost"
+                disabled={agent.busy}
+                onClick={() => void agent.resume(run.id)}
+              >
+                Resume source checks
+              </Button>
+            )}
+            {(run.status === "queued" || run.status === "running") && (
+              <Button
+                variant="ghost"
+                disabled={agent.busy}
+                onClick={() => void agent.cancel(run.id)}
+              >
+                Cancel task
+              </Button>
+            )}
+          </div>
+        </article>
+      ))}
+    </div>
+  );
+}

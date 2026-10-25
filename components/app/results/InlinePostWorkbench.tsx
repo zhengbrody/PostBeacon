@@ -73,6 +73,7 @@ export function InlinePostWorkbench({
   );
   const [hookChange, setHookChange] = useState<{ from: string; to: string }>();
   const wasLoading = useRef(false);
+  const draftsBeforeLoading = useRef(JSON.stringify(content.posts));
   const previousPostCount = useRef(content.posts.length);
   const previousPlatform = useRef(content.platformId);
 
@@ -84,9 +85,16 @@ export function InlinePostWorkbench({
   }, [content.platformId, firstAvailable]);
 
   useEffect(() => {
-    if (wasLoading.current && !loading) setFeedback("Fresh draft generated ✓");
+    if (!wasLoading.current && loading)
+      draftsBeforeLoading.current = JSON.stringify(content.posts);
+    if (
+      wasLoading.current &&
+      !loading &&
+      draftsBeforeLoading.current !== JSON.stringify(content.posts)
+    )
+      setFeedback("Fresh draft generated ✓");
     wasLoading.current = loading;
-  }, [loading]);
+  }, [loading, content.posts]);
 
   useEffect(() => {
     if (previousPlatform.current !== content.platformId) {

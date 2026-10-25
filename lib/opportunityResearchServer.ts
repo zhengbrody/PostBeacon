@@ -42,15 +42,21 @@ export function sourceFetchPermitted(url: string): boolean {
 }
 
 const plain = (text: string) => text.replace(/\s+/g, " ").trim();
-export async function runOpportunityResearch(args: {
-  provider: "openai" | "deepseek";
-  productUrl: string;
-  profile: ProductProfile;
-  facts: Fact[];
-  successContract: SuccessContract;
-  input: TrialResearchInput;
-  bannedClaims?: string[];
-}): Promise<OpportunityResearch> {
+export async function runOpportunityResearch(
+  args: {
+    provider: "openai" | "deepseek";
+    productUrl: string;
+    profile: ProductProfile;
+    facts: Fact[];
+    successContract: SuccessContract;
+    input: TrialResearchInput;
+    bannedClaims?: string[];
+  },
+  progress?: {
+    sources: (sources: OpportunitySource[]) => Promise<void>;
+    beforeModel: () => Promise<void>;
+  }
+): Promise<OpportunityResearch> {
   const input = normalizeResearchInput(args.input);
   if (!input)
     throw new PublicError(
@@ -103,6 +109,7 @@ export async function runOpportunityResearch(args: {
     }
   );
   const usable = sources.filter(eligibleSource);
+  await progress?.sources(sources);
   const contextKey = researchContextKey(
     args.profile,
     args.facts,
@@ -112,6 +119,7 @@ export async function runOpportunityResearch(args: {
   );
   if (!usable.length)
     return { id, contextKey, input, sources, opportunities: [], completedAt: now };
+  await progress?.beforeModel();
   const result = await generateJsonOnce({
     provider: args.provider,
     maxTokens: 2600,

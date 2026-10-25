@@ -172,6 +172,14 @@ Import the repo in [Vercel](https://vercel.com), set the env vars above, point y
 - Cross-project channel analytics on the normalized workspace tables
 - Shared projects for small teams
 
+## Persistent Growth Agent research (C.2.0)
+
+The Today workspace includes a visible, bounded research-task entry. Persistent
+execution is **off by default**, not an autonomous publisher. See
+[implementation, local checks and production enablement](docs/M26.C2.0-bounded-agent-runs.md).
+After normal tests, `npm run test:agent-db` exercises an isolated disposable local
+PostgreSQL cluster (requires `initdb`, `pg_ctl`, `psql`); it never touches production.
+
 ## Contributing
 
 It's a beta and feedback is the roadmap: if a plan is off, a score looks wrong, or the Reddit draft still smells like an ad, [open an issue](https://github.com/zhengbrody/PostBeacon/issues). PRs welcome — keep the five gates green (`typecheck · test · lint · format:check · build`) and match the conventions in [AGENTS.md](./AGENTS.md).

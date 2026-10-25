@@ -9,7 +9,7 @@ import type { Provider } from "./types";
 import { guestPreviewQuotaConfigured } from "./guestPreviewQuota";
 
 /** Bump when the published policy text meaningfully changes. */
-export const PRIVACY_LAST_UPDATED = "2026-10-12";
+export const PRIVACY_LAST_UPDATED = "2026-10-24";
 
 /**
  * How each LLM provider handles API data, per its PUBLIC policy as of
@@ -120,7 +120,7 @@ export const SUBPROCESSORS: Subprocessor[] = [
   {
     name: "Supabase",
     role: "Accounts (auth) and database",
-    data: "Email / OAuth identity, saved projects, workspace experiments & outcomes, usage entitlements",
+    data: "Email / OAuth identity, saved projects, workspace experiments & outcomes, usage entitlements, explicit Agent research tasks and daily reservations",
     region: "Operator-chosen project region",
     when: "Only when accounts are configured and you sign in",
     policyUrl: "https://supabase.com/privacy",
@@ -342,13 +342,23 @@ export const DATA_CATEGORIES: DataCategory[] = [
     deletion: "Deleting the project cascades all of it",
   },
   {
+    what: "Agent research tasks (frozen product facts, submitted public excerpts, trial instructions, source receipts, provider, execution state and reviewable result)",
+    where:
+      "Supabase, owner-readable tasks with server-only writes, only when persistent Agent tasks are enabled",
+    why: "Restore a bounded task after refresh without silently repeating a model request. No automatic publication or outreach",
+    retention:
+      "With its project; daily reservation counts survive project deletion to prevent quota resets and follow the configured retention sweep",
+    deletion:
+      "Delete project removes task content; delete account also removes owner-linked counters. Shared daily counts contain no identity or content",
+  },
+  {
     what: "Prompts to the AI model (page text, profile, plan context, pasted feedback)",
     where: deepseekAutomaticFallbackEnabled()
       ? "Sent to your primary model; on availability/credit/rate-limit failure, another configured provider (including DeepSeek during this beta) may receive the retry"
       : "Sent to your primary model; on availability/credit/rate-limit failure, a clear-policy fallback may receive the retry",
     why: "Generating your profile, strategy, content and copilot answers",
     retention:
-      "Not stored by us; the provider retains per its API policy (see table below)",
+      "Ordinary model transport prompts are not stored separately; saved Agent tasks include the disclosed input snapshot and excerpts. The provider retains per its API policy (see table below)",
     deletion: "Provider-side, per its policy",
   },
   {

@@ -57,6 +57,8 @@ app/
     copilot/route.ts                                                 Launch Copilot (plan-scoped CMO chat)
     opportunities/route.ts      C.1 signed-in, explicit-source trial research; one model
                                  request, no automatic fallback or autonomous publishing
+    agent-runs/route.ts         C.2.0 flag-gated persistent research tasks; owner-scoped
+                                 reads, atomic reservations and request-backed fenced worker
     billing/{checkout,webhook}/route.ts                              Polar checkout + webhook
 lib/
   types.ts              All shared types (Provider, ProductProfile, MarketingStrategy, ...)
@@ -131,6 +133,9 @@ lib/
                          trial gate and confirmed trial provenance; not AgentRun jobs
   opportunityResearchServer.ts Explicit source-only safe fetch and single-request provider
                               orchestration; quote verification is not demand/rules review
+  agentRuns.ts                Owner-visible job receipts, bounded status projection; no fake progress
+  agentRunServer.ts           Saved-context/owner check, reserve/transition RPC seam and
+                              at-most-one-model worker; not an always-on scheduler
   execution.ts          M19 Prepare→Publish→Measure→Learn lifecycle projection,
                         countdowns and operator-controlled platform destinations
   experimentHistory.ts M24.1 Outcome-owned verdict reads, honest legacy-final fallback
@@ -170,6 +175,8 @@ hooks/
                         posted marks ⊆ existing posts, step never deeper than the data)
   useLaunchFlow.ts      Thin hook over the reducer: async API actions + ephemeral UI state
   useAutosave.ts        Debounced persist: localStorage (anon) / Supabase upsert (signed-in)
+  useGrowthAgent.ts     Account/project-scoped remote job reads/commands, bounded polling,
+                        explicit review into the reducer; no localStorage job ledger
 components/
   ui/                   Button, Card, Badge, Spinner, Field, Tabs (design system primitives)
   app/                  Stepper, UrlStep, ProfileForm, FactLedger (provenance UI + questions),
@@ -349,6 +356,20 @@ cross-origin 403. Aggregate product-health reporting is operator-only at `/api/m
 Redeploy: `npx vercel --prod --yes`. Push env from `.env.local`: `~/push-env.sh`.
 
 ## Status / changelog
+- **2026-10-24**: **C.2.0 visible persistent research — local implementation.** Today
+  now puts Growth Agent first and gives legacy/unsaved projects explicit setup paths.
+  Added flag-closed owner-scoped tasks, composite project-owner FK, transactional
+  user/global UTC daily reservations, one fenced worker/model attempt, explicit
+  pre-model resume and cancellation fencing. Completed jobs require manual review
+  before the existing dual-confirm/queue boundary. Export/delete/retention/privacy
+  cover tasks and counters, including a server-written initialization marker so
+  pre-install accounts remain exportable without hiding unreadable later history.
+  No new framework, provider, model, automatic publisher or always-on scheduler.
+  Independent local PostgreSQL acceptance and offline/UI gates are recorded in
+  `docs/M26.C2.0-bounded-agent-runs.md`: 598 offline tests (three live skipped),
+  eight SQL audit rows, 19 named PostgreSQL scenarios, 1440×1000/375×812 fictional
+  browser QA and six built-app signed-out smoke probes pass. Production SQL/flag, real account/provider
+  acceptance and activation/retention remain pending; this is not the whole C.2.
 - **2026-10-24**: **Authorized security/account-boundary release deployed.** Pushed
   `c2fc40c`, `5e6454c` and deterministic-test follow-up `22e92a1` to main.
   GitHub CI `40149521584` passed all gates; Vercel deployment

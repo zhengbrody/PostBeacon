@@ -146,6 +146,7 @@ export default function AppPage() {
         <AppFlow
           key={userId ?? "local"}
           f={f}
+          onSaveProject={saveNow}
           canReceiveEmail={Boolean(userEmail)}
           previewHandoff={previewHandoff}
           handoffAccepted={handoffAccepted}
@@ -169,6 +170,7 @@ export default function AppPage() {
 
 function AppFlow({
   f,
+  onSaveProject,
   canReceiveEmail,
   previewHandoff,
   handoffAccepted,
@@ -177,6 +179,7 @@ function AppFlow({
   onClearHandoff,
 }: {
   f: ReturnType<typeof useLaunchFlow>;
+  onSaveProject: () => Promise<boolean>;
   canReceiveEmail: boolean;
   previewHandoff: PreviewHandoff | null;
   handoffAccepted: boolean;
@@ -422,6 +425,11 @@ function AppFlow({
           onResearchOpportunities={f.researchOpportunities}
           onClearOpportunityResearch={f.clearOpportunityResearch}
           onQueueOpportunity={f.queueOpportunity}
+          growthAgent={f.growthAgent}
+          onReviewAgent={f.reviewAgentResearch}
+          projectId={f.projectId}
+          onCompleteSetup={() => f.setStep("profile")}
+          onSaveProject={onSaveProject}
           launchDate={f.launchDate}
           setLaunchDate={f.setLaunchDate}
           loading={f.loading}
