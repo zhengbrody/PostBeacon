@@ -15,6 +15,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # Fail on high/critical dependency advisories; never auto-force upgrades.
+      - run: npm run audit:dependencies
       - run: npm run typecheck
       - run: npm run lint
       - run: npm run format:check

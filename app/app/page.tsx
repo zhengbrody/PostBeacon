@@ -34,14 +34,17 @@ import {
 import { PRODUCT_EVENTS, trackProductEvent } from "@/lib/productAnalytics";
 
 export default function AppPage() {
-  const f = useLaunchFlow();
-  const { resetAccountBoundary } = f;
   const { userId, userEmail, supabase, loading: authLoading } = useSupabaseUser();
+  const previousUserId = useRef<string | null | undefined>(undefined);
+  const boundaryPending =
+    !authLoading && shouldResetForAccountBoundary(previousUserId.current, userId);
+  const f = useLaunchFlow(authLoading ? undefined : userId);
+  const { resetAccountBoundary } = f;
   const { lastSaved, saveError, saving, saveNow } = useAutosave(f, {
     userId,
     supabase,
+    loading: authLoading || boundaryPending,
   });
-  const previousUserId = useRef<string | null | undefined>(undefined);
   const [previewHandoff, setPreviewHandoff] = useState<PreviewHandoff | null>(null);
   const [handoffAccepted, setHandoffAccepted] = useState(false);
   const [handoffReadyToSave, setHandoffReadyToSave] = useState(false);
@@ -101,7 +104,7 @@ export default function AppPage() {
   // Login gate: required only when Supabase is configured. The demo bypasses it
   // so anyone can explore the example; with no Supabase keys the app stays open.
   const gateOn = supabaseConfigured() && !f.demo;
-  const checkingAuth = gateOn && authLoading;
+  const checkingAuth = gateOn && (authLoading || boundaryPending);
   const needsAuth = gateOn && !authLoading && !userEmail;
   const showHeaderTools = !checkingAuth && !needsAuth && !f.demo;
 
@@ -116,6 +119,7 @@ export default function AppPage() {
         </div>
         {showHeaderTools && (
           <ProjectBar
+            key={userId ?? "signed-out"}
             snapshot={f.snapshot}
             onLoad={f.loadProject}
             lastSaved={lastSaved}
@@ -140,6 +144,7 @@ export default function AppPage() {
         <AuthScreen onDemo={f.loadDemo} />
       ) : (
         <AppFlow
+          key={userId ?? "local"}
           f={f}
           canReceiveEmail={Boolean(userEmail)}
           previewHandoff={previewHandoff}
@@ -438,6 +443,7 @@ function AppFlow({
 
       {f.step === "results" && f.result && f.profile && f.strategy && !f.demo && (
         <CopilotPanel
+          key={f.projectId || f.url}
           profile={f.profile}
           strategy={f.strategy}
           result={f.result}

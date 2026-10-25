@@ -371,6 +371,46 @@ describe("verdictFor (rule-based, absent ≠ 0)", () => {
 });
 
 describe("weeklyReview — north star = completed learning loops", () => {
+  it("does not promote a 24h target reach into an angle win before its 72h window", () => {
+    const verdict: NonNullable<Outcome["verdict"]> = {
+      call: "supported",
+      assessment: "target-reached",
+      reason: "Stored target was reached at this checkpoint.",
+      advice: "Wait for the final window before promoting angle evidence.",
+      decidedAt: hoursBefore(1),
+    };
+    const early = experiment({
+      successContract: {
+        primaryGoal: "Signups",
+        primarySignal: "signups",
+        minimumResult: 1,
+        evaluationWindow: "72h",
+      },
+      outcomes: [
+        { id: "o24", checkpoint: "24h", recordedAt: hoursBefore(1), signups: 1, verdict },
+      ],
+    });
+    expect(
+      weeklyReview({ strategy, workspace: ws({ experiments: [early] }) }, NOW).bestAngle
+    ).toBeUndefined();
+    const final = {
+      ...early,
+      outcomes: [
+        ...early.outcomes,
+        {
+          id: "o72",
+          checkpoint: "72h" as const,
+          recordedAt: hoursBefore(1),
+          signups: 2,
+          verdict,
+        },
+      ],
+    };
+    expect(
+      weeklyReview({ strategy, workspace: ws({ experiments: [final] }) }, NOW).bestAngle
+    ).toBe("the angle");
+  });
+
   it("counts only verdict-decided loops inside the window", () => {
     const decided = (id: string, at: string): Experiment =>
       experiment({

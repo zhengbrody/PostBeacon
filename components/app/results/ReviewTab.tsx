@@ -48,7 +48,7 @@ export function ReviewTab({
           {review.bestAngle && (
             <div className="max-w-sm rounded-lg bg-surface-2 px-4 py-3 text-right">
               <div className="text-xs uppercase tracking-wide text-neutral-500">
-                Best angle so far
+                Target-reaching angle · {review.bestAngleEvidence}
               </div>
               <div className="mt-1 text-sm text-neutral-200">
                 “{clipString(review.bestAngle, 90)}”
@@ -109,7 +109,7 @@ export function ReviewTab({
                 </span>
                 {channel.bestCall && (
                   <span className="rounded-full bg-surface px-2 py-0.5 text-[11px] text-neutral-300">
-                    best: {channel.bestCall}
+                    strongest checkpoint: {channel.bestCall}
                   </span>
                 )}
               </div>

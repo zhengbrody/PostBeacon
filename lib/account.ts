@@ -56,13 +56,52 @@ export async function exportAccountData(
   sb: SupabaseClient,
   user: { id: string; email: string | null }
 ): Promise<AccountExport> {
-  async function rows(table: string): Promise<unknown[]> {
-    const { data, error } = await sb.from(table).select("*");
-    if (error) {
-      if (error.code === "42P01") return []; // table not installed — nothing to export
-      throw new PublicError("Export failed. Try again.", 500);
+  async function rows(table: (typeof EXPORT_TABLES)[number]): Promise<unknown[]> {
+    const result: unknown[] = [];
+    let expected: number | undefined;
+    for (let page = 0; page < 200; page += 1) {
+      let query = sb.from(table).select("*", { count: "exact" }).eq("user_id", user.id);
+      query =
+        table === "tasks"
+          ? query.order("campaign_id", { ascending: true }).order("id", { ascending: true })
+          : query.order(table === "entitlements" ? "user_id" : "id", { ascending: true });
+      const { data, error, count } = await query.range(result.length, result.length + 499);
+      if (error) {
+        if (error.code === "42P01" && result.length === 0) return [];
+        throw new PublicError("Export failed. Try again.", 500);
+      }
+      if (
+        typeof count !== "number" ||
+        !Number.isSafeInteger(count) ||
+        count < 0 ||
+        count > 100_000
+      )
+        throw new PublicError(
+          "Export could not verify its complete row count. Contact us if retrying fails.",
+          500
+        );
+      if (expected !== undefined && expected !== count)
+        throw new PublicError(
+          "Your data changed during export. Wait for saving to finish and retry.",
+          409
+        );
+      expected = count;
+      const batch = data ?? [];
+      if (
+        result.length + batch.length > expected ||
+        (!batch.length && result.length < expected)
+      )
+        throw new PublicError(
+          "Export stopped because some rows could not be read. Try again.",
+          500
+        );
+      result.push(...batch);
+      if (result.length === expected) return result;
     }
-    return data ?? [];
+    throw new PublicError(
+      "Export exceeded its safe page limit. Contact us for a complete export.",
+      500
+    );
   }
 
   const [projects, campaigns, experiments, outcomes, tasks, entitlements] =

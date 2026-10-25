@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { api } from "@/lib/api";
+import { createAsyncScope, StaleRequestError } from "@/lib/asyncScope";
 import { clearDraft, loadDraft } from "@/lib/storage";
 import { DEMO_PROJECT } from "@/lib/demo";
 import { PLATFORMS } from "@/lib/platforms";
@@ -56,10 +57,16 @@ export type { Step };
  * and ephemeral UI state (loading/error/paywall), and keeps the same public
  * surface components have always consumed.
  */
-export function useLaunchFlow() {
+export function useLaunchFlow(accountId?: string | null) {
   const [state, dispatch] = useReducer(flowReducer, initialFlowState);
   const currentState = useRef(state);
   currentState.current = state;
+  const requests = useRef(createAsyncScope());
+  const observedAccount = useRef(accountId);
+  if (observedAccount.current !== accountId) {
+    requests.current.invalidate();
+    observedAccount.current = accountId;
+  }
   const [provider, setProvider] = useState<Provider>("claude");
   const [availProviders, setAvailProviders] = useState<Provider[]>([]);
   const [loading, setLoading] = useState(false);
@@ -81,21 +88,53 @@ export function useLaunchFlow() {
       .catch(() => {});
   }, []);
 
-  const run = useCallback(async (fn: () => Promise<void>, msg: string) => {
-    setError("");
-    setLoading(true);
-    setLoadingMsg(msg);
-    try {
-      await fn();
-      return true;
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Something went wrong");
-      return false;
-    } finally {
-      setLoading(false);
-      setLoadingMsg("");
-    }
+  const cancelPending = useCallback(() => {
+    requests.current.invalidate();
+    setLoading(false);
+    setLoadingMsg("");
   }, []);
+
+  useEffect(() => () => requests.current.invalidate(), []);
+
+  const run = useCallback(
+    async (fn: (check: () => void, signal: AbortSignal) => Promise<void>, msg: string) => {
+      const source = currentState.current;
+      const ticket = requests.current.begin(() => {
+        const current = currentState.current;
+        return (
+          current.url === source.url &&
+          current.profile === source.profile &&
+          current.facts === source.facts &&
+          current.result === source.result &&
+          current.strategy === source.strategy &&
+          current.selected === source.selected &&
+          current.workspace === source.workspace &&
+          current.memory === source.memory &&
+          current.launchDate === source.launchDate
+        );
+      });
+      setError("");
+      setLoading(true);
+      setLoadingMsg(msg);
+      try {
+        await fn(ticket.check, ticket.signal);
+        return true;
+      } catch (e) {
+        if (ticket.current() && !(e instanceof StaleRequestError))
+          setError(e instanceof Error ? e.message : "Something went wrong");
+        return false;
+      } finally {
+        // A state-changing success no longer matches its source references, so
+        // use signal cancellation (not context equality) for loading ownership.
+        if (!ticket.signal.aborted) {
+          setLoading(false);
+          setLoadingMsg("");
+        }
+        ticket.release();
+      }
+    },
+    []
+  );
 
   const { url, profile, facts, selected } = state;
 
@@ -106,12 +145,14 @@ export function useLaunchFlow() {
   };
 
   const analyze = (evidenceSources: EvidenceSourceInput[] = []) =>
-    run(async () => {
+    run(async (check, signal) => {
       const { profile, facts, questions, meta, receipt } = await api.analyze(
         url,
         provider,
-        evidenceSources
+        evidenceSources,
+        signal
       );
+      check();
       adoptFallback(meta);
       dispatch({
         type: "ANALYZED",
@@ -127,7 +168,7 @@ export function useLaunchFlow() {
     }, "Validating and analyzing your submitted sources…");
 
   const buildStrategy = () =>
-    run(async () => {
+    run(async (check, signal) => {
       if (!profile) return;
       if (!state.workspace.successContract) {
         throw new Error("Define how this experiment will be judged before continuing.");
@@ -136,8 +177,10 @@ export function useLaunchFlow() {
         profile,
         provider,
         facts,
-        state.workspace.successContract
+        state.workspace.successContract,
+        signal
       );
+      check();
       adoptFallback(strategy.meta);
       dispatch({ type: "STRATEGY_BUILT", strategy });
       trackProductEvent(PRODUCT_EVENTS.strategyCompleted, {
@@ -148,7 +191,7 @@ export function useLaunchFlow() {
 
   const researchOpportunities = (input: TrialResearchInput) =>
     run(
-      async () => {
+      async (check, signal) => {
         if (!state.profile || !state.workspace.successContract || !state.result)
           throw new Error(
             "Prepare a plan and success definition before researching trials."
@@ -165,15 +208,19 @@ export function useLaunchFlow() {
               state.url,
               state.memory.bannedClaims
             )
-          : await api.opportunities({
-              provider: provider === "deepseek" ? "deepseek" : "openai",
-              productUrl: state.url,
-              profile: state.profile,
-              facts: state.facts,
-              successContract: state.workspace.successContract,
-              input,
-              bannedClaims: state.memory.bannedClaims,
-            });
+          : await api.opportunities(
+              {
+                provider: provider === "deepseek" ? "deepseek" : "openai",
+                productUrl: state.url,
+                profile: state.profile,
+                facts: state.facts,
+                successContract: state.workspace.successContract,
+                input,
+                bannedClaims: state.memory.bannedClaims,
+              },
+              signal
+            );
+        check();
         const current = currentState.current;
         if (
           !current.profile ||
@@ -202,7 +249,7 @@ export function useLaunchFlow() {
     );
 
   const generate = () =>
-    run(async () => {
+    run(async (check, signal) => {
       if (!profile) return;
       setPaywall(null);
       try {
@@ -211,8 +258,10 @@ export function useLaunchFlow() {
           selected,
           provider,
           facts,
-          state.workspace.successContract
+          state.workspace.successContract,
+          signal
         );
+        check();
         adoptFallback(result.content.find((c) => c.meta?.fallbackFrom)?.meta);
         dispatch({ type: "GENERATED", result });
         setGenerations((n) => n + 1);
@@ -223,6 +272,7 @@ export function useLaunchFlow() {
             provider,
         });
       } catch (e) {
+        check();
         if (isGateError(e, "auth")) return setPaywall("auth");
         if (isGateError(e, "paywall")) return setPaywall("limit");
         throw e;
@@ -231,15 +281,17 @@ export function useLaunchFlow() {
 
   // Rewrite one platform's content in place, leaving the rest of the results intact.
   const regeneratePost = (platformId: string) =>
-    run(async () => {
+    run(async (check, signal) => {
       if (!profile) return;
       const { posts, playbook, meta } = await api.regenerate(
         profile,
         platformId,
         provider,
         facts,
-        state.workspace.successContract
+        state.workspace.successContract,
+        signal
       );
+      check();
       adoptFallback(meta);
       dispatch({
         type: "CHANNEL_CONTENT_REPLACED",
@@ -253,7 +305,7 @@ export function useLaunchFlow() {
   const upsertChannel = (platformId: string, msg: string) => {
     const platform = PLATFORMS.find((p) => p.id === platformId);
     if (!platform) return Promise.resolve();
-    return run(async () => {
+    return run(async (check, signal) => {
       if (!profile) return;
       setPaywall(null);
       try {
@@ -262,14 +314,17 @@ export function useLaunchFlow() {
           platformId,
           provider,
           facts,
-          state.workspace.successContract
+          state.workspace.successContract,
+          signal
         );
+        check();
         adoptFallback(meta);
         dispatch({
           type: "CHANNEL_UPSERTED",
           channel: { platformId, posts, playbook, meta },
         });
       } catch (e) {
+        check();
         if (isGateError(e, "auth")) return setPaywall("auth");
         if (isGateError(e, "paywall")) return setPaywall("limit");
         throw e;
@@ -293,22 +348,26 @@ export function useLaunchFlow() {
   const generateVariant = (experiment: Experiment) => {
     const verdict = effectiveExperimentVerdict(experiment);
     if (!verdict) return Promise.resolve();
-    return run(async () => {
+    return run(async (check, signal) => {
       if (!profile || !state.strategy) return;
       const platform = PLATFORMS.find((p) => p.id === experiment.platformId);
-      const res = await api.copilot({
-        provider,
-        profile,
-        strategy: state.strategy,
-        result: state.result,
-        facts,
-        workspace: state.workspace,
-        memory: state.memory,
-        launchDate: state.launchDate,
-        action: "rewrite",
-        targetPlatformId: experiment.platformId,
-        question: variantDirection(experiment, verdict),
-      });
+      const res = await api.copilot(
+        {
+          provider,
+          profile,
+          strategy: state.strategy,
+          result: state.result,
+          facts,
+          workspace: state.workspace,
+          memory: state.memory,
+          launchDate: state.launchDate,
+          action: "rewrite",
+          targetPlatformId: experiment.platformId,
+          question: variantDirection(experiment, verdict),
+        },
+        signal
+      );
+      check();
       adoptFallback(res.meta);
       const variant = res.actions.find(
         (a) => a.tool === "generate_variant" && a.hook && a.body
@@ -337,7 +396,7 @@ export function useLaunchFlow() {
   };
 
   const preparePlannedExperiment = (id: string) =>
-    run(async () => {
+    run(async (check, signal) => {
       const plan = state.workspace.plannedExperiments?.find(
         (item) => item.id === id && item.status === "planned"
       );
@@ -379,32 +438,36 @@ export function useLaunchFlow() {
             { platformId: plan.platformId, platformName: plan.platformName, posts: [seed] },
           ],
         };
-        const res = await api.copilot({
-          provider,
-          profile: {
-            ...profile,
-            audience: source.snapshot?.audience ?? profile.audience,
-            publisherVoice: source.snapshot?.publisherVoice ?? profile.publisherVoice,
+        const res = await api.copilot(
+          {
+            provider,
+            profile: {
+              ...profile,
+              audience: source.snapshot?.audience ?? profile.audience,
+              publisherVoice: source.snapshot?.publisherVoice ?? profile.publisherVoice,
+            },
+            strategy: state.strategy,
+            result: contextResult,
+            facts: source.snapshot?.facts ?? facts,
+            workspace: {
+              ...state.workspace,
+              experiments: [
+                ...state.workspace.experiments
+                  .filter((item) => item.id !== source.id)
+                  .slice(-29),
+                source,
+              ],
+            },
+            memory: state.memory,
+            launchDate: state.launchDate,
+            action: "rewrite",
+            targetPlatformId: plan.platformId,
+            targetPostIdx: 0,
+            question: followUpDirection(plan, source),
           },
-          strategy: state.strategy,
-          result: contextResult,
-          facts: source.snapshot?.facts ?? facts,
-          workspace: {
-            ...state.workspace,
-            experiments: [
-              ...state.workspace.experiments
-                .filter((item) => item.id !== source.id)
-                .slice(-29),
-              source,
-            ],
-          },
-          memory: state.memory,
-          launchDate: state.launchDate,
-          action: "rewrite",
-          targetPlatformId: plan.platformId,
-          targetPostIdx: 0,
-          question: followUpDirection(plan, source),
-        });
+          signal
+        );
+        check();
         adoptFallback(res.meta);
         const proposal = res.actions.find(
           (item) =>
@@ -431,6 +494,7 @@ export function useLaunchFlow() {
           caveats: "Manual experiment; no causal inference is claimed.",
         };
       }
+      check();
       dispatch({ type: "PLANNED_DRAFT_PREPARED", id, post });
     }, "Preparing the queued experiment — nothing will be posted…");
 
@@ -532,15 +596,18 @@ export function useLaunchFlow() {
     });
   };
 
-  const loadProject = (p: LoadedProject) =>
+  const loadProject = (p: LoadedProject) => {
+    cancelPending();
     dispatch({ type: "PROJECT_LOADED", project: p, demo: false });
+  };
 
   // Load the baked-in example plan (no API call, works with zero keys). Marked
   // as `demo` so autosave skips it and it never overwrites the user's own draft.
   const loadDemo = useCallback(() => {
+    cancelPending();
     setError("");
     dispatch({ type: "PROJECT_LOADED", project: DEMO_PROJECT, demo: true });
-  }, []);
+  }, [cancelPending]);
 
   // Resume / discard the in-progress draft surfaced on mount.
   const resumeDraft = () => {
@@ -558,12 +625,13 @@ export function useLaunchFlow() {
   // Auth user A -> signed-out/user B must not leave A's in-memory plan or
   // browser draft visible to the next account on the same device.
   const resetAccountBoundary = useCallback(() => {
+    cancelPending();
     clearDraft();
     setPendingDraft(null);
     setError("");
     setPaywall(null);
     dispatch({ type: "RESET" });
-  }, []);
+  }, [cancelPending]);
 
   // On mount: a `?demo=1` deep link opens the example; otherwise we *offer* to
   // resume any in-progress draft (a banner on the input step) rather than
@@ -672,7 +740,10 @@ export function useLaunchFlow() {
     buildStrategy,
     generate,
     openPreparedDemo: () => dispatch({ type: "FOCUSED_RESULT_OPENED" }),
-    reset: () => dispatch({ type: "RESET" }),
+    reset: () => {
+      cancelPending();
+      dispatch({ type: "RESET" });
+    },
     loadProject,
     snapshot,
     // ---- workspace (M15) ----

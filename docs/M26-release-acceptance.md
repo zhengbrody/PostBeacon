@@ -141,3 +141,49 @@ used a controlled, explicitly hypothetical scenario and the local C.1 orchestrat
 it did not complete authenticated production, real-demand or retention acceptance.
 Recovery regression tests exposed and fixed goal-provenance restamping and loss of
 the source-truncation warning. C.2 remains a separate, unimplemented milestone.
+
+## October 24 security/account-boundary release candidate
+
+The user explicitly authorized production release **after acceptance** in the current
+turn. Scope is the accumulated async/account/export corrections and dependency migration,
+plus the bounded Review correctness repair below. No SQL, environment variables, provider
+models, real account deletion or social publication is authorized by this release.
+
+Browser QA exposed a real inconsistency: a 72h-contract experiment with a positive
+24h checkpoint was already shown as the "best angle", although final-window Memory
+correctly excluded it. A failing regression reproduced this. Weekly Review and Copilot
+now read angle candidates from `deriveAngleEvidence`, exclude conflicting evidence,
+and label a qualifying candidate "Target-reaching angle" with its existing evidence
+grade. Channel summaries explicitly say "strongest checkpoint", not an angle win.
+Completed scheduled learning-loop counts are unchanged; no persisted state/schema
+or invented confidence score was added. Final-window, repeated and conflicting cases
+are covered by regressions.
+
+Local candidate checks:
+
+- 569 offline tests pass; three live tests skipped. Typecheck, lint, formatting and
+  production build pass under Node 22.23.4. Dependency scans have zero known advisories.
+- Built-app browser QA observed actual **1440×1000** desktop and **375×812** mobile
+  viewports, with no horizontal document overflow or captured warnings/errors.
+- The fictional tutorial passed Prepare → simulated Publish → example 24h result →
+  Learn. `javascript:` tracked URL input disabled confirmation. After the repair,
+  the 24h read no longer produces a final angle candidate before the 72h window.
+- Fictional C.1 passed explicit opportunity load → kit review → both acknowledgements
+  → one ready queue/draft → publish-dialog cancel (queue retained) → simulated second
+  publish (only its queue consumed, separate Timeline execution). No source/model
+  request or cloud save was made. Screenshots are local artifacts under
+  `artifacts/release-2026-10-24/`, not release source.
+
+Production is still at `01886f90bb6cd593059b8a73726c21124b82b907` according to the
+fresh GitHub commit-linked Vercel status; that historical deployment succeeded and
+its GitHub CI run `40065918489` passed. This is not acceptance of the new candidate.
+The Vercel CLI has no available credentials and its prompted login was cancelled;
+the dashboard opens at sign-in. Production Node ≥22 therefore remains an explicit
+pre-push gate (the new SDK requires it). The user has been asked to confirm the
+project runtime or sign in; no credential, project setting or security policy was
+changed as a shortcut. The existing Git integration can deploy the authorized push
+once that gate is resolved.
+
+Authenticated cloud save/refresh/export/two-account isolation, fresh paid-provider
+acceptance after this SDK migration, real activation/retention, relational ownership
+constraints and cross-device conflict control remain pending. C.2 is not delivered.

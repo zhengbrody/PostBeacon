@@ -37,6 +37,8 @@ Most "AI marketing" tools generate confident text. PostBeacon is built around a 
 
 ## Quick start
 
+Requires Node.js 22 or newer (the OpenAI SDK's minimum runtime); CI runs Node 22.
+
 ```bash
 git clone https://github.com/zhengbrody/PostBeacon.git
 cd PostBeacon

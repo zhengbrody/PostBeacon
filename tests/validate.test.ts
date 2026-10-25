@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   analyzeBodySchema,
   copilotBodySchema,
+  deleteAccountBodySchema,
   generateBodySchema,
   parseBody,
   readJsonBody,
@@ -31,6 +32,15 @@ describe("analyzeBodySchema", () => {
     expect(() =>
       parseBody(analyzeBodySchema, { url: "https://example.com", provider: "grok" })
     ).toThrow(PublicError);
+  });
+
+  it("keeps enum errors static and never echoes the rejected value", () => {
+    expect(() =>
+      parseBody(analyzeBodySchema, {
+        url: "https://example.com",
+        provider: "private-user-supplied-value",
+      })
+    ).toThrow('Invalid request: "provider" has an unsupported value.');
   });
 
   it("rejects a missing or oversized url", () => {
@@ -102,6 +112,29 @@ describe("generateBodySchema", () => {
     expect(() =>
       parseBody(generateBodySchema, { profile, platformIds: Array(61).fill(P0) })
     ).toThrow(PublicError);
+  });
+
+  it("rejects over-limit collections before collecting per-element failures", () => {
+    const parsed = generateBodySchema.safeParse({
+      profile,
+      platformIds: Array(61).fill("x".repeat(65)),
+    });
+    expect(parsed.success).toBe(false);
+    if (!parsed.success)
+      expect(parsed.error.issues).toEqual([
+        expect.objectContaining({ code: "too_big", path: ["platformIds"] }),
+      ]);
+  });
+});
+
+describe("account deletion confirmation", () => {
+  it("accepts only the exact phrase and never echoes an incorrect one", () => {
+    expect(parseBody(deleteAccountBodySchema, { confirm: "delete my account" })).toEqual({
+      confirm: "delete my account",
+    });
+    expect(() =>
+      parseBody(deleteAccountBodySchema, { confirm: "private incorrect confirmation" })
+    ).toThrow('Invalid request: "confirm" has an unsupported value.');
   });
 });
 
@@ -195,6 +228,46 @@ describe("copilotBodySchema", () => {
     const outcome = parsed.workspace!.experiments[0].outcomes[0];
     expect(outcome.impressions).toBeUndefined(); // absent, not null/NaN
     expect(outcome.clicks).toBe(7); // real numbers pass through
+  });
+
+  it.each([null, Number.NaN, Infinity, -Infinity, -1])(
+    "keeps invalid legacy metrics absent instead of zero: %s",
+    (value) => {
+      const parsed = parseBody(copilotBodySchema, {
+        ...base,
+        workspace: {
+          experiments: [
+            {
+              id: "e1",
+              platformId: "hn",
+              outcomes: [{ id: "o1", checkpoint: "24h", impressions: value, clicks: 7 }],
+            },
+          ],
+        },
+      });
+      const outcome = parsed.workspace!.experiments[0].outcomes[0];
+      expect(outcome.impressions).toBeUndefined();
+      expect(outcome.clicks).toBe(7);
+    }
+  );
+
+  it("does not coerce strings or objects into numeric observations", () => {
+    for (const value of ["12", "Infinity", {}, true]) {
+      expect(() =>
+        parseBody(copilotBodySchema, {
+          ...base,
+          workspace: {
+            experiments: [
+              {
+                id: "e1",
+                platformId: "hn",
+                outcomes: [{ id: "o1", checkpoint: "24h", impressions: value }],
+              },
+            ],
+          },
+        })
+      ).toThrow(PublicError);
+    }
   });
 
   it("rejects unknown actions", () => {

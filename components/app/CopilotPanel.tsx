@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createAsyncScope } from "@/lib/asyncScope";
 import { Button } from "@/components/ui/Button";
 import { Spinner } from "@/components/ui/Spinner";
 import { api, type ApiError } from "@/lib/api";
@@ -145,6 +146,30 @@ export function CopilotPanel({
   } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const handledOpenRequest = useRef<number | null>(null);
+  const requests = useRef(createAsyncScope());
+  const currentContext = useRef({
+    profile,
+    strategy,
+    result,
+    facts,
+    workspace,
+    memory,
+    launchDate,
+  });
+  currentContext.current = {
+    profile,
+    strategy,
+    result,
+    facts,
+    workspace,
+    memory,
+    launchDate,
+  };
+  useEffect(() => {
+    const scope = requests.current;
+    setBusy(false);
+    return () => scope.invalidate();
+  }, [profile, strategy, result, facts, workspace, memory, launchDate]);
 
   const ctx: ActionContext = {
     strategy,
@@ -204,6 +229,13 @@ export function CopilotPanel({
 
   async function send(action: CopilotAction, label: string, question?: string) {
     if (busy) return;
+    const source = currentContext.current;
+    const ticket = requests.current.begin(() => {
+      const current = currentContext.current;
+      return Object.keys(source).every(
+        (key) => current[key as keyof typeof source] === source[key as keyof typeof source]
+      );
+    });
     const history = msgs
       .filter((m) => !m.briefing)
       .slice(-6)
@@ -212,24 +244,30 @@ export function CopilotPanel({
     setBusy(true);
     setError("");
     try {
-      const res = await api.copilot({
-        provider,
-        profile,
-        strategy,
-        result,
-        facts,
-        workspace,
-        memory,
-        launchDate,
-        action,
-        question,
-        targetPlatformId:
-          action === "rewrite" || action === "first-replies" || targetPostIdx !== undefined
-            ? validTarget
-            : undefined,
-        targetPostIdx,
-        history,
-      });
+      const res = await api.copilot(
+        {
+          provider,
+          profile,
+          strategy,
+          result,
+          facts,
+          workspace,
+          memory,
+          launchDate,
+          action,
+          question,
+          targetPlatformId:
+            action === "rewrite" ||
+            action === "first-replies" ||
+            targetPostIdx !== undefined
+              ? validTarget
+              : undefined,
+          targetPostIdx,
+          history,
+        },
+        ticket.signal
+      );
+      ticket.check();
       const providerNote = res.meta?.fallbackFrom
         ? `${PROVIDER_PRIVACY[res.meta.fallbackFrom].label} was unavailable. Completed with ${PROVIDER_PRIVACY[res.meta.provider].label}; future requests will use it as primary.`
         : undefined;
@@ -245,6 +283,7 @@ export function CopilotPanel({
         },
       ]);
     } catch (e) {
+      if (!ticket.current()) return;
       const err = e as ApiError;
       if (err?.code === "auth") {
         // Withdraw the optimistic turn and hand off to the sign-in modal.
@@ -254,7 +293,8 @@ export function CopilotPanel({
         setError(err?.message || "Copilot failed");
       }
     } finally {
-      setBusy(false);
+      if (!ticket.signal.aborted) setBusy(false);
+      ticket.release();
     }
   }
 

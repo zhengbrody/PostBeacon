@@ -3,7 +3,7 @@ import { clipString } from "./coerce";
 import { growthMode, type GrowthMode } from "./growth";
 import { completedScheduledVerdict, effectiveExperimentVerdict } from "./experimentHistory";
 import { isFinalContractCheckpoint, outcomeSignal, signalLabel } from "./successContract";
-import { measuredOutcome } from "./learningEvidence";
+import { deriveAngleEvidence, measuredOutcome } from "./learningEvidence";
 import {
   draftExecutionKey,
   draftKeyFromPostTaskId,
@@ -11,6 +11,7 @@ import {
   recordTaskId,
 } from "./experimentIdentity";
 import type {
+  AngleRecord,
   Experiment,
   ExperimentVerdict,
   GenerateResult,
@@ -572,6 +573,7 @@ export interface WeeklyReview {
     bestCall?: VerdictCall;
   }[];
   bestAngle?: string;
+  bestAngleEvidence?: AngleRecord["evidenceState"];
   /** Highest-ranked channel with no experiment yet (structured — the briefing
    *  keys off this, never off suggestion copy). */
   unprovenChannel?: { platformId: string; platformName: string };
@@ -624,14 +626,25 @@ export function weeklyReview(
     byChannel.set(e.platformId, row);
   }
 
-  const best = [...completed]
-    .filter((item) => item.verdict.assessment === "target-reached")
-    .sort((a, b) => CALL_RANK[b.verdict.call] - CALL_RANK[a.verdict.call])[0];
+  // Review and Copilot must use the same final-window evidence as Memory.
+  // A scheduled 24h read can close a loop without establishing a 72h angle win.
+  const winningRead = deriveAngleEvidence(workspace)
+    .filter(
+      (read) => read.verdict === "winning" && read.evidenceState !== "conflicting evidence"
+    )
+    .sort(
+      (a, b) =>
+        Number(b.evidenceState === "repeated evidence") -
+          Number(a.evidenceState === "repeated evidence") || b.at.localeCompare(a.at)
+    )[0];
+  const best = winningRead
+    ? workspace.experiments.find((experiment) => experiment.id === winningRead.experimentId)
+    : undefined;
 
   const suggestions: string[] = [];
-  if (best && best.verdict.call !== "no-signal") {
+  if (best) {
     suggestions.push(
-      `Repeat to test reliability: "${clipString(best.experiment.angle, 70)}" reached its stored target on ${best.experiment.platformName}. One result does not prove causality.`
+      `Repeat to test reliability: "${clipString(best.angle, 70)}" reached its stored target on ${best.platformName}. This evidence does not prove causality.`
     );
   }
   const unproven = strategy?.recommendations.find(
@@ -661,7 +674,8 @@ export function weeklyReview(
     loopsThisWeek,
     loops,
     channels: [...byChannel.values()],
-    bestAngle: best?.experiment.angle,
+    bestAngle: best?.angle,
+    bestAngleEvidence: winningRead?.evidenceState,
     unprovenChannel,
     suggestions: suggestions.slice(0, 3),
   };
@@ -708,7 +722,7 @@ export function buildBriefing(plan: PlanSlice, now: Date): Briefing {
     lines.push(
       `Loops closed this week: ${review.loopsThisWeek}${
         review.bestAngle
-          ? ` · best angle so far: “${clipString(review.bestAngle, 60)}”`
+          ? ` · target-reaching angle (${review.bestAngleEvidence}): “${clipString(review.bestAngle, 60)}”`
           : ""
       }`
     );

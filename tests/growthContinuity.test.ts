@@ -121,6 +121,10 @@ describe("calibrated observations and memory", () => {
       outcome: observation({ checkpoint: "24h", replies: 5 }),
     });
     expect(state.memory.angles).toEqual([]);
+    expect(
+      weeklyReview({ workspace: state.workspace, strategy: state.strategy }, new Date(at))
+        .bestAngle
+    ).toBeUndefined();
   });
   it("a final measured result references its Outcome and stays early evidence", () => {
     const state = flowReducer(seed(), {
@@ -134,6 +138,9 @@ describe("calibrated observations and memory", () => {
       verdict: "winning",
       evidenceState: "early evidence",
     });
+    expect(
+      weeklyReview({ workspace: state.workspace, strategy: state.strategy }, new Date(at))
+    ).toMatchObject({ bestAngle: "Interactive demo", bestAngleEvidence: "early evidence" });
   });
   it("invalidation removes earlier learning without deleting history or fabricating a loss", () => {
     const measured = flowReducer(seed(), {
@@ -192,6 +199,15 @@ describe("calibrated observations and memory", () => {
         (item) => item.evidenceState === "repeated evidence"
       )
     ).toBe(true);
+    expect(
+      weeklyReview(
+        {
+          workspace: { ...state.workspace, experiments: [first, second] },
+          strategy: state.strategy,
+        },
+        new Date(at)
+      ).bestAngleEvidence
+    ).toBe("repeated evidence");
     second.outcomes[0] = {
       ...second.outcomes[0],
       replies: 0,
@@ -206,6 +222,15 @@ describe("calibrated observations and memory", () => {
         (item) => item.evidenceState === "conflicting evidence"
       )
     ).toBe(true);
+    expect(
+      weeklyReview(
+        {
+          workspace: { ...state.workspace, experiments: [first, second] },
+          strategy: state.strategy,
+        },
+        new Date(at)
+      ).bestAngle
+    ).toBeUndefined();
     const changed = { ...second, successContract: { ...contract, minimumResult: 10 } };
     expect(
       deriveAngleEvidence({ ...state.workspace, experiments: [first, changed] }).every(

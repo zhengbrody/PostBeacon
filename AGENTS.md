@@ -142,6 +142,8 @@ lib/
                         tables (feature-detected, best-effort; meta.workspace hydrates)
   coerce.ts             unknown-typed coercers for loose JSON (replaces per-file any helpers, M14)
   async.ts              mapLimit — bounded-concurrency runner (route + evals share it, M14)
+  asyncScope.ts         Ephemeral stale-request/abort boundary and owner/project keyed
+                        ordered client writes; not a persistent Agent job system
   errors.ts             PublicError/BlockedUrlError + ApiErrorBody/ApiErrorCode — THE error
                         shape every route returns and the client consumes
   urlPolicy.ts          SSRF URL policy (schemes/ports/hostnames/IPv4+IPv6 ranges); isomorphic,
@@ -218,6 +220,10 @@ scripts/release-smoke.mjs  Credential-free public release gates; never labels sm
 scripts/research-acceptance.ts  Explicit bounded provider acceptance, controlled scenario,
                                local continuity checks; not authenticated production QA
 docs/M26.C1-provider-acceptance.md Recovery fixes and the exact live-provider evidence boundary
+docs/M26.C1-cloud-boundary-audit.md Async ownership/save/export audit, regression fixes,
+                                  remaining major dependency and real-account gates
+docs/M26.C1-dependency-migration.md Approved Zod 4/OpenAI SDK 7 security migration,
+                                  installed-SDK wire regression and release boundaries
 tests/                  vitest suites: urlPolicy, safeFetch, billing, webhook route, validate,
                         golden (12-fixture offline evals), generateRoute, flowReducer
                         (state-machine invariants), storage (draft migrations), workspace
@@ -237,7 +243,7 @@ supabase/schema.sql     projects + entitlements + webhook_events + M15 campaigns
 supabase/migrations/    production-safe, transactional repair migrations
 supabase/audit.sql      single-result PASS/FAIL report for project columns/tables/RLS/
                         policies/cascades/RPC
-.github/workflows/ci.yml  typecheck · lint · format:check · offline tests · build on every push/PR
+.github/workflows/ci.yml  dependency audit · typecheck · lint · format:check · offline tests · build on every push/PR
 eslint.config.mjs / .prettierrc.json   non-interactive lint + format (next lint is deprecated)
 ```
 
@@ -272,8 +278,12 @@ eslint.config.mjs / .prettierrc.json   non-interactive lint + format (next lint 
   Origin header is honored only when it's in that list.
 - **Headers**: global CSP + nosniff/DENY/referrer/permissions/HSTS in `next.config.mjs`
   (dev adds `unsafe-eval` + the Vercel Analytics debug script host).
-- **Known accepted**: `npm audit` reports a moderate advisory on Next's internally pinned
-  postcss (build-time only; every Next release is flagged — revisit on the next Next major).
+- **Dependency gate (2026-10-24)**: the old moderate-only PostCSS acceptance
+  is superseded. Local repairs use Next 15.5.28, a same-major patched PostCSS override,
+  and the explicitly approved Zod 4.6.7 / OpenAI SDK 7.43.0 migration. Full/runtime
+  scans currently report zero known advisories; this is not proof of zero bugs or
+  a production-upgrade claim. CI fails on high/critical advisories without force-upgrading.
+  Node 22+ is required by the SDK; model IDs and provider routing are unchanged.
 
 ## Conventions
 - TS strict. Components are presentational; state/effects live in `hooks/` or route handlers.
@@ -291,6 +301,7 @@ npm install
 cp .env.example .env     # ANTHROPIC_API_KEY and/or OPENAI_API_KEY (Supabase keys optional)
 npm run dev              # landing at /, tool at /app
 npm run typecheck        # tsc --noEmit
+npm run audit:dependencies # fail on high/critical known dependency advisories
 npm test                 # vitest (offline suites in tests/; no API keys needed)
 npm run lint             # eslint . (flat config, non-interactive)
 npm run format:check     # prettier --check . (CI-enforced)
@@ -338,6 +349,55 @@ cross-origin 403. Aggregate product-health reporting is operator-only at `/api/m
 Redeploy: `npx vercel --prod --yes`. Push env from `.env.local`: `~/push-env.sh`.
 
 ## Status / changelog
+- **2026-10-24**: **Release-candidate browser acceptance + Review evidence repair.**
+  Actual built-app 1440×1000 desktop and 375×812 mobile fictional walkthroughs passed
+  Prepare/Publish/Measure/Learn and C.1 review/dual-confirm/queue/cancel/second-execution
+  continuity, with no horizontal overflow or captured browser warnings/errors. QA
+  exposed early 24h target reaches being promoted to "best angle" before the stored
+  72h window. A failing regression preceded the fix: Review and Copilot now reuse
+  final-window angle evidence, exclude conflicts and show evidence grades, while
+  checkpoint/loop counting remains unchanged. 569 offline tests pass, three live
+  skipped; local typecheck/lint/format/build and dependency scans pass. Production
+  release was authorized after acceptance, but push is gated on confirming Node ≥22:
+  Vercel CLI/dashboard require login. No SQL/env/model/credential change, real account
+  write/delete, model call or deployment occurred at this checkpoint. See release
+  acceptance for the remaining cloud/relational/retention/C.2 boundary.
+- **2026-10-24**: **Approved dependency migration — local, not deployed.** Updated
+  Zod to 4.6.7 and OpenAI SDK to 7.43.0, resolved the two remaining high dependency
+  entries and kept one deduped Zod copy. Adapted static enum/literal error mapping
+  and pre-validation non-finite metric normalization (absent, never zero). Actual
+  installed-SDK offline wire tests preserve OpenAI/DeepSeek endpoints, models, JSON
+  mode, token budgets, ordinary fallback and C.1's no-retry/fallback/repair boundary.
+  No model-transport code or API family change was needed. CI now blocks high/critical
+  dependency advisories; README documents Node 22+. Clean install, 568 offline tests
+  (three live skipped), typecheck/lint/format/build and six local signed-out HTTP smoke
+  probes pass under Node 22.23.4; full/runtime scans report zero known advisories.
+  No paid provider call, cloud write, SQL/env/runtime setting or deploy occurred.
+  Changes are uncommitted; real cloud/account/relational/concurrency acceptance and
+  C.2 remain pending. See `docs/M26.C1-dependency-migration.md` for exact evidence.
+- **2026-10-23**: **Pre-cloud acceptance audit — local stabilization, C.2 not started.**
+  Found stale async result/account-command ownership, overlapping save ordering and
+  silent >1,000-row export truncation. Added shared ephemeral scope/abort control,
+  owner/project keyed ordered saves including mirrors, ownership-bound data-rights
+  calls and complete counted export pagination. Actual React Hook + deferred-network
+  regressions supplement pure tests; jsdom is development-only. Compatible dependency
+  patches remove the initial critical runtime advisory; Zod/SDK major migration is
+  still an explicit approval/security gate. Real QA accounts, cross-device conflict
+  control and relational parent/child ownership constraints remain separate checks.
+  Final local checks: 550 offline tests pass, three live tests skipped; typecheck,
+  lint, format, production build and six built-app signed-out HTTP probes pass.
+  Full/runtime dependency scans each retain two high entries; no clean audit is claimed.
+  Changes are local, uncommitted and not deployed; fresh visual/cloud QA is pending.
+  See the cloud-boundary audit for scope and limitations. No new SQL, model call,
+  production account write/delete or autonomous Agent was added by this audit.
+- **2026-10-23**: **Explicitly approved DeepSeek controlled acceptance passed.** One
+  `deepseek-chat` C.1 invocation returned one review-ready opportunity; protocol and
+  all six local acknowledgement/queue/idempotency/export-hydration/no-publish checks
+  passed. The bounded, content-free report is in ignored eval-results. Only the
+  previously disclosed public product description and hypothetical scenario were
+  sent; no fallback, private account data, cloud write or real publication occurred.
+  This closes the controlled DeepSeek check, not real signed-in production acceptance
+  or C.2. No application code, configuration or deployment change was needed.
 - **2026-10-23**: **C.1 recovery correctness + bounded provider acceptance.** Unchanged
   project hydration now preserves canonical user-confirmed goal provenance instead of
   restamping its verification time and invalidating pending research. Changed goals
@@ -349,8 +409,9 @@ Redeploy: `npx vercel --prod --yes`. Push env from `.env.local`: `~/push-env.sh`
   protocol/content/local continuity and never claim full production acceptance. One
   real OpenAI controlled integration passed; its detailed console report was not
   retained, so no draft-count/content-readiness conclusion is asserted for that run.
-  Future runs persist non-content report files. DeepSeek, real signed-in cloud/account
-  acceptance, real activation/retention and C.2 remain pending. No SQL/env/vendor change.
+  Future runs persist non-content report files. DeepSeek was initially pending and
+  subsequently passed the separately approved controlled check above. Real signed-in
+  cloud/account acceptance, real activation/retention and C.2 remain pending. No SQL/env/vendor change.
   Local gates: 522 offline tests passed, three live tests skipped by default;
   the separate one-call OpenAI live case passed. Typecheck/lint/format/build passed.
 - **2026-10-12**: **A/B + C.1 deployed after authorized smoke.** App revision

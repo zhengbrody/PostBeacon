@@ -12,17 +12,61 @@ import {
 import { PublicError } from "@/lib/errors";
 
 /** Minimal thenable-style mock matching the supabase-js call shapes we use. */
-function exportClient(rows: Record<string, unknown[]>, failTable?: string) {
+function exportClient(
+  rows: Record<string, unknown[]>,
+  failTable?: string,
+  cap = 1000,
+  options: {
+    count?: (from: number, total: number) => number | null;
+    emptyAfterFirst?: boolean;
+    failAfterFirst?: string;
+  } = {}
+) {
   const queried: string[] = [];
+  const filters: { table: string; column: string; value: string }[] = [];
+  const ranges: { table: string; from: number; to: number }[] = [];
   return {
     queried,
+    filters,
+    ranges,
     client: {
       from: (table: string) => ({
-        select: async () => {
+        select: () => {
           queried.push(table);
-          if (table === failTable) return { data: null, error: { code: "XX000" } };
-          if (!(table in rows)) return { data: null, error: { code: "42P01" } };
-          return { data: rows[table], error: null };
+          const page = (from: number, to: number) => {
+            if (table === failTable)
+              return { data: null, error: { code: "XX000" }, count: null };
+            if (!(table in rows))
+              return { data: null, error: { code: "42P01" }, count: null };
+            if (from > 0 && options.failAfterFirst)
+              return { data: null, error: { code: options.failAfterFirst }, count: null };
+            return {
+              data:
+                from > 0 && options.emptyAfterFirst
+                  ? []
+                  : rows[table].slice(from, Math.min(to + 1, from + cap)),
+              error: null,
+              count: options.count
+                ? options.count(from, rows[table].length)
+                : rows[table].length,
+            };
+          };
+          return {
+            eq(column: string, value: string) {
+              filters.push({ table, column, value });
+              return this;
+            },
+            order() {
+              return this;
+            },
+            async range(from: number, to: number) {
+              ranges.push({ table, from, to });
+              return page(from, to);
+            },
+            then(resolve: (value: ReturnType<typeof page>) => unknown) {
+              return Promise.resolve(page(0, 999)).then(resolve);
+            },
+          };
         },
       }),
     } as unknown as SupabaseClient,
@@ -259,6 +303,60 @@ describe("deleteAccountData", () => {
 });
 
 describe("exportAccountData", () => {
+  it("honors lower server page caps without skipping offsets", async () => {
+    const many = Array.from({ length: 751 }, (_, id) => ({ id }));
+    const mock = exportClient({ projects: many }, undefined, 100);
+    const out = await exportAccountData(mock.client, { id: "u", email: null });
+    expect(out.projects).toEqual(many);
+    expect(mock.ranges.filter((p) => p.table === "projects").map((p) => p.from)).toEqual([
+      0, 100, 200, 300, 400, 500, 600, 700,
+    ]);
+    expect(
+      mock.filters.every((filter) => filter.column === "user_id" && filter.value === "u")
+    ).toBe(true);
+  });
+  it.each([
+    "missing-count",
+    "changed-count",
+    "empty-page",
+    "query-failed",
+    "table-disappeared",
+  ])("fails closed on %s rather than returning a partial account export", async (mode) => {
+    const many = Array.from({ length: 1001 }, (_, id) => ({ id }));
+    const mock = exportClient({ projects: many }, undefined, 500, {
+      count:
+        mode === "missing-count"
+          ? () => null
+          : mode === "changed-count"
+            ? (from, total) => total + (from > 0 ? 1 : 0)
+            : undefined,
+      emptyAfterFirst: mode === "empty-page",
+      failAfterFirst:
+        mode === "query-failed"
+          ? "XX000"
+          : mode === "table-disappeared"
+            ? "42P01"
+            : undefined,
+    });
+    await expect(
+      exportAccountData(mock.client, { id: "u", email: null })
+    ).rejects.toBeInstanceOf(PublicError);
+  });
+  it("fails safely instead of reading forever under extremely low server limits", async () => {
+    const many = Array.from({ length: 201 }, (_, id) => ({ id }));
+    const mock = exportClient({ projects: many }, undefined, 1);
+    await expect(exportAccountData(mock.client, { id: "u", email: null })).rejects.toThrow(
+      "safe page limit"
+    );
+    expect(mock.ranges.filter((p) => p.table === "projects")).toHaveLength(200);
+  });
+  it("exports beyond the default server page limit without dropping rows", async () => {
+    const many = Array.from({ length: 2501 }, (_, i) => ({ id: `project-${i}` }));
+    const mock = exportClient({ projects: many, entitlements: [] });
+    const out = await exportAccountData(mock.client, { id: "u", email: null });
+    expect(out.projects).toHaveLength(many.length);
+    expect(out.projects.at(-1)).toEqual(many.at(-1));
+  });
   const rows = {
     projects: [{ id: "p1", meta: { memory: { tone: "dry" } } }],
     campaigns: [{ id: "c1" }],

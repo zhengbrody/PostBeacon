@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import { downloadFile } from "@/lib/export";
 import { clearDraft } from "@/lib/storage";
 import { supabaseConfigured } from "@/lib/supabase/client";
 import { projectIdentity } from "@/lib/projectIdentity";
+import { createAsyncScope } from "@/lib/asyncScope";
 import { Button } from "@/components/ui/Button";
 import { AccountName, SignIn, useSupabaseUser } from "./SignIn";
 import type {
@@ -65,6 +66,21 @@ export function ProjectBar({
   const [dataBusy, setDataBusy] = useState(false);
   const [deleteArmed, setDeleteArmed] = useState(false);
   const [deletePhrase, setDeletePhrase] = useState("");
+  const requests = useRef(createAsyncScope());
+  const listRequests = useRef(createAsyncScope());
+  const currentOwner = useRef(userId);
+  if (currentOwner.current !== userId) {
+    requests.current.invalidate();
+    listRequests.current.invalidate();
+    currentOwner.current = userId;
+  }
+  useEffect(
+    () => () => {
+      requests.current.invalidate();
+      listRequests.current.invalidate();
+    },
+    []
+  );
 
   // Refresh the list on sign-in and after each autosave (so the current project shows up).
   useEffect(() => {
@@ -82,58 +98,94 @@ export function ProjectBar({
   }
 
   async function refresh() {
-    if (!supabase) return;
-    const { data } = await supabase
-      .from("projects")
-      .select("*")
-      .order("updated_at", { ascending: false });
-    setProjects((data as SavedProject[]) || []);
+    if (!supabase || !userId) return;
+    const ticket = listRequests.current.begin(() => currentOwner.current === userId);
+    try {
+      const { data, error } = await supabase
+        .from("projects")
+        .select("*")
+        .eq("user_id", userId)
+        .order("updated_at", { ascending: false });
+      if (ticket.current()) {
+        if (error) setDataMsg("Saved projects could not be refreshed. Try again.");
+        else setProjects((data as SavedProject[]) || []);
+      }
+    } catch {
+      if (ticket.current()) setDataMsg("Saved projects could not be refreshed. Try again.");
+    } finally {
+      ticket.release();
+    }
   }
 
   // Deleting a project cascades its campaigns → experiments → outcomes →
   // tasks (schema FKs), and meta carried workspace/memory — hence the arm step.
   async function remove(id: string) {
-    if (!supabase) return;
-    await supabase.from("projects").delete().eq("id", id);
-    setConfirmProject(null);
-    refresh();
+    if (!supabase || !userId) return;
+    const ticket = requests.current.capture();
+    try {
+      const { error } = await supabase
+        .from("projects")
+        .delete()
+        .eq("id", id)
+        .eq("user_id", userId);
+      if (!ticket.current()) return;
+      if (error) {
+        setDataMsg("Project deletion failed. Your project list was not changed.");
+        return;
+      }
+      setConfirmProject(null);
+      void refresh();
+    } catch {
+      if (ticket.current()) setDataMsg("Project deletion failed. Try again.");
+    } finally {
+      ticket.release();
+    }
   }
 
   async function exportData() {
+    if (!userId) return;
+    const ticket = requests.current.capture();
     setDataBusy(true);
     setDataMsg("");
     try {
       if (snapshot.profile || snapshot.url) {
         const saved = await onSaveNow();
+        ticket.check();
         if (!saved) {
           setDataMsg("Export stopped because the current project was not saved.");
           return;
         }
       }
-      downloadFile(
-        "postbeacon-account-export.json",
-        await api.exportAccount(),
-        "application/json"
-      );
+      const exported = await api.exportAccount(userId, ticket.signal);
+      ticket.check();
+      downloadFile("postbeacon-account-export.json", exported, "application/json");
       setDataMsg("Exported ✓");
     } catch (e) {
-      setDataMsg((e as Error).message);
+      if (ticket.current()) setDataMsg((e as Error).message);
     } finally {
-      setDataBusy(false);
+      if (ticket.current()) setDataBusy(false);
+      ticket.release();
     }
   }
 
   async function deleteAccount() {
+    if (!userId) return;
+    const ticket = requests.current.capture();
     setDataBusy(true);
     setDataMsg("");
     try {
-      await api.deleteAccount();
+      await api.deleteAccount(userId, ticket.signal);
+      ticket.check();
       clearDraft(); // leave nothing on this device either
       await supabase?.auth.signOut();
-      window.location.assign("/app");
+      if (ticket.current()) window.location.assign("/app");
     } catch (e) {
-      setDataMsg((e as Error).message);
-      setDataBusy(false);
+      if (ticket.current()) {
+        setDataMsg((e as Error).message);
+        setDataBusy(false);
+      }
+    } finally {
+      ticket.release();
     }
   }
 

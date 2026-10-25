@@ -46,7 +46,7 @@ function issueMessage(issue: z.ZodIssue): string {
       return `"${path}" is missing or too short`;
     case "invalid_type":
       return `"${path}" has the wrong type`;
-    case "invalid_enum_value":
+    case "invalid_value":
       return `"${path}" has an unsupported value`;
     case "custom":
       return `"${path}": ${issue.message}`; // our own static refine messages
@@ -56,7 +56,7 @@ function issueMessage(issue: z.ZodIssue): string {
 }
 
 /** Parse or throw PublicError(400). */
-export function parseBody<S extends z.ZodTypeAny>(schema: S, data: unknown): z.infer<S> {
+export function parseBody<S extends z.ZodType>(schema: S, data: unknown): z.infer<S> {
   const r = schema.safeParse(data);
   if (!r.success) {
     throw new PublicError(`Invalid request: ${issueMessage(r.error.issues[0])}.`);
@@ -402,8 +402,12 @@ export const regenerateBodySchema = z.object({
 /** Workspace slice the copilot needs for evidence refs (bounded). */
 /** Outcome metric off the wire: absent/null/non-finite all mean "not measured". */
 const metricSchema = z
-  .number()
-  .nullish()
+  .preprocess(
+    // Zod 4 rejects non-finite numbers before transforms run. Keep the
+    // historical "not measured" normalization, never turn invalid data into 0.
+    (v) => (typeof v === "number" && !Number.isFinite(v) ? undefined : v),
+    z.number().nullish()
+  )
   .transform((v) =>
     typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : undefined
   );

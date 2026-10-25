@@ -2,13 +2,14 @@
   "name": "postbeacon",
   "version": "0.1.0",
   "private": true,
-  "description": "PostBeacon \u2014 turn verified product facts into one focused growth experiment, a measured result, and the next move.",
+  "description": "PostBeacon — turn verified product facts into one focused growth experiment, a measured result, and the next move.",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
+    "audit:dependencies": "npm audit --audit-level=high",
     "test": "vitest run",
     "release:smoke": "node scripts/release-smoke.mjs",
     "release:research": "RUN_RESEARCH_ACCEPTANCE=1 vitest run tests/researchAcceptance.live.test.ts --maxWorkers=1 --no-file-parallelism",
@@ -20,11 +21,14 @@
     "@supabase/supabase-js": "^2.108.2",
     "@vercel/analytics": "^2.0.1",
     "cheerio": "^1.0.0",
-    "next": "^15.1.6",
-    "openai": "^4.80.0",
+    "next": "^15.5.28",
+    "openai": "^7.43.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "zod": "^3.25.76"
+    "zod": "^4.6.7"
+  },
+  "overrides": {
+    "postcss": "$postcss"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.6",
@@ -33,11 +37,12 @@
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "eslint": "^9.39.5",
-    "eslint-config-next": "^15.5.20",
-    "postcss": "^8.5.0",
+    "eslint-config-next": "^15.5.28",
+    "jsdom": "29.1.1",
+    "postcss": "^8.5.31",
     "prettier": "^3.9.5",
     "tailwindcss": "^4.0.0",
     "typescript": "^5.7.0",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.12"
   }
 }

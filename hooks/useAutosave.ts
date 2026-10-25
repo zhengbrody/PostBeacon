@@ -5,6 +5,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { projectSaveErrorMessage } from "@/lib/projectSaveError";
 import { saveDraft, clearDraft, DRAFT_SCHEMA_VERSION } from "@/lib/storage";
 import { syncWorkspaceTables } from "@/lib/workspace";
+import { createAsyncScope, createSerialQueue } from "@/lib/asyncScope";
 import type {
   Fact,
   AnalysisReceipt,
@@ -46,23 +47,34 @@ function timeNow() {
  */
 export function useAutosave(
   f: AutosaveFlow,
-  auth: { userId: string | null; supabase: SupabaseClient | null }
+  auth: { userId: string | null; supabase: SupabaseClient | null; loading?: boolean }
 ) {
-  const { userId, supabase } = auth;
+  const { userId, supabase, loading: authLoading = false } = auth;
   const [lastSaved, setLastSaved] = useState("");
   const [saveError, setSaveError] = useState("");
   const [saving, setSaving] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const projectIdRef = useRef(f.projectId);
   const observedProjectIdRef = useRef(f.projectId);
+  const observedUserRef = useRef(userId);
+  const observedDemoRef = useRef(f.demo);
+  const scope = useRef(createAsyncScope());
+  const queue = useRef(createSerialQueue());
+  if (observedUserRef.current !== userId || observedDemoRef.current !== f.demo) {
+    scope.current.invalidate();
+    observedUserRef.current = userId;
+    observedDemoRef.current = f.demo;
+  }
   if (f.projectId !== observedProjectIdRef.current) {
+    scope.current.invalidate();
     observedProjectIdRef.current = f.projectId;
     projectIdRef.current = f.projectId;
   }
 
   // Latest values in a ref so the debounced persist() never reads stale state.
-  const ref = useRef({ ...f, userId, supabase });
-  ref.current = { ...f, userId, supabase };
+  const ref = useRef({ ...f, userId, supabase, authLoading });
+  ref.current = { ...f, userId, supabase, authLoading };
+  useEffect(() => () => scope.current.invalidate(), []);
 
   const persist = useCallback(async (): Promise<boolean> => {
     const {
@@ -73,8 +85,10 @@ export function useAutosave(
       userId,
       supabase,
       demo,
+      authLoading,
     } = ref.current;
     if (demo) return true; // the example plan is read-only — don't save it
+    if (authLoading) return false;
     if (!(snap.profile || snap.url)) return true;
 
     let id = projectIdRef.current || projectId;
@@ -84,112 +98,142 @@ export function useAutosave(
       // synchronously so both upserts target one project rather than creating
       // duplicate rows before React applies setProjectId.
       projectIdRef.current = id;
+      observedProjectIdRef.current = id;
       setProjectId(id);
     }
-
-    setSaving(true);
-    setSaveError("");
-    try {
-      if (userId && supabase) {
-        const { data: u } = await supabase.auth.getUser();
-        if (!u.user || u.user.id !== userId) {
-          setLastSaved("");
-          setSaveError("Your session changed. Sign in again before saving.");
+    const ticket = scope.current.capture(
+      () =>
+        ref.current.userId === userId &&
+        projectIdRef.current === id &&
+        !ref.current.demo &&
+        !ref.current.authLoading
+    );
+    return queue.current.enqueue(
+      async () => {
+        if (!ticket.current()) {
+          ticket.release();
           return false;
         }
-        const { error } = await supabase.from("projects").upsert(
-          {
-            id,
-            user_id: u.user.id,
-            name: snap.profile?.name || snap.url || "Untitled",
-            url: snap.url,
-            profile: snap.profile,
-            strategy: snap.strategy,
-            result: snap.result,
-            posted: snap.posted,
-            // Client-side plan state that isn't a server response: channel
-            // selection, launch date, the M13 fact ledger — plus the
-            // serialization version so future readers can migrate.
-            meta: {
-              schemaVersion: DRAFT_SCHEMA_VERSION,
+        setSaving(true);
+        setSaveError("");
+        try {
+          if (userId && !supabase)
+            throw new Error("Configured account storage is unavailable.");
+          if (userId && supabase) {
+            const { data: u } = await supabase.auth.getUser();
+            ticket.check();
+            if (!u.user || u.user.id !== userId) {
+              setLastSaved("");
+              setSaveError("Your session changed. Sign in again before saving.");
+              return false;
+            }
+            const { error } = await supabase.from("projects").upsert(
+              {
+                id,
+                user_id: u.user.id,
+                name: snap.profile?.name || snap.url || "Untitled",
+                url: snap.url,
+                profile: snap.profile,
+                strategy: snap.strategy,
+                result: snap.result,
+                posted: snap.posted,
+                // Client-side plan state that isn't a server response: channel
+                // selection, launch date, the M13 fact ledger — plus the
+                // serialization version so future readers can migrate.
+                meta: {
+                  schemaVersion: DRAFT_SCHEMA_VERSION,
+                  selected: snap.selected,
+                  launchDate,
+                  facts: snap.facts,
+                  analysisReceipt: snap.analysisReceipt,
+                  workspace: snap.workspace,
+                  memory: snap.memory,
+                },
+                updated_at: new Date().toISOString(),
+              },
+              { onConflict: "id" }
+            );
+            ticket.check();
+            if (error) {
+              setLastSaved("");
+              setSaveError(projectSaveErrorMessage(error));
+              return false;
+            }
+            clearDraft(); // migrated to the account
+            setLastSaved(timeNow());
+            // Write-through to the normalized workspace tables (best-effort,
+            // feature-detected; meta.workspace above remains the hydration
+            // source — see docs/M15-workspace.md §11).
+            await syncWorkspaceTables(
+              supabase,
+              u.user.id,
+              id,
+              {
+                workspace: snap.workspace,
+                profile: snap.profile,
+                launchDate,
+              },
+              ticket.current
+            );
+          } else {
+            const saved = saveDraft({
+              id,
+              url: snap.url,
+              profile: snap.profile,
+              strategy: snap.strategy,
+              result: snap.result,
+              posted: snap.posted,
               selected: snap.selected,
               launchDate,
               facts: snap.facts,
               analysisReceipt: snap.analysisReceipt,
               workspace: snap.workspace,
               memory: snap.memory,
-            },
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: "id" }
-        );
-        if (error) {
-          setLastSaved("");
-          setSaveError(projectSaveErrorMessage(error));
+            });
+            if (!saved) {
+              setLastSaved("");
+              setSaveError("Browser storage is unavailable; this draft was not saved.");
+              return false;
+            }
+            setLastSaved(timeNow());
+          }
+          return ticket.current();
+        } catch {
+          if (ticket.current()) {
+            setLastSaved("");
+            setSaveError(
+              "Project save failed. Check your connection and try Save now again."
+            );
+          }
           return false;
+        } finally {
+          if (ticket.current()) setSaving(false);
+          ticket.release();
         }
-        clearDraft(); // migrated to the account
-        setLastSaved(timeNow());
-        // Write-through to the normalized workspace tables (best-effort,
-        // feature-detected; meta.workspace above remains the hydration
-        // source — see docs/M15-workspace.md §11).
-        void syncWorkspaceTables(supabase, u.user.id, id, {
-          workspace: snap.workspace,
-          profile: snap.profile,
-          launchDate,
-        });
-      } else {
-        const saved = saveDraft({
-          id,
-          url: snap.url,
-          profile: snap.profile,
-          strategy: snap.strategy,
-          result: snap.result,
-          posted: snap.posted,
-          selected: snap.selected,
-          launchDate,
-          facts: snap.facts,
-          analysisReceipt: snap.analysisReceipt,
-          workspace: snap.workspace,
-          memory: snap.memory,
-        });
-        if (!saved) {
-          setLastSaved("");
-          setSaveError("Browser storage is unavailable; this draft was not saved.");
-          return false;
-        }
-        setLastSaved(timeNow());
-      }
-      return true;
-    } catch {
-      setLastSaved("");
-      setSaveError("Project save failed. Check your connection and try Save now again.");
-      return false;
-    } finally {
-      setSaving(false);
-    }
+      },
+      `${userId ?? "local"}:${id}`
+    );
   }, []);
 
   useEffect(() => {
     setLastSaved("");
     setSaveError("");
-    projectIdRef.current = "";
-    observedProjectIdRef.current = "";
-  }, [userId]);
+    setSaving(false);
+  }, [userId, f.projectId, f.demo]);
 
   // Re-run whenever the content, the launch date, or the auth state changes.
   // `f.snapshot` is memoized upstream, so its identity is a cheap change signal.
   const hasContent = !!(f.snapshot.profile || f.snapshot.url);
 
   useEffect(() => {
-    if (!hasContent) return;
+    if (!hasContent || authLoading || f.demo) return;
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(() => void persist(), 1500);
     return () => {
       if (timer.current) clearTimeout(timer.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [f.snapshot, f.launchDate, userId]);
+  }, [f.snapshot, f.launchDate, userId, authLoading, f.demo]);
 
   return { lastSaved, saveError, saving, saveNow: persist };
 }

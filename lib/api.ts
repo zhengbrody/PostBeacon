@@ -36,19 +36,36 @@ export interface ApiError extends Error {
 }
 
 /** Attach the Supabase access token so the server can identify the user. */
-async function authHeader(): Promise<Record<string, string>> {
+async function authHeader(expectedUserId?: string): Promise<Record<string, string>> {
   const sb = getSupabase();
-  if (!sb) return {};
+  if (!sb) {
+    if (expectedUserId !== undefined)
+      throw new Error("Your session changed. Sign in again.");
+    return {};
+  }
   const { data } = await sb.auth.getSession();
+  if (
+    expectedUserId !== undefined &&
+    (!expectedUserId || data.session?.user.id !== expectedUserId)
+  )
+    throw new Error("Your session changed. The operation was stopped.");
   const token = data.session?.access_token;
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-async function post<T>(path: string, body: unknown): Promise<T> {
+async function post<T>(
+  path: string,
+  body: unknown,
+  signal?: AbortSignal,
+  expectedUserId?: string
+): Promise<T> {
+  const authorization = await authHeader(expectedUserId);
+  signal?.throwIfAborted();
   const res = await fetch(path, {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...(await authHeader()) },
+    headers: { "Content-Type": "application/json", ...authorization },
     body: JSON.stringify(body),
+    signal,
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
@@ -114,7 +131,12 @@ export const api = {
    * an account bearer token or persist the returned data. */
   guestPreview: (url: string, deepseekConsent: boolean, signal?: AbortSignal) =>
     postGuest<GuestPreviewResult>("/api/preview", { url, deepseekConsent }, signal),
-  analyze: (url: string, provider: Provider, evidenceSources: EvidenceSourceInput[] = []) =>
+  analyze: (
+    url: string,
+    provider: Provider,
+    evidenceSources: EvidenceSourceInput[] = [],
+    signal?: AbortSignal
+  ) =>
     post<{
       profile: ProductProfile;
       facts: Fact[];
@@ -122,55 +144,70 @@ export const api = {
       meta: GenerationMeta;
       receipt: AnalysisReceipt;
       page: { url: string; title: string };
-    }>("/api/analyze", { url, provider, evidenceSources }),
+    }>("/api/analyze", { url, provider, evidenceSources }, signal),
   strategy: (
     profile: ProductProfile,
     provider: Provider,
     facts: Fact[],
-    successContract?: SuccessContract
+    successContract?: SuccessContract,
+    signal?: AbortSignal
   ) =>
-    post<MarketingStrategy>("/api/strategy", {
-      profile,
-      provider,
-      facts,
-      successContract,
-    }),
+    post<MarketingStrategy>(
+      "/api/strategy",
+      {
+        profile,
+        provider,
+        facts,
+        successContract,
+      },
+      signal
+    ),
   generate: (
     profile: ProductProfile,
     platformIds: string[],
     provider: Provider,
     facts: Fact[],
-    successContract?: SuccessContract
+    successContract?: SuccessContract,
+    signal?: AbortSignal
   ) =>
-    post<GenerateResult>("/api/generate", {
-      profile,
-      platformIds,
-      provider,
-      facts,
-      successContract,
-    }),
+    post<GenerateResult>(
+      "/api/generate",
+      {
+        profile,
+        platformIds,
+        provider,
+        facts,
+        successContract,
+      },
+      signal
+    ),
   regenerate: (
     profile: ProductProfile,
     platformId: string,
     provider: Provider,
     facts: Fact[],
-    successContract?: SuccessContract
+    successContract?: SuccessContract,
+    signal?: AbortSignal
   ) =>
     post<{ posts: PlatformPost[]; playbook?: PlatformPlaybook; meta?: GenerationMeta }>(
       "/api/regenerate",
-      { profile, platformId, provider, facts, successContract }
+      { profile, platformId, provider, facts, successContract },
+      signal
     ),
-  copilot: (body: CopilotRequest) =>
-    post<CopilotReplyV2>("/api/copilot", boundedCopilotRequest(body)),
-  opportunities: (body: {
-    provider: "openai" | "deepseek";
-    productUrl: string;
-    profile: ProductProfile;
-    facts: Fact[];
-    successContract: SuccessContract;
-    input: TrialResearchInput;
-    bannedClaims?: string[];
-  }) => post<OpportunityResearch>("/api/opportunities", body),
+  copilot: (body: CopilotRequest, signal?: AbortSignal) =>
+    post<CopilotReplyV2>("/api/copilot", boundedCopilotRequest(body), signal),
+  opportunities: (
+    body: {
+      provider: "openai" | "deepseek";
+      productUrl: string;
+      profile: ProductProfile;
+      facts: Fact[];
+      successContract: SuccessContract;
+      input: TrialResearchInput;
+      bannedClaims?: string[];
+    },
+    signal?: AbortSignal
+  ) => post<OpportunityResearch>("/api/opportunities", body, signal),
   usage: async (): Promise<UsageInfo> => {
     const res = await fetch("/api/usage", { headers: { ...(await authHeader()) } });
     return res.json();
@@ -178,9 +215,12 @@ export const api = {
   checkout: () => post<{ url: string }>("/api/billing/checkout", {}),
   // ---- data rights (M17) ----
   /** Everything the signed-in user owns, as a pretty-printed JSON string. */
-  exportAccount: async (): Promise<string> => {
+  exportAccount: async (expectedUserId: string, signal?: AbortSignal): Promise<string> => {
+    const authorization = await authHeader(expectedUserId);
+    signal?.throwIfAborted();
     const res = await fetch("/api/account/export", {
-      headers: { ...(await authHeader()) },
+      headers: authorization,
+      signal,
     });
     if (!res.ok) {
       const body = (await res.json().catch(() => ({}))) as { error?: string };
@@ -188,6 +228,11 @@ export const api = {
     }
     return res.text();
   },
-  deleteAccount: () =>
-    post<{ ok: boolean }>("/api/account/delete", { confirm: "delete my account" }),
+  deleteAccount: (expectedUserId: string, signal?: AbortSignal) =>
+    post<{ ok: boolean }>(
+      "/api/account/delete",
+      { confirm: "delete my account" },
+      signal,
+      expectedUserId
+    ),
 };

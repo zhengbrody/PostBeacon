@@ -39,10 +39,11 @@ export async function syncWorkspaceTables(
     workspace: WorkspaceState;
     profile: ProductProfile | null;
     launchDate: string;
-  }
+  },
+  isCurrent: () => boolean = () => true
 ): Promise<void> {
   try {
-    if (!(await detectTables(sb))) return;
+    if (!isCurrent() || !(await detectTables(sb)) || !isCurrent()) return;
     const { workspace, profile, launchDate } = snap;
 
     const { data: campaign, error: campErr } = await sb
@@ -61,7 +62,7 @@ export async function syncWorkspaceTables(
       )
       .select("id")
       .single();
-    if (campErr || !campaign) return;
+    if (campErr || !campaign || !isCurrent()) return;
 
     if (workspace.experiments.length) {
       await sb.from("experiments").upsert(
@@ -81,6 +82,7 @@ export async function syncWorkspaceTables(
         })),
         { onConflict: "id" }
       );
+      if (!isCurrent()) return;
       const outcomes = workspace.experiments.flatMap((e) =>
         e.outcomes.map((o) => ({
           id: o.id,
@@ -102,7 +104,7 @@ export async function syncWorkspaceTables(
       }
     }
 
-    if (workspace.taskLog.length) {
+    if (workspace.taskLog.length && isCurrent()) {
       await sb.from("tasks").upsert(
         workspace.taskLog.map((t) => ({
           id: t.id,
