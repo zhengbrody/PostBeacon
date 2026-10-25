@@ -138,6 +138,8 @@ lib/
                               at-most-one-model worker; not an always-on scheduler
   execution.ts          M19 Prepare→Publish→Measure→Learn lifecycle projection,
                         countdowns and operator-controlled platform destinations
+  publishHandoff.ts     C.2.1 pure Truth-Gate checked, user-initiated X single-post
+                        composer shortcut; complete manual fallback, never publication
   experimentHistory.ts M24.1 Outcome-owned verdict reads, honest legacy-final fallback
                         and v7 workspace compatibility repair
   experimentIdentity.ts M24.1 draft/execution/checkpoint task identity helpers
@@ -356,6 +358,21 @@ cross-origin 403. Aggregate product-health reporting is operator-only at `/api/m
 Redeploy: `npx vercel --prod --yes`. Push env from `.env.local`: `~/push-env.sh`.
 
 ## Status / changelog
+- **2026-10-24**: **C.2.1 assisted publishing — accepted local slice, authorized release pending.**
+  Three subagents split official API feasibility, execution-boundary audit and pure
+  handoff implementation. Added fixed-origin X single-post prefill with current
+  Truth Gate, conservative weighted length/URL limits, no truncation and explicit
+  draft-in-URL/history disclosure; other channels/threads remain copy-and-open.
+  Opening never records a publish or consumes an experiment. Fixed popup null-handle
+  misreporting and a reproduced A→B→A stale-command finally race that released a newer
+  command's duplicate-click lock. No new dependencies, models, token storage, SQL or
+  production flag changes. Future approved API distribution (Buffer X/LinkedIn,
+  DEV drafts; Reddit manual) is a separate, not implemented product contract; see
+  `docs/M26.C2.1-assisted-publishing-plan.md`. Local 1280×720/375×812 fictional UI
+  has no horizontal overflow or captured warnings/errors. X intent preserves its
+  text through a sign-in redirect; authenticated composer/media/publication remains
+  unverified. Node 24.22.1: 626 offline tests pass (three live skipped), typecheck,
+  lint, format and production build pass; dependency scan has zero known advisories.
 - **2026-10-24**: **C.2.0 code released, Agent execution deliberately OFF.** User
   authorized accepted code publication only. App commit `1ed30d5` passed GitHub CI
   `40161487756`; Vercel `dpl_BWc65fr5iH5XwW6FCvwapXTACC8x` is Ready and owns

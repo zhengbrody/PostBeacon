@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { ExecutionProgress } from "./ExecutionProgress";
 import { DraftSafetyNotice } from "./DraftSafetyNotice";
 import { DraftDecisionSupport } from "./DraftDecisionSupport";
-import { publishDestination, type ExecutionStep } from "@/lib/execution";
+import type { ExecutionStep } from "@/lib/execution";
+import { buildPublishHandoff } from "@/lib/publishHandoff";
 import { auditDraftSafety, charBudget, platformCharLimit } from "@/lib/contentSafety";
 import type {
   Fact,
@@ -72,6 +73,7 @@ export function InlinePostWorkbench({
     "Draft ready — prepare it here, then post manually."
   );
   const [hookChange, setHookChange] = useState<{ from: string; to: string }>();
+  const handoffNoticeId = useId();
   const wasLoading = useRef(false);
   const draftsBeforeLoading = useRef(JSON.stringify(content.posts));
   const previousPostCount = useRef(content.posts.length);
@@ -120,11 +122,15 @@ export function InlinePostWorkbench({
     () => Array.from(new Set([post?.hook, ...(post?.hookVariants ?? [])])).filter(Boolean),
     [post?.hook, post?.hookVariants]
   );
-  const destination = publishDestination(content.platformId);
-
   if (!post) return null;
 
   const safety = auditDraftSafety(post, facts, profile, content.platformId);
+  const handoff = buildPublishHandoff({
+    platformId: content.platformId,
+    post,
+    facts,
+    profile,
+  });
   const limit = platformCharLimit(content.platformId);
   const budget = limit ? charBudget(post, limit) : undefined;
 
@@ -152,18 +158,24 @@ export function InlinePostWorkbench({
   }
 
   function openPlatform() {
-    if (!destination) {
-      setFeedback(
-        "No direct compose link for this channel — copy the draft and open it manually."
-      );
+    if (handoff.kind === "unavailable") {
+      setFeedback(handoff.reason);
       return;
     }
-    const opened = window.open(destination, "_blank", "noopener,noreferrer");
-    setFeedback(
-      opened
-        ? `${content.platformName} opened in a new tab ✓`
-        : `Popup blocked — copy the draft and open ${content.platformName} manually.`
-    );
+    try {
+      // noopener can return null even after success. Opening is neither proof of
+      // a visible composer nor publication, so never infer either from this handle.
+      window.open(handoff.href, "_blank", "noopener,noreferrer");
+      setFeedback(
+        handoff.kind === "prefilled-compose"
+          ? "X composer requested with this draft. Review it and press Post on X yourself. Nothing is marked published here. If no tab appears, use Copy draft and open X manually."
+          : `${content.platformName} opening requested. Copy the draft, paste and review it there. Nothing is marked published here. If no tab appears, open the platform manually.`
+      );
+    } catch {
+      setFeedback(
+        `Could not request the platform window. Copy the draft and open ${content.platformName} manually. Nothing was marked published.`
+      );
+    }
   }
 
   function switchHook(hook: string) {
@@ -334,6 +346,16 @@ export function InlinePostWorkbench({
         {feedback}
       </div>
 
+      <div id={handoffNoticeId} className="space-y-1 text-xs text-neutral-400">
+        <p className="font-medium text-neutral-300">
+          {handoff.kind === "prefilled-compose"
+            ? "Shortcut: review the complete draft on X"
+            : "Manual publishing handoff"}
+        </p>
+        <p>{handoff.reason}</p>
+        {handoff.kind !== "unavailable" && <p>{handoff.privacyNotice}</p>}
+      </div>
+
       <div className="flex flex-wrap gap-2">
         <Button
           variant="outline"
@@ -356,8 +378,16 @@ export function InlinePostWorkbench({
         >
           {editing ? "Done editing" : "Edit draft"}
         </Button>
-        <Button variant="outline" onClick={openPlatform}>
-          Open {content.platformName}
+        <Button
+          variant="outline"
+          disabled={loading || handoff.kind === "unavailable"}
+          aria-describedby={handoffNoticeId}
+          title={handoff.reason}
+          onClick={openPlatform}
+        >
+          {handoff.kind === "prefilled-compose"
+            ? "Send draft to X composer ↗"
+            : `Open ${content.platformName}`}
         </Button>
         <Button
           disabled={loading || !safety.ready}

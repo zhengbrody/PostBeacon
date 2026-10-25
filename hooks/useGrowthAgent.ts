@@ -114,7 +114,9 @@ export function useGrowthAgent(
           error: failure instanceof Error ? failure.message : "Agent task failed.",
         }));
     } finally {
-      if (current.current === capturedScope) {
+      // A project/account can leave and return to the same scope while an old
+      // aborted command settles. Only the current command may release its lock.
+      if (current.current === capturedScope && commands.current === controller) {
         inFlight.current = false;
         setBusyScope(null);
       }

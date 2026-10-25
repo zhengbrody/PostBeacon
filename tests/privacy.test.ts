@@ -93,6 +93,16 @@ describe("privacy single source stays complete", () => {
     expect(vercel?.data).toContain("never submitted URLs");
   });
 
+  it("discloses the user-initiated draft URL handoff without claiming publication", () => {
+    const handoff = DATA_CATEGORIES.find((category) =>
+      category.what.startsWith("Optional external publishing handoff")
+    );
+    expect(handoff?.where).toContain("only after you click");
+    expect(handoff?.retention).toContain("browser history");
+    expect(handoff?.why).toContain("not publication");
+    expect(handoff?.deletion).toContain("does not delete external");
+  });
+
   it("hides dormant billing from the current private-beta pages", () => {
     delete process.env.POLAR_ACCESS_TOKEN;
     delete process.env.POLAR_PRODUCT_ID;

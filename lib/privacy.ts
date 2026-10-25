@@ -362,6 +362,16 @@ export const DATA_CATEGORIES: DataCategory[] = [
     deletion: "Provider-side, per its policy",
   },
   {
+    what: "Optional external publishing handoff (the draft you choose to send)",
+    where:
+      "Your selected platform; the optional X composer shortcut sends the visible draft in a URL only after you click it. Other Open buttons do not attach the draft",
+    why: "Let you review and publish manually; opening a composer is not publication",
+    retention:
+      "The draft URL may remain in browser history and the destination follows its own policy. PostBeacon does not add account tokens or receive a publication receipt from this shortcut",
+    deletion:
+      "Clear browser history and manage drafts/posts on the destination. Deleting a PostBeacon project does not delete external drafts or posts",
+  },
+  {
     what: "Copilot chat transcripts",
     where: "Your browser session only",
     why: "The conversation you're having",

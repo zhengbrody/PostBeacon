@@ -24,6 +24,53 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllGlobals());
 describe("Agent hook owner/project boundary", () => {
+  it("does not let an aborted A→B→A command unlock a newer command", async () => {
+    const oldGate = deferred<AgentRunList["runs"][number]>();
+    const newGate = deferred<AgentRunList["runs"][number]>();
+    calls.agentCommand
+      .mockReturnValueOnce(oldGate.promise)
+      .mockReturnValueOnce(newGate.promise);
+    const hook = await mountHook<string, ReturnType<typeof useGrowthAgent>>(
+      (project) => useGrowthAgent("owner", project, false),
+      "A"
+    );
+    let oldCommand: Promise<void> | undefined;
+    let newCommand: Promise<void> | undefined;
+    try {
+      await act(async () => {
+        oldCommand = hook.current.start(input, "openai", "context", false);
+      });
+      await hook.render("B");
+      await hook.render("A");
+      await act(async () => {
+        newCommand = hook.current.start(input, "openai", "context", false);
+      });
+      expect(hook.current.busy).toBe(true);
+      expect(calls.agentCommand).toHaveBeenCalledTimes(2);
+      expect(calls.agentCommand.mock.calls[0][2].aborted).toBe(true);
+
+      await act(async () => {
+        oldGate.resolve({ id: "stale-A", projectId: "A" } as AgentRunList["runs"][number]);
+        await oldCommand;
+      });
+      expect(hook.current.runs).toEqual([]);
+      expect(hook.current.busy).toBe(true);
+      await act(async () => {
+        void hook.current.start(input, "openai", "context", false);
+      });
+      expect(calls.agentCommand).toHaveBeenCalledTimes(2);
+      expect(calls.agentCommand.mock.calls[1][2].aborted).toBe(false);
+    } finally {
+      await act(async () => {
+        newGate.resolve({
+          id: "current-A",
+          projectId: "A",
+        } as AgentRunList["runs"][number]);
+        await newCommand;
+      });
+      await hook.unmount();
+    }
+  });
   it("suppresses double clicks and discards a late command across accounts", async () => {
     const gate = deferred<AgentRunList["runs"][number]>();
     calls.agentCommand.mockReturnValue(gate.promise);
