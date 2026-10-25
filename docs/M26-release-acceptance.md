@@ -220,3 +220,33 @@ The built candidate passed all six public probes at `2026-10-25T01:09:06.870Z`;
 old-production pre-push smoke passed at `2026-10-25T01:09:03.710Z` (October 24 local).
 The prior desktop/mobile acceptance remains applicable because this final repair
 changes only the test fixture. Neither smoke is authenticated production acceptance.
+
+### Authorized production release completed
+
+The authorized push advanced main from `01886f9` to
+`22e92a10a4d979aec44b3a72fcd470b6b3e2928b`, including app/security commit `c2fc40c`,
+acceptance record `5e6454c` and the deterministic-test follow-up `22e92a1`.
+[GitHub CI 40149521584](https://github.com/zhengbrody/PostBeacon/actions/runs/40149521584)
+passed every gate. The commit-linked Vercel status is successful and identifies
+[production deployment H2WQsNMgFcRNJ84PnS2FBVLnnSzH](https://vercel.com/zhengbrodys-projects/postbeacon/H2WQsNMgFcRNJ84PnS2FBVLnnSzH).
+CLI inspection independently reports Ready, target production, build duration 49s,
+and aliases including postbeacon.app and www.postbeacon.app. Direct inspection of
+postbeacon.app resolves to the same deployment. No separate local-source deployment
+was needed; the existing Git integration deployed the exact pushed revision.
+
+Public post-release smoke on https://postbeacon.app at
+`2026-10-25T01:11:04.493Z` passed all six gates (October 24 locally): page 200,
+current trial notice, research 401, foreign-origin research 403, export 401 and
+public metrics 401. The checker still correctly reports `productionAccepted: false`.
+A deployment-scoped error/fatal scan covering
+`2026-10-25T01:06:13.931Z`–`2026-10-25T01:11:13.931Z` returned zero records, with no
+excluded intervals or further page. This short, low-traffic observation does not
+establish a complete monitoring setup or prove the absence of runtime errors.
+
+CI passed with action-runtime and ubuntu-latest migration notices. These are
+maintenance follow-ups, not failed gates. This release changed no SQL, production
+environment variable, runtime setting or provider/model selection and made no paid
+request, real project/account write/delete or social post. Real authenticated
+cloud/account/relational/concurrency checks, migrated-SDK live-provider acceptance,
+activation/retention and C.2 remain separate, uncompleted work. This record supersedes
+the earlier local-only/runtime-blocked snapshots without deleting their evidence.

@@ -279,10 +279,10 @@ eslint.config.mjs / .prettierrc.json   non-interactive lint + format (next lint 
 - **Headers**: global CSP + nosniff/DENY/referrer/permissions/HSTS in `next.config.mjs`
   (dev adds `unsafe-eval` + the Vercel Analytics debug script host).
 - **Dependency gate (2026-10-24)**: the old moderate-only PostCSS acceptance
-  is superseded. Local repairs use Next 15.5.28, a same-major patched PostCSS override,
+  is superseded. Released repairs use Next 15.5.28, a same-major patched PostCSS override,
   and the explicitly approved Zod 4.6.7 / OpenAI SDK 7.43.0 migration. Full/runtime
-  scans currently report zero known advisories; this is not proof of zero bugs or
-  a production-upgrade claim. CI fails on high/critical advisories without force-upgrading.
+  scans currently report zero known advisories; this is not proof of zero bugs.
+  CI fails on high/critical advisories without force-upgrading.
   Node 22+ is required by the SDK; model IDs and provider routing are unchanged.
 
 ## Conventions
@@ -349,6 +349,18 @@ cross-origin 403. Aggregate product-health reporting is operator-only at `/api/m
 Redeploy: `npx vercel --prod --yes`. Push env from `.env.local`: `~/push-env.sh`.
 
 ## Status / changelog
+- **2026-10-24**: **Authorized security/account-boundary release deployed.** Pushed
+  `c2fc40c`, `5e6454c` and deterministic-test follow-up `22e92a1` to main.
+  GitHub CI `40149521584` passed all gates; Vercel deployment
+  `dpl_H2WQsNMgFcRNJ84PnS2FBVLnnSzH` is Ready and owns postbeacon.app/www.
+  Commit-linked Vercel status independently matches `22e92a1`. Post-release public
+  smoke passed all six gates at `2026-10-25T01:11:04.493Z` (October 24 locally).
+  A bounded deployment error/fatal log scan returned zero records, not proof of
+  error-free behavior or a completed monitoring setup. No SQL/env/model changes,
+  paid requests, real account writes/deletes or social posts occurred. Real cloud
+  save/export/account isolation and fresh migrated-SDK provider acceptance remain
+  pending; C.2 is not delivered. CI action-runtime/runner deprecation notices are
+  non-failing maintenance follow-ups. Earlier local-only entries are historical.
 - **2026-10-24**: **Runtime gate resolved; authorized release revalidated.** Official
   Vercel CLI login and existing-project inspection confirm
   `zhengbrodys-projects/postbeacon` uses Node 24.x; no runtime/env setting changed.
