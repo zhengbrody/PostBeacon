@@ -28,14 +28,16 @@ function signedRequest(
   const sig = crypto
     .createHmac("sha256", Buffer.from(SECRET, "utf8"))
     .update(`${id}.${ts}.${body}`)
-    .digest("base64");
+    .digest();
+  // Flip an actual signature bit so corruption cannot accidentally be a no-op.
+  if (badSig) sig[0] ^= 1;
   return new NextRequest("http://localhost/api/billing/webhook", {
     method: "POST",
     body,
     headers: {
       "webhook-id": id,
       "webhook-timestamp": String(ts),
-      "webhook-signature": `v1,${badSig ? sig.replace(/^./, "x") : sig}`,
+      "webhook-signature": `v1,${sig.toString("base64")}`,
     },
   });
 }
@@ -52,6 +54,7 @@ describe("POST /api/billing/webhook", () => {
   });
   afterEach(() => {
     vi.unstubAllEnvs();
+    vi.restoreAllMocks();
     vi.clearAllMocks();
   });
 
@@ -63,6 +66,9 @@ describe("POST /api/billing/webhook", () => {
   });
 
   it("rejects a bad signature with 401 and changes nothing", async () => {
+    // At this instant the valid signature starts with "x". Replacing its first
+    // character with a fixed "x" would leave the supposedly bad fixture valid.
+    vi.spyOn(Date, "now").mockReturnValue(1792880021000);
     const res = await POST(signedRequest(paidOrder, { badSig: true }));
     expect(res.status).toBe(401);
     expect(setPlan).not.toHaveBeenCalled();

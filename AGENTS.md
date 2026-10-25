@@ -349,6 +349,19 @@ cross-origin 403. Aggregate product-health reporting is operator-only at `/api/m
 Redeploy: `npx vercel --prod --yes`. Push env from `.env.local`: `~/push-env.sh`.
 
 ## Status / changelog
+- **2026-10-24**: **Runtime gate resolved; authorized release revalidated.** Official
+  Vercel CLI login and existing-project inspection confirm
+  `zhengbrodys-projects/postbeacon` uses Node 24.x; no runtime/env setting changed.
+  Full local typecheck/lint/format/569 offline tests (three live skipped)/production
+  build pass under Node 24.22.1; dependency audit reports zero known advisories.
+  The fresh pass exposed an intermittent bad-signature test fixture: replacing the
+  first Base64 character with `x` sometimes did not corrupt it. A fixed-clock
+  reproduction failed before repair; the fixture now flips a signature bit and
+  restores its clock mock. Production signature verification is unchanged.
+  Local and pre-push production smoke each pass six gates. This clears the runtime
+  pre-push blocker, not authenticated cloud/provider/retention acceptance or C.2.
+  The MCP plugin is installed, but its team grant remains unavailable; the CLI
+  can access the intended project. Release completion is recorded separately.
 - **2026-10-24**: **Release-candidate browser acceptance + Review evidence repair.**
   Actual built-app 1440×1000 desktop and 375×812 mobile fictional walkthroughs passed
   Prepare/Publish/Measure/Learn and C.1 review/dual-confirm/queue/cancel/second-execution

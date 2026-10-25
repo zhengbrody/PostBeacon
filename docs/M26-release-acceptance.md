@@ -197,3 +197,26 @@ login is required. The existing production-release authorization remains valid.
 Authenticated cloud save/refresh/export/two-account isolation, fresh paid-provider
 acceptance after this SDK migration, real activation/retention, relational ownership
 constraints and cross-device conflict control remain pending. C.2 is not delivered.
+
+### Runtime gate resolution and final revalidation
+
+On October 24 (America/Los_Angeles), the official CLI was installed and the user
+completed its login. `vercel project inspect --non-interactive` from this checkout
+confirmed `zhengbrodys-projects/postbeacon`, project
+`prj_OHhaaAA1bjMJWiAKgdIM1W0Oc5lm`, and existing **Node 24.x**. This supersedes the
+earlier unavailable-credential/runtime blocker above; no runtime, environment,
+SQL or model setting was modified. The separately installed MCP plugin still lacks
+the team grant; its 403 is not treated as proof that the CLI cannot access the project.
+
+A fresh full run on Node 24.22.1 initially exposed a test-fixture defect: the webhook
+helper replaced the first Base64 signature character with `x`, leaving an already
+`x`-prefixed signature unchanged. Freezing `Date.now()` at 1792880021000 reproduced
+the failure before repair. The helper now flips a signature bit; the fixed-clock
+401/no-plan-change regression passes. No production webhook code was changed.
+
+Final Node 24.22.1 gates pass: typecheck, lint, format, **569 offline tests** (three
+live skipped), production build, and dependency audit (zero known advisories).
+The built candidate passed all six public probes at `2026-10-25T01:09:06.870Z`;
+old-production pre-push smoke passed at `2026-10-25T01:09:03.710Z` (October 24 local).
+The prior desktop/mobile acceptance remains applicable because this final repair
+changes only the test fixture. Neither smoke is authenticated production acceptance.
