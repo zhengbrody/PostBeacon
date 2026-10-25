@@ -358,6 +358,16 @@ cross-origin 403. Aggregate product-health reporting is operator-only at `/api/m
 Redeploy: `npx vercel --prod --yes`. Push env from `.env.local`: `~/push-env.sh`.
 
 ## Status / changelog
+- **2026-10-25**: **C.2.1 assisted handoff released after explicit approval.** App
+  commit `eeb30bb` passed GitHub CI `40171171849`; Next.js/Node 24.x production
+  deployment `dpl_3HnQBj42abmApc33Lue7Xfq9f3rm` is Ready (44s build) and owns
+  postbeacon.app/www. Six public smoke checks passed at `2026-10-25T07:02:05.914Z`;
+  the added draft-URL/history privacy notice is live. Production fictional browser
+  QA confirms the new shortcut and disclosure at actual 1280×720, with no horizontal
+  overflow or captured warnings/errors. No social post/connection, SQL/env change,
+  paid model request or Agent enablement occurred. Authenticated X composer prefill
+  remains unverified; Copy/Open fallback and final manual publication are required.
+  Multi-platform API delivery remains planning, not an implemented connector.
 - **2026-10-24**: **C.2.1 assisted publishing — accepted local slice, authorized release pending.**
   Three subagents split official API feasibility, execution-boundary audit and pure
   handoff implementation. Added fixed-origin X single-post prefill with current
