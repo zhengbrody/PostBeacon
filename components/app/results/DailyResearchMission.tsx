@@ -268,9 +268,10 @@ export function DailyResearchMission({
       <p className="mt-2 text-xs text-neutral-400">
         Goal: {successContractSummary(contract)}. At most one check per authorization
         revision per UTC day, including “Check now”; changing the authorization creates a
-        new revision. Shared limits are 10 checks per user and 100 globally per day.
-        Delivery time is not guaranteed, and service/API costs may apply. Authorization
-        expires after 30 days; review and save again to renew it explicitly.
+        new revision. Shared limits are 10 checks per user and 100 globally per day. This
+        pilot checks at most three delegations per daily scheduler trigger, not continuous
+        monitoring. Delivery time is not guaranteed, and service/API costs may apply.
+        Authorization expires after 30 days; review and save again to renew it explicitly.
       </p>
       {demo ? (
         <p className="mt-3 rounded-lg border border-accent-500/30 p-3 text-xs text-accent-200">

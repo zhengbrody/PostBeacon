@@ -1,6 +1,7 @@
 {
   "crons": [
     { "path": "/api/retention", "schedule": "0 4 * * *" },
-    { "path": "/api/reminders", "schedule": "0 16 * * *" }
+    { "path": "/api/reminders", "schedule": "0 16 * * *" },
+    { "path": "/api/agent-missions/tick", "schedule": "0 12 * * *" }
   ]
 }
