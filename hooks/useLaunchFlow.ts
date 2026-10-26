@@ -223,7 +223,8 @@ export function useLaunchFlow(accountId?: string | null) {
           state.facts,
           state.workspace.successContract,
           state.url,
-          state.memory.bannedClaims
+          state.memory.bannedClaims,
+          input
         );
         check();
         const current = currentState.current;

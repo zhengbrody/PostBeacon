@@ -119,4 +119,42 @@ describe("visible Agent entry and honest receipts", () => {
     expect(html).toContain("No model will be called");
     expect(html).not.toContain("aria-current");
   });
+
+  it("labels product-led input checks without fabricating a demand-source receipt", () => {
+    const run: AgentRun = {
+      id: "product-only",
+      projectId: "project",
+      status: "running",
+      phase: "sources",
+      provider: "openai",
+      createdAt: "2026-10-25T00:00:00Z",
+      updatedAt: "2026-10-25T00:00:01Z",
+      interrupted: false,
+      canResume: false,
+      modelAttempted: false,
+      sourceCount: 0,
+      checkedSources: 0,
+      input: {
+        mode: "product-led",
+        audience: "Developers",
+        task: "Try one workflow",
+        platformId: "twitter",
+        venue: "Own X profile",
+        entryUrl: "https://example.org/demo",
+        steps: ["Open", "Try", "Reply"],
+        feedbackQuestion: "What was unclear?",
+        sources: [],
+      },
+    };
+    const html = renderToStaticMarkup(
+      createElement(AgentRunPanel, {
+        agent: { ...controls(), runs: [run] },
+        onReview: vi.fn(),
+      })
+    );
+    expect(html).toContain("Input checks / product facts");
+    expect(html).toContain("no external demand sources");
+    expect(html).not.toContain("0/0 source receipts");
+    expect(html).not.toContain("Quote found");
+  });
 });

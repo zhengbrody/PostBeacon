@@ -521,6 +521,7 @@ export interface OpportunitySourceInput {
 }
 
 export interface TrialResearchInput {
+  mode?: "product-led" | "evidence-led"; // absent preserves legacy source-backed behavior
   audience: string;
   task: string;
   entryUrl: string;
@@ -544,7 +545,7 @@ export interface OpportunitySource {
 
 export interface TrialOpportunity {
   id: string;
-  sourceId: string;
+  sourceId?: string;
   whyFit: string; // explicitly a hypothesis, never observed demand/permission
   factIds: string[];
   draft: PlatformPost;
@@ -563,7 +564,10 @@ export interface OpportunityResearch {
 
 export interface TrialOpportunitySnapshot {
   researchId: string;
-  source: OpportunitySource;
+  contextKey?: string; // current product/goal version at approval, never authorization
+  mode?: "product-led" | "evidence-led";
+  factIds?: string[];
+  source?: OpportunitySource;
   audience: string;
   task: string;
   entryUrl: string;

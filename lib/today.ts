@@ -513,12 +513,21 @@ export interface TimelineEvent {
 
 export function timelineEvents(workspace: WorkspaceState): TimelineEvent[] {
   const events: TimelineEvent[] = [];
-  for (const plan of workspace.plannedExperiments ?? [])
+  for (const plan of workspace.plannedExperiments ?? []) {
+    const trial = plan.opportunity;
+    const provenance = trial
+      ? trial.mode === "product-led"
+        ? `Product-led trial; no external demand evidence. Product facts: ${trial.factIds?.join(", ") || "not recorded"}; rules user-checked, not independently reviewed.`
+        : trial.source
+          ? `Product trial source: ${trial.source.url}; rules user-checked, not independently reviewed.`
+          : "Product trial source unavailable; not reconstructed."
+      : `Source execution: ${plan.sourceExperimentId}`;
     events.push({
       at: plan.createdAt,
       icon: "→",
-      text: `Next experiment confirmed: ${plan.platformName} · ${plan.variable} (${plan.status}). ${plan.opportunity ? `Product trial source: ${plan.opportunity.source.url}; rules user-checked, not independently reviewed.` : `Source execution: ${plan.sourceExperimentId}`}`,
+      text: `Next experiment confirmed: ${plan.platformName} · ${plan.variable} (${plan.status}). ${provenance}`,
     });
+  }
   for (const exp of workspace.experiments) {
     events.push({
       at: exp.publishedAt,

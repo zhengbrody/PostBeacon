@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { toJson, toMarkdown, type ExportSnapshot } from "@/lib/export";
-import type { WorkspaceState } from "@/lib/types";
+import type {
+  PlannedExperiment,
+  TrialOpportunitySnapshot,
+  WorkspaceState,
+} from "@/lib/types";
+import { timelineEvents } from "@/lib/today";
 
 const workspace: WorkspaceState = {
   successContract: {
@@ -72,6 +77,81 @@ const snap: ExportSnapshot = {
 };
 
 describe("plan export carries the learning loop (anonymous users' only way out)", () => {
+  it("exports source-free product-led approvals honestly in queue and history", () => {
+    const trial: TrialOpportunitySnapshot = {
+      researchId: "product-trial",
+      mode: "product-led",
+      contextKey: "saved-context",
+      factIds: ["feature-a", "feature-b"],
+      audience: "Developers",
+      task: "Try one documented workflow",
+      entryUrl: "https://example.org/demo",
+      steps: ["Open the demo", "Try the sample", "Report one confusing step"],
+      feedbackQuestion: "Which step was unclear?",
+      rulesUserCheckedAt: "2026-10-25T00:00:00Z",
+    };
+    const planned: PlannedExperiment = {
+      id: "planned-product-trial",
+      templateId: "trial-template",
+      sourceExperimentId: "trial:product-trial",
+      platformId: "twitter",
+      platformName: "X / Twitter",
+      venue: "Own X profile",
+      angle: "Product trial",
+      variable: "hook",
+      heldConstant: "Audience and task",
+      status: "ready",
+      createdAt: "2026-10-25T00:00:00Z",
+      opportunity: trial,
+    };
+    const current: WorkspaceState = {
+      ...workspace,
+      plannedExperiments: [planned],
+      experiments: workspace.experiments.map((experiment) => ({
+        ...experiment,
+        opportunity: trial,
+      })),
+    };
+    const md = toMarkdown({ ...snap, workspace: current });
+    expect(md).toContain("Mode: product-led; no external demand evidence");
+    expect(md).toContain("*Trial mode:* product-led; no external demand evidence");
+    expect(md).toContain("feature-a, feature-b");
+    expect(md).not.toContain("Demand excerpt:");
+    expect(md).not.toContain("undefined");
+    const timeline = timelineEvents(current).find((event) =>
+      event.text.includes("Next experiment confirmed")
+    );
+    expect(timeline?.text).toContain("Product-led trial; no external demand evidence");
+    expect(timeline?.text).toContain("feature-a, feature-b");
+    expect(
+      JSON.parse(toJson({ ...snap, workspace: current })).workspace.plannedExperiments[0]
+        .opportunity.source
+    ).toBeUndefined();
+  });
+
+  it("does not reconstruct an unavailable historical demand source", () => {
+    const trial: TrialOpportunitySnapshot = {
+      researchId: "old-trial",
+      audience: "Developers",
+      task: "Try a task",
+      entryUrl: "https://example.org/demo",
+      steps: ["Open", "Try", "Reply"],
+      feedbackQuestion: "What was unclear?",
+      rulesUserCheckedAt: "2026-10-25T00:00:00Z",
+    };
+    const md = toMarkdown({
+      ...snap,
+      workspace: {
+        ...workspace,
+        experiments: workspace.experiments.map((experiment) => ({
+          ...experiment,
+          opportunity: trial,
+        })),
+      },
+    });
+    expect(md).toContain("Trial source:* unavailable; not reconstructed");
+    expect(md).not.toContain("undefined");
+  });
   it("markdown includes the experiment log with metrics, feedback and verdict", () => {
     const md = toMarkdown(snap);
     expect(md).toContain("## Experiment log");

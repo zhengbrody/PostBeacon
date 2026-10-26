@@ -136,7 +136,7 @@ export const SUBPROCESSORS: Subprocessor[] = [
   {
     name: "OpenAI",
     role: "AI model (GPT)",
-    data: "Your product page text, profile, plan context, Copilot input, and submitted demand excerpts/trial instructions during explicit source research",
+    data: "Your product page text, profile, plan context, Copilot input, and trial instructions (plus optional submitted demand excerpts) during explicit product-trial research",
     region: PROVIDER_PRIVACY.openai.region,
     when: "Only if configured, and when selected as primary or used as a clear-policy fallback",
     policyUrl: PROVIDER_PRIVACY.openai.policyUrl,
@@ -144,7 +144,7 @@ export const SUBPROCESSORS: Subprocessor[] = [
   {
     name: "DeepSeek",
     role: "AI model",
-    data: "Your product page text, profile, plan context, Copilot input, and submitted demand excerpts/trial instructions during explicit source research",
+    data: "Your product page text, profile, plan context, Copilot input, and trial instructions (plus optional submitted demand excerpts) during explicit product-trial research",
     region: PROVIDER_PRIVACY.deepseek.region,
     when: deepseekAutomaticFallbackEnabled()
       ? "When selected as primary, or as the explicitly enabled beta fallback after another provider fails"

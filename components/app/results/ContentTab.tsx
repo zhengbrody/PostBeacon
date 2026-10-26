@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/Button";
 import { PriorityBadge } from "@/components/ui/Badge";
 import { postsToMarkdown } from "@/lib/export";
 import { unsafeDraftCount } from "@/lib/contentSafety";
+import { trialDraftIssues } from "@/lib/trialDraftSafety";
 import { PrintHeading } from "./PrintHeading";
 import { ChannelBlock } from "./ChannelBlock";
 import type {
@@ -15,6 +16,7 @@ import type {
   PlatformPost,
   PlatformRecommendation,
   ProductProfile,
+  PlannedExperiment,
 } from "@/lib/types";
 
 /** Master-detail content library: pick a channel on the left, work its posts
@@ -36,6 +38,9 @@ export function ContentTab({
   onRemoveChannel,
   onAddChannel,
   onRequestPublish,
+  plans = [],
+  currentTrialContextKey,
+  bannedClaims = [],
 }: {
   orderedContent: PlatformContent[];
   result: GenerateResult;
@@ -56,6 +61,9 @@ export function ContentTab({
   onRemoveChannel: (platformId: string) => void;
   onAddChannel: (platformId: string) => void;
   onRequestPublish: (platformId: string, postIdx: number) => void;
+  plans?: PlannedExperiment[];
+  currentTrialContextKey?: string;
+  bannedClaims?: string[];
 }) {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [addPick, setAddPick] = useState("");
@@ -68,6 +76,22 @@ export function ContentTab({
         0
       ),
     [result.content, facts, profile]
+  );
+  const trialBlockedCount = result.content.reduce(
+    (count, channel) =>
+      count +
+      channel.posts.filter(
+        (post, index) =>
+          trialDraftIssues(
+            channel.platformId,
+            index,
+            post,
+            plans,
+            currentTrialContextKey,
+            bannedClaims
+          ).length > 0
+      ).length,
+    0
   );
 
   // Self-heals when the active channel is removed.
@@ -83,7 +107,7 @@ export function ContentTab({
   );
 
   async function copyAllPosts() {
-    if (unsafeCount > 0) return;
+    if (unsafeCount > 0 || trialBlockedCount > 0) return;
     await navigator.clipboard.writeText(postsToMarkdown(result));
     setCopiedAll(true);
     setTimeout(() => setCopiedAll(false), 1500);
@@ -95,6 +119,9 @@ export function ContentTab({
       content={c}
       facts={facts}
       profile={profile}
+      plans={plans}
+      currentTrialContextKey={currentTrialContextKey}
+      bannedClaims={bannedClaims}
       rec={recFor(c.platformId)}
       posted={posted}
       loading={loading}
@@ -119,17 +146,27 @@ export function ContentTab({
           size="sm"
           variant="outline"
           className="no-print"
-          disabled={unsafeCount > 0}
+          disabled={unsafeCount > 0 || trialBlockedCount > 0}
           title={
-            unsafeCount > 0
-              ? `Fix ${unsafeCount} draft${unsafeCount === 1 ? "" : "s"} before copying all`
-              : undefined
+            trialBlockedCount > 0
+              ? "Review the changed trial context or restore the approved trial entry before copying all"
+              : unsafeCount > 0
+                ? `Fix ${unsafeCount} draft${unsafeCount === 1 ? "" : "s"} before copying all`
+                : undefined
           }
           onClick={copyAllPosts}
         >
           {copiedAll ? "Copied!" : "⧉ Copy all posts"}
         </Button>
       </div>
+
+      {trialBlockedCount > 0 && (
+        <p role="alert" className="no-print mb-4 text-xs text-amber-200">
+          {trialBlockedCount} trial draft{trialBlockedCount === 1 ? " needs" : "s need"} a
+          fresh review or the approved entry restored. Bulk copy is locked; open the draft
+          to see the exact issue.
+        </p>
+      )}
 
       {unsafeCount > 0 && (
         <div className="no-print mb-4 rounded-lg border border-amber-800/70 bg-amber-950/20 px-3 py-2 text-xs text-amber-200">

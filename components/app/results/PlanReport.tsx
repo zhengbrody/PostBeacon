@@ -53,6 +53,7 @@ export function PlanReport({
   loading,
   demo,
   onReset,
+  currentTrialContextKey,
 }: {
   result: GenerateResult;
   strategy: MarketingStrategy | null;
@@ -82,6 +83,7 @@ export function PlanReport({
   loading: boolean;
   demo: boolean;
   onReset: () => void;
+  currentTrialContextKey?: string;
 }) {
   function exportSnapshot(): ExportSnapshot {
     return {
@@ -142,6 +144,9 @@ export function PlanReport({
           strategy={strategy}
           facts={facts}
           profile={profile}
+          plans={workspace.plannedExperiments}
+          currentTrialContextKey={currentTrialContextKey}
+          bannedClaims={memory.bannedClaims}
           posted={posted}
           loading={loading}
           demo={demo}

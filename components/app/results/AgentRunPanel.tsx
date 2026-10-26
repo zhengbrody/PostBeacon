@@ -66,7 +66,10 @@ export function AgentRunPanel({
                 aria-current={run.phase === phase ? "step" : undefined}
                 className={`rounded-lg border p-2 ${run.phase === phase ? "border-accent-500 text-accent-300" : "border-line text-neutral-400"}`}
               >
-                {index + 1}. {labels[phase]}
+                {index + 1}.{" "}
+                {phase === "sources" && run.input.mode === "product-led"
+                  ? "Input checks / product facts"
+                  : labels[phase]}
                 {phase === "model" && run.status === "ready" && !run.modelAttempted
                   ? " · not needed"
                   : AGENT_PHASES.indexOf(run.phase) > index
@@ -79,8 +82,11 @@ export function AgentRunPanel({
             {agentRunMessage(run)}
           </p>
           <p className="mt-2 text-xs text-neutral-500">
-            Last server receipt: {run.updatedAt} · {run.checkedSources}/{run.sourceCount}{" "}
-            source receipts ·{" "}
+            Last server receipt: {run.updatedAt} ·{" "}
+            {run.input.mode === "product-led"
+              ? "Product-facts mode; no external demand sources"
+              : `${run.checkedSources}/${run.sourceCount} source receipts`}{" "}
+            ·{" "}
             {run.modelAttempted
               ? "1 request reserved (not proof of provider completion)"
               : "No model request reserved"}
@@ -95,7 +101,9 @@ export function AgentRunPanel({
                 disabled={agent.busy}
                 onClick={() => void agent.resume(run.id)}
               >
-                Resume source checks
+                {run.input.mode === "product-led"
+                  ? "Resume input checks"
+                  : "Resume source checks"}
               </Button>
             )}
             {(run.status === "queued" || run.status === "running") && (

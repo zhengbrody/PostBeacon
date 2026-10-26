@@ -84,7 +84,9 @@ export function agentRunMessage(run: AgentRun): string {
     return "Execution was interrupted after the model request was reserved. Its outcome is unknown; it will not be automatically repeated.";
   if (run.interrupted)
     return run.canResume
-      ? "Execution was interrupted before the model request. You can resume the source checks safely."
+      ? run.input.mode === "product-led"
+        ? "Execution was interrupted before the model request. You can resume the input checks safely."
+        : "Execution was interrupted before the model request. You can resume the source checks safely."
       : "Recovery deadline or attempt limit reached. This task will not restart; review its receipts and explicitly prepare a new task.";
   if (run.status === "ready")
     return run.research?.opportunities.length
@@ -93,6 +95,8 @@ export function agentRunMessage(run: AgentRun): string {
   if (run.phase === "model")
     return "The one model request has been reserved; preparing tentative invitations. No retry or fallback.";
   if (run.phase === "sources")
-    return "Checking only the public sources you explicitly allowed. Excerpts without fetching remain user-provided.";
+    return run.input.mode === "product-led"
+      ? "Using verified product facts only. No external demand sources are being fetched or verified."
+      : "Checking only the public sources you explicitly allowed. Excerpts without fetching remain user-provided.";
   return "Task saved. Waiting for a worker to claim it; no progress is inferred from elapsed time.";
 }

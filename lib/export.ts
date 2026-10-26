@@ -106,9 +106,20 @@ export function toMarkdown(snap: ExportSnapshot): string {
       );
       if (plan.opportunity) {
         const trial = plan.opportunity;
+        if (trial.mode === "product-led") {
+          out.push(
+            `  - Mode: product-led; no external demand evidence.`,
+            `  - Product fact references: ${trial.factIds?.join(", ") || "not recorded"}; venue rules: user checked ${trial.rulesUserCheckedAt}, not independently reviewed.`
+          );
+        } else if (trial.source) {
+          out.push(
+            `  - Source: ${trial.source.url} (${trial.source.verification}); rules: user checked ${trial.rulesUserCheckedAt}, not independently reviewed.`,
+            `  - Demand excerpt: “${trial.source.quote}”`
+          );
+        } else {
+          out.push("  - Demand source: unavailable; not reconstructed.");
+        }
         out.push(
-          `  - Source: ${trial.source.url} (${trial.source.verification}); rules: user checked ${trial.rulesUserCheckedAt}, not independently reviewed.`,
-          `  - Demand excerpt: “${trial.source.quote}”`,
           `  - Trial audience: ${trial.audience}`,
           `  - Trial entry: ${trial.entryUrl}`
         );
@@ -125,9 +136,10 @@ export function toMarkdown(snap: ExportSnapshot): string {
       "## Product trial research — hypotheses, not verified demand",
       "",
       `Task: ${research.input.task}`,
+      `Mode: ${research.input.mode === "product-led" ? "product-led; no external demand evidence" : "evidence-led; submitted sources, not verified demand"}`,
       `Audience: ${research.input.audience}`,
       `Entry: ${research.input.entryUrl}`,
-      `Provider: ${research.example ? "fictional example; no model call" : research.meta ? `${research.meta.provider} / ${research.meta.model}` : "none; no usable source"}`,
+      `Provider: ${research.example ? "fictional example; no model call" : research.meta ? `${research.meta.provider} / ${research.meta.model}` : research.input.mode === "product-led" ? "not recorded" : "none; no usable source"}`,
       ""
     );
     for (const source of research.sources)
@@ -259,8 +271,19 @@ function appendExperiments(out: string[], workspace: WorkspaceState) {
         out.push(`- Published fact [${fact.status}] ${fact.id}: ${fact.claim}`);
     }
     if (e.opportunity) {
+      if (e.opportunity.mode === "product-led") {
+        out.push(
+          "*Trial mode:* product-led; no external demand evidence.",
+          `*Trial product facts:* ${e.opportunity.factIds?.join(", ") || "not recorded"}; venue rules user-checked, not independently reviewed.`
+        );
+      } else if (e.opportunity.source) {
+        out.push(
+          `*Trial source:* ${e.opportunity.source.url} (${e.opportunity.source.verification}); venue rules user-checked, not independently reviewed.`
+        );
+      } else {
+        out.push("*Trial source:* unavailable; not reconstructed.");
+      }
       out.push(
-        `*Trial source:* ${e.opportunity.source.url} (${e.opportunity.source.verification}); venue rules user-checked, not independently reviewed.`,
         `*Trial task:* ${e.opportunity.task}`,
         `*Trial audience:* ${e.opportunity.audience}`,
         `*Trial entry:* ${e.opportunity.entryUrl}`,

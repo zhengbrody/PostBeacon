@@ -7,6 +7,7 @@ import { DraftSafetyNotice } from "./DraftSafetyNotice";
 import { DraftDecisionSupport } from "./DraftDecisionSupport";
 import type { ExecutionStep } from "@/lib/execution";
 import { buildPublishHandoff } from "@/lib/publishHandoff";
+import { trialDraftIssues } from "@/lib/trialDraftSafety";
 import { auditDraftSafety, charBudget, platformCharLimit } from "@/lib/contentSafety";
 import type {
   Fact,
@@ -40,6 +41,9 @@ export function InlinePostWorkbench({
   onOpenLibrary,
   productUrl,
   plan,
+  currentTrialContextKey,
+  trialPlans = [],
+  bannedClaims = [],
 }: {
   content: PlatformContent;
   facts: Fact[];
@@ -56,6 +60,9 @@ export function InlinePostWorkbench({
   onOpenLibrary: () => void;
   productUrl?: string;
   plan?: import("@/lib/types").PlannedExperiment;
+  currentTrialContextKey?: string;
+  trialPlans?: import("@/lib/types").PlannedExperiment[];
+  bannedClaims?: string[];
 }) {
   const requestedIsAvailable =
     defaultPostIdx !== undefined &&
@@ -108,14 +115,24 @@ export function InlinePostWorkbench({
       const nextIndex = content.posts.length - 1;
       const previousHook = content.posts[postIdx]?.hook;
       const nextHook = content.posts[nextIndex]?.hook;
+      const reviewedTrial = (trialPlans.length ? trialPlans : plan ? [plan] : []).some(
+        (item) =>
+          item.platformId === content.platformId &&
+          item.postIdx === nextIndex &&
+          Boolean(item.opportunity)
+      );
       setPostIdx(nextIndex);
-      if (previousHook && nextHook && previousHook !== nextHook) {
+      if (!reviewedTrial && previousHook && nextHook && previousHook !== nextHook) {
         setHookChange({ from: previousHook, to: nextHook });
-      }
-      setFeedback("New variant selected — the deterministic Truth Gate ran again.");
+      } else setHookChange(undefined);
+      setFeedback(
+        reviewedTrial
+          ? "Reviewed trial selected — the invitation and experiment contract are ready below."
+          : "New variant selected — the deterministic Truth Gate ran again."
+      );
     }
     previousPostCount.current = content.posts.length;
-  }, [content.platformId, content.posts, postIdx]);
+  }, [content.platformId, content.posts, postIdx, trialPlans, plan]);
 
   const post = content.posts[postIdx] ?? content.posts[0];
   const hooks = useMemo(
@@ -125,6 +142,21 @@ export function InlinePostWorkbench({
   if (!post) return null;
 
   const safety = auditDraftSafety(post, facts, profile, content.platformId);
+  const activePlan = (trialPlans.length ? trialPlans : plan ? [plan] : []).find(
+    (item) =>
+      item.status !== "cancelled" &&
+      item.platformId === content.platformId &&
+      item.postIdx === postIdx
+  );
+  const trialIssues = trialDraftIssues(
+    content.platformId,
+    postIdx,
+    post,
+    trialPlans.length ? trialPlans : plan ? [plan] : [],
+    currentTrialContextKey,
+    bannedClaims
+  );
+  const trialStale = trialIssues.length > 0;
   const handoff = buildPublishHandoff({
     platformId: content.platformId,
     post,
@@ -138,6 +170,12 @@ export function InlinePostWorkbench({
     onUpdatePost(content.platformId, postIdx, patch);
 
   async function copyDraft() {
+    if (trialStale) {
+      setFeedback(
+        "Product facts or the success goal changed. Prepare and review a fresh trial kit first."
+      );
+      return;
+    }
     if (!safety.ready) {
       setFeedback("Truth check blocked copying — edit the highlighted claim first.");
       return;
@@ -158,6 +196,12 @@ export function InlinePostWorkbench({
   }
 
   function openPlatform() {
+    if (trialStale) {
+      setFeedback(
+        "Product facts or the success goal changed. Prepare and review a fresh trial kit first."
+      );
+      return;
+    }
     if (handoff.kind === "unavailable") {
       setFeedback(handoff.reason);
       return;
@@ -195,10 +239,12 @@ export function InlinePostWorkbench({
         post={post}
         profile={profile}
         recommendation={recommendation}
-        successContract={successContract}
+        successContract={activePlan?.successContract ?? successContract}
         productUrl={productUrl}
-        variable={plan?.variable}
-        heldConstant={plan?.heldConstant}
+        variable={activePlan?.variable}
+        heldConstant={activePlan?.heldConstant}
+        externalIssues={trialIssues}
+        disableShareCopy={Boolean(activePlan?.opportunity)}
         hookChange={hookChange}
       />
 
@@ -312,6 +358,15 @@ export function InlinePostWorkbench({
       </div>
 
       <DraftSafetyNotice report={safety} />
+      {trialStale && (
+        <p
+          role="alert"
+          className="rounded-lg border border-amber-900/50 p-3 text-sm text-amber-200"
+        >
+          Trial blocked: {trialIssues.join("; ")}. Restore the reviewed draft or prepare and
+          confirm a fresh trial kit. This draft and its history are preserved.
+        </p>
+      )}
 
       {!safety.ready && (
         <div className="flex flex-wrap items-center gap-3 rounded-lg border border-amber-900/50 bg-amber-950/10 px-3 py-2.5">
@@ -359,7 +414,7 @@ export function InlinePostWorkbench({
       <div className="flex flex-wrap gap-2">
         <Button
           variant="outline"
-          disabled={!safety.ready}
+          disabled={!safety.ready || trialStale}
           title={!safety.ready ? "Fix the truth-check issues before copying" : undefined}
           onClick={copyDraft}
         >
@@ -380,7 +435,7 @@ export function InlinePostWorkbench({
         </Button>
         <Button
           variant="outline"
-          disabled={loading || handoff.kind === "unavailable"}
+          disabled={loading || trialStale || handoff.kind === "unavailable"}
           aria-describedby={handoffNoticeId}
           title={handoff.reason}
           onClick={openPlatform}
@@ -390,7 +445,7 @@ export function InlinePostWorkbench({
             : `Open ${content.platformName}`}
         </Button>
         <Button
-          disabled={loading || !safety.ready}
+          disabled={loading || !safety.ready || trialStale}
           title={!safety.ready ? "Fix the truth-check issues before publishing" : undefined}
           onClick={() => onPublish(content.platformId, postIdx)}
         >

@@ -5,8 +5,9 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Field } from "@/components/ui/Field";
 import { auditDraftSafety } from "@/lib/contentSafety";
+import { trialDraftIssues } from "@/lib/trialDraftSafety";
 import { DraftSafetyNotice } from "./DraftSafetyNotice";
-import type { Fact, PlatformPost, ProductProfile } from "@/lib/types";
+import type { Fact, PlannedExperiment, PlatformPost, ProductProfile } from "@/lib/types";
 
 /** One ready-to-post draft: copy, inline edit, A/B hook chips, posted mark. */
 export function PostCard({
@@ -18,6 +19,10 @@ export function PostCard({
   onTogglePosted,
   onPublish,
   onUpdate,
+  postIdx = 0,
+  plans,
+  currentTrialContextKey,
+  bannedClaims,
 }: {
   post: PlatformPost;
   platformId: string;
@@ -27,6 +32,10 @@ export function PostCard({
   onTogglePosted: () => void; // un-mark only (the experiment record stays)
   onPublish: () => void; // marking published goes through the experiment dialog
   onUpdate: (patch: Partial<PlatformPost>) => void;
+  postIdx?: number;
+  plans?: PlannedExperiment[];
+  currentTrialContextKey?: string;
+  bannedClaims?: string[];
 }) {
   const [copied, setCopied] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -34,9 +43,17 @@ export function PostCard({
     () => auditDraftSafety(post, facts, profile, platformId),
     [post, facts, profile, platformId]
   );
+  const trialIssues = trialDraftIssues(
+    platformId,
+    postIdx,
+    post,
+    plans,
+    currentTrialContextKey,
+    bannedClaims
+  );
 
   async function copy() {
-    if (!safety.ready) return;
+    if (!safety.ready || trialIssues.length > 0) return;
     await navigator.clipboard.writeText(`${post.hook}\n\n${post.body}`);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
@@ -106,13 +123,21 @@ export function PostCard({
 
       <div className="no-print mt-4">
         <DraftSafetyNotice report={safety} />
+        {trialIssues.length > 0 && (
+          <p role="alert" className="mt-2 text-xs text-amber-200">
+            Trial review required: {trialIssues.join(" ")}
+          </p>
+        )}
       </div>
 
       <div className="no-print mt-4 flex flex-wrap gap-2">
         <Button
           size="sm"
-          disabled={!safety.ready}
-          title={!safety.ready ? "Fix the truth-check issues before copying" : undefined}
+          disabled={!safety.ready || trialIssues.length > 0}
+          title={
+            trialIssues[0] ??
+            (!safety.ready ? "Fix the truth-check issues before copying" : undefined)
+          }
           onClick={copy}
         >
           {copied ? "Copied!" : "Copy"}
@@ -123,7 +148,7 @@ export function PostCard({
         <Button
           size="sm"
           variant={posted ? "primary" : "outline"}
-          disabled={!posted && !safety.ready}
+          disabled={!posted && (!safety.ready || trialIssues.length > 0)}
           title={
             !posted && !safety.ready
               ? "Fix the truth-check issues before starting an experiment"

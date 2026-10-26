@@ -15,28 +15,53 @@ import type {
 } from "./types";
 
 const text = (max: number) => z.string().trim().min(1).max(max);
-export const trialResearchInputSchema = z.object({
-  audience: text(500),
-  task: text(500),
-  entryUrl: text(2048),
-  platformId: text(64).refine(
-    (id) => PLATFORMS.some((p) => p.id === id),
-    "unknown platform"
-  ),
-  venue: text(200),
-  steps: z.tuple([text(200), text(200), text(200)]),
-  feedbackQuestion: text(300),
-  sources: z
-    .array(
-      z.object({
-        url: text(2048),
-        quote: z.string().trim().min(30).max(400),
-        fetchAllowed: z.boolean(),
-      })
+export const trialResearchInputSchema = z
+  .object({
+    mode: z.enum(["product-led", "evidence-led"]).optional(),
+    audience: text(500),
+    task: text(500),
+    entryUrl: text(2048),
+    platformId: text(64).refine(
+      (id) => PLATFORMS.some((p) => p.id === id),
+      "unknown platform"
+    ),
+    venue: text(200),
+    steps: z.tuple([text(200), text(200), text(200)]),
+    feedbackQuestion: text(300),
+    sources: z
+      .array(
+        z.object({
+          url: text(2048),
+          quote: z.string().trim().min(30).max(400),
+          fetchAllowed: z.boolean(),
+        })
+      )
+      .max(3),
+  })
+  .superRefine((input, ctx) => {
+    if (
+      input.mode === "product-led" ? input.sources.length !== 0 : input.sources.length < 1
     )
-    .min(1)
-    .max(3),
-});
+      ctx.addIssue({
+        code: "custom",
+        path: ["sources"],
+        message:
+          "Product-led trials use no demand sources; evidence-led trials require one to three.",
+      });
+  });
+
+function boundedFactIds(raw: unknown): string[] {
+  return Array.isArray(raw)
+    ? [
+        ...new Set(
+          raw.filter(
+            (id): id is string =>
+              typeof id === "string" && Boolean(id.trim()) && id.length <= 60
+          )
+        ),
+      ].slice(0, 6)
+    : [];
+}
 
 /** Exact public URL, never credentials, local/private literals or token links. */
 export function researchUrl(raw: string): string {
@@ -180,14 +205,16 @@ export function normalizeOpportunityResearch(
       ];
     });
   const used = new Set<string>();
+  const productLed = input.mode === "product-led";
   const opportunities = asRecordList(item.opportunities)
-    .slice(0, 3)
+    .slice(0, productLed ? 1 : 3)
     .flatMap((candidate) => {
       const sourceId = asString(candidate.sourceId),
         draft = asRecord(candidate.draft);
       const source = sources.find((s) => s.id === sourceId && eligibleSource(s));
+      const factIds = boundedFactIds(candidate.factIds);
       if (
-        !source ||
+        (productLed ? Boolean(sourceId) || !factIds.length : !source) ||
         used.has(sourceId) ||
         typeof draft.hook !== "string" ||
         typeof draft.body !== "string"
@@ -196,15 +223,10 @@ export function normalizeOpportunityResearch(
       used.add(sourceId);
       return [
         {
-          id: `${id}:${sourceId}`,
-          sourceId,
+          id: productLed ? `${id}:product` : `${id}:${sourceId}`,
+          ...(productLed ? {} : { sourceId }),
           whyFit: asString(candidate.whyFit).slice(0, 700),
-          factIds: Array.isArray(candidate.factIds)
-            ? candidate.factIds
-                .filter((v): v is string => typeof v === "string")
-                .slice(0, 6)
-                .map((v) => v.slice(0, 60))
-            : [],
+          factIds,
           draft: {
             hook: draft.hook.slice(0, 1000),
             body: draft.body.slice(0, 4000),
@@ -248,6 +270,16 @@ export function trialSafety(
     profile,
     research.input.platformId
   ).issues.map((issue) => issue.title);
+  if (research.input.mode === "product-led") {
+    if (research.input.sources.length || research.sources.length || opportunity.sourceId)
+      issues.push("A product-led trial cannot claim external demand evidence.");
+  } else if (
+    !research.sources.some(
+      (source) => source.id === opportunity.sourceId && eligibleSource(source)
+    )
+  ) {
+    issues.push("The invitation needs an eligible submitted demand source.");
+  }
   if (!opportunity.factIds.length || opportunity.factIds.some((id) => !confirmed.has(id)))
     issues.push("The invitation needs a current verified or user-confirmed product fact.");
   const instructionSafety = auditDraftSafety(
@@ -312,34 +344,56 @@ export function normalizeTrialSnapshot(raw: unknown): TrialOpportunitySnapshot |
       steps.some((s) => typeof s !== "string" || !s.trim() || s.length > 200)
     )
       return undefined;
+    if (
+      item.mode !== undefined &&
+      item.mode !== "product-led" &&
+      item.mode !== "evidence-led"
+    )
+      return undefined;
+    const productLed = item.mode === "product-led";
+    const factIds = boundedFactIds(item.factIds);
+    const contextKey = asString(item.contextKey);
+    if ((productLed && !contextKey.trim()) || contextKey.length > 50_000) return undefined;
     const verification = asString(source.verification) as OpportunitySource["verification"];
-    if (!["user-provided", "quote-found"].includes(verification)) return undefined;
+    if (
+      productLed
+        ? item.source !== undefined || !factIds.length
+        : !["user-provided", "quote-found"].includes(verification)
+    )
+      return undefined;
     const researchId = asString(item.researchId).slice(0, 80),
       rulesUserCheckedAt = asString(item.rulesUserCheckedAt).slice(0, 40);
     const audience = asString(item.audience).trim().slice(0, 500);
     if (
       !researchId ||
       !rulesUserCheckedAt ||
-      !asString(source.id) ||
+      (!productLed && !asString(source.id)) ||
       !audience ||
       !asString(item.task).trim() ||
       !asString(item.feedbackQuestion).trim() ||
-      asString(source.quote).trim().length < 30
+      (!productLed && asString(source.quote).trim().length < 30)
     )
       return undefined;
     return {
       researchId,
       audience,
-      source: {
-        id: asString(source.id).slice(0, 80),
-        url: researchUrl(asString(source.url)),
-        quote: asString(source.quote).slice(0, 400),
-        verification,
-        checkedAt: asString(source.checkedAt).slice(0, 40),
-        rules: "unknown",
-        title: asString(source.title).slice(0, 200) || undefined,
-        truncated: source.truncated === true,
-      },
+      ...(contextKey ? { contextKey } : {}),
+      ...(item.mode === undefined ? {} : { mode: item.mode }),
+      ...(productLed ? { factIds } : {}),
+      ...(productLed
+        ? {}
+        : {
+            source: {
+              id: asString(source.id).slice(0, 80),
+              url: researchUrl(asString(source.url)),
+              quote: asString(source.quote).slice(0, 400),
+              verification,
+              checkedAt: asString(source.checkedAt).slice(0, 40),
+              rules: "unknown",
+              title: asString(source.title).slice(0, 200) || undefined,
+              truncated: source.truncated === true,
+            },
+          }),
       task: asString(item.task).slice(0, 500),
       entryUrl: researchUrl(asString(item.entryUrl)),
       steps: [asString(steps[0]), asString(steps[1]), asString(steps[2])],
@@ -357,11 +411,12 @@ export function exampleOpportunityResearch(
   facts: Fact[],
   contract: SuccessContract,
   productUrl: string,
-  bannedClaims: string[] = []
+  bannedClaims: string[] = [],
+  inputOverride?: TrialResearchInput
 ): OpportunityResearch {
   const fact = trialProductFacts(facts)[0];
   const entryUrl = productTrialEntry(productUrl);
-  const input: TrialResearchInput = {
+  const input: TrialResearchInput = inputOverride ?? {
     audience: "Independent developers in this fictional example",
     task: "Try the example workflow and report one confusing step",
     entryUrl,
@@ -387,24 +442,32 @@ export function exampleOpportunityResearch(
     id,
     contextKey: researchContextKey(profile, facts, contract, productUrl, bannedClaims),
     input,
-    sources: [
-      {
-        id: "s1",
-        ...input.sources[0],
-        verification: "user-provided",
-        checkedAt: new Date().toISOString(),
-        rules: "unknown",
-      },
-    ],
+    sources:
+      input.mode === "product-led"
+        ? []
+        : [
+            {
+              id: "s1",
+              ...input.sources[0],
+              verification: "user-provided",
+              checkedAt: new Date().toISOString(),
+              rules: "unknown",
+            },
+          ],
     opportunities: [
       {
-        sourceId: "s1",
+        ...(input.mode === "product-led" ? {} : { sourceId: "s1" }),
         whyFit:
-          "Fictional fit hypothesis only; no real community, demand or permission has been verified.",
+          input.mode === "product-led"
+            ? "Product-fact trial only. No external demand evidence or venue permission has been verified."
+            : "Fictional fit hypothesis only; no real community, demand or permission has been verified.",
         factIds: fact ? [fact.id] : [],
         draft: {
-          hook: `Try ${profile.name} with one small task.`,
-          body: `${fact?.claim ?? profile.name}\n\n${input.feedbackQuestion}\n\n${entryUrl}`,
+          hook:
+            input.mode === "product-led"
+              ? input.task
+              : `Try ${profile.name} with one small task.`,
+          body: `${fact?.claim ?? profile.name}\n\n${input.feedbackQuestion}\n\n${input.entryUrl}`,
         },
       },
     ],

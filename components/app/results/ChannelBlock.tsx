@@ -12,6 +12,7 @@ import type {
   PlatformPost,
   PlatformRecommendation,
   ProductProfile,
+  PlannedExperiment,
 } from "@/lib/types";
 
 /** One channel's working area: header (meta + regenerate/remove), editable
@@ -30,6 +31,9 @@ export function ChannelBlock({
   onUpdateRec,
   onRemove,
   onRequestPublish,
+  plans,
+  currentTrialContextKey,
+  bannedClaims,
 }: {
   content: PlatformContent;
   facts: Fact[];
@@ -44,6 +48,9 @@ export function ChannelBlock({
   onUpdateRec: (patch: Partial<PlatformRecommendation>) => void;
   onRemove: () => void;
   onRequestPublish: (postIdx: number) => void;
+  plans?: PlannedExperiment[];
+  currentTrialContextKey?: string;
+  bannedClaims?: string[];
 }) {
   const pb = content.playbook;
   const [editingRec, setEditingRec] = useState(false);
@@ -153,6 +160,10 @@ export function ChannelBlock({
               platformId={content.platformId}
               facts={facts}
               profile={profile}
+              postIdx={i}
+              plans={plans}
+              currentTrialContextKey={currentTrialContextKey}
+              bannedClaims={bannedClaims}
               posted={!!posted[id]}
               onTogglePosted={() => onTogglePosted(id)}
               onPublish={() => onRequestPublish(i)}

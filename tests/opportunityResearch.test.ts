@@ -376,7 +376,7 @@ describe("review → confirm → independent trial execution", () => {
       demo: false,
       project: { ...queued, ...migrateDraft(JSON.parse(toJson(queued))) },
     });
-    expect(restored.workspace.plannedExperiments?.[0].opportunity?.source.truncated).toBe(
+    expect(restored.workspace.plannedExperiments?.[0].opportunity?.source?.truncated).toBe(
       true
     );
   });
@@ -566,7 +566,7 @@ describe("review → confirm → independent trial execution", () => {
         outcomes: [],
       },
     });
-    expect(state.workspace.experiments[0].opportunity?.source.quote).toBe(
+    expect(state.workspace.experiments[0].opportunity?.source?.quote).toBe(
       input.sources[0].quote
     );
     expect(state.workspace.experiments[0].snapshot?.variable).toBe("exploratory");
@@ -586,7 +586,7 @@ describe("review → confirm → independent trial execution", () => {
       demo: false,
       project: { ...state, ...migrateDraft(JSON.parse(exported)) },
     });
-    expect(hydrated.workspace.plannedExperiments![0].opportunity?.source.quote).toBe(
+    expect(hydrated.workspace.plannedExperiments![0].opportunity?.source?.quote).toBe(
       input.sources[0].quote
     );
     const md = toMarkdown({

@@ -216,6 +216,9 @@ export function TodayTab({
   recordEditor,
   productUrl,
   primaryPlan,
+  currentTrialContextKey,
+  trialPlans,
+  bannedClaims,
   onAskExperiment,
   onRecordEarly,
   onOpenProgress,
@@ -227,6 +230,9 @@ export function TodayTab({
   successContract?: SuccessContract;
   productUrl?: string;
   primaryPlan?: PlannedExperiment;
+  currentTrialContextKey?: string;
+  trialPlans?: PlannedExperiment[];
+  bannedClaims?: string[];
   facts: Fact[];
   profile?: ProductProfile | null;
   emailRemindersAvailable: boolean;
@@ -375,6 +381,9 @@ export function TodayTab({
               successContract={primaryPlan?.successContract ?? successContract}
               productUrl={productUrl}
               plan={primaryPlan}
+              currentTrialContextKey={currentTrialContextKey}
+              trialPlans={trialPlans}
+              bannedClaims={bannedClaims}
               posted={posted}
               defaultPostIdx={primary.postIdx}
               loading={handlers.loading}

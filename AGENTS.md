@@ -129,8 +129,10 @@ lib/
                         comparison boundary; changed held conditions become exploratory
   learningEvidence.ts   M26 A/B Outcome-referenced, final-window angle evidence and
                         observed 72h-minus-24h deltas; unknown/invalid tests excluded
-  opportunityResearch.ts C.1 bounded saved receipts, eligible product facts, current-context
-                         trial gate and confirmed trial provenance; not AgentRun jobs
+  opportunityResearch.ts C.1/C.2.2 bounded receipts, explicit product-led/evidence-led modes,
+                         verified facts and reviewed-context trial provenance; not AgentRun jobs
+  trialBrief.ts          Editable three-question CMO Brief suggestions, not feature evidence
+  trialDraftSafety.ts    Actual platform/post-index trial exit checks shared by Today/library
   opportunityResearchServer.ts Explicit source-only safe fetch and single-request provider
                               orchestration; quote verification is not demand/rules review
   agentRuns.ts                Owner-visible job receipts, bounded status projection; no fake progress
@@ -167,7 +169,7 @@ lib/
   api.ts                Browser→server typed client (used by the hook)
   projectSaveError.ts   Bounded Supabase/PostgREST project-save error copy
   storage.ts            Versioned localStorage draft (DRAFT_SCHEMA_VERSION + migrateDraft;
-                        v11 includes receipts, Success Contract, queue, publish snapshots and trial provenance;
+                        v12 adds explicit product-led mode, fact IDs and reviewed-context snapshots;
                         projects.meta carries the authoritative workspace)
   supabase/client.ts    Browser Supabase client (graceful if unconfigured)
   supabase/server.ts    Service-role client (server-only; trust-counts usage)
@@ -358,6 +360,23 @@ cross-origin 403. Aggregate product-health reporting is operator-only at `/api/m
 Redeploy: `npx vercel --prod --yes`. Push env from `.env.local`: `~/push-env.sh`.
 
 ## Status / changelog
+- **2026-10-25**: **C.2.2 visible CMO Brief / trial kit — release acceptance.**
+  Three subagents split product-mode orchestration, Brief/UI and independent boundary
+  review. Today opens with an editable audience/task/feedback Brief; product-led
+  invitations require verified facts but no external demand sources. Evidence mode
+  retains its source checks; old inputs never silently change mode. Review exposes
+  draft/entry/steps/facts/goal/screenshot jobs and still requires two confirmations.
+  Canonical queue state drives step feedback and Today selection. Publishing success
+  waits for the reducer's actual experiment ID, not merely a callback. Reviewed-context,
+  approved-entry and banned-claim checks protect actual draft identities in Today,
+  individual library copy and bulk copy; derived Share Kit copying is disabled for
+  trial drafts. Historical exports remain available. No new dependency/SDK/model,
+  automatic post, connector, production schema mutation or flag enablement.
+  Read-only production investigation confirmed the new Agent installation is absent:
+  eight Agent audit rows FAIL; all three Agent tables resolve to NULL in PostBeacon
+  main PRODUCTION. This does not invalidate the earlier base RLS acceptance. Real
+  persistent execution remains OFF pending separately approved installation and
+  account/provider acceptance. See `docs/M26.C2.2-cmo-trial-workbench.md` for evidence.
 - **2026-10-25**: **C.2.1 assisted handoff released after explicit approval.** App
   commit `eeb30bb` passed GitHub CI `40171171849`; Next.js/Node 24.x production
   deployment `dpl_3HnQBj42abmApc33Lue7Xfq9f3rm` is Ready (44s build) and owns

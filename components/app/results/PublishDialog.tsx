@@ -9,6 +9,7 @@ import { DraftSafetyNotice } from "./DraftSafetyNotice";
 import { auditDraftSafety } from "@/lib/contentSafety";
 import { normalizeTrackedUrl } from "@/lib/trackedUrl";
 import { trialPublicationIssues } from "@/lib/opportunityResearch";
+import { trialDraftIssues } from "@/lib/trialDraftSafety";
 import { projectExperimentContract } from "@/lib/experimentContract";
 import {
   TESTED_VARIABLES,
@@ -53,18 +54,21 @@ export function PublishDialog({
   facts,
   profile,
   rec,
-  successContract,
+  successContract: initialSuccessContract,
   defaultPostIdx,
   initialCommunity,
   initialAngle,
   initialVariable,
   heldConstant,
   sourceExperiment,
-  trial,
+  trial: initialTrial,
+  trialPlans = [],
+  currentTrialContextKey,
   bannedClaims = [],
   lockedDraft = false,
   publishedPostIndices = [],
   demo = false,
+  recording = false,
   onConfirm,
   onClose,
 }: {
@@ -81,10 +85,13 @@ export function PublishDialog({
   heldConstant?: string;
   sourceExperiment?: Experiment;
   trial?: TrialOpportunitySnapshot;
+  trialPlans?: import("@/lib/types").PlannedExperiment[];
+  currentTrialContextKey?: string;
   bannedClaims?: string[];
   lockedDraft?: boolean;
   publishedPostIndices?: number[];
   demo?: boolean;
+  recording?: boolean;
   onConfirm: (details: PublishDetails) => void;
   onClose: () => void;
 }) {
@@ -102,6 +109,14 @@ export function PublishDialog({
   const normalizedTrackedUrl = normalizeTrackedUrl(trackedUrl);
   const trackedUrlInvalid = trackedUrl.trim() !== "" && !normalizedTrackedUrl;
   const selectedPost = content.posts[postIdx];
+  const selectedPlan = trialPlans.find(
+    (item) =>
+      item.status !== "cancelled" &&
+      item.platformId === content.platformId &&
+      item.postIdx === postIdx
+  );
+  const trial = selectedPlan?.opportunity ?? initialTrial;
+  const successContract = selectedPlan?.successContract ?? initialSuccessContract;
   const comparison =
     sourceExperiment && selectedPost
       ? comparisonBoundary(
@@ -127,6 +142,21 @@ export function PublishDialog({
     : { ready: false, issues: [] };
   const trialIssues =
     trial && selectedPost ? trialPublicationIssues(trial, selectedPost, bannedClaims) : [];
+  if (selectedPost)
+    trialIssues.push(
+      ...trialDraftIssues(
+        content.platformId,
+        postIdx,
+        selectedPost,
+        trialPlans,
+        currentTrialContextKey,
+        bannedClaims
+      )
+    );
+  if (trial?.contextKey && trial.contextKey !== currentTrialContextKey)
+    trialIssues.push(
+      "Product facts or the success goal changed; prepare a fresh trial kit"
+    );
   const experimentContract = selectedPost
     ? projectExperimentContract({
         profile: trial ? { ...profile, audience: trial.audience } : profile,
@@ -251,8 +281,9 @@ export function PublishDialog({
             <p className="font-semibold">Product trial provenance · exploratory</p>
             <p className="mt-2">Trial audience: {trial.audience}</p>
             <p className="mt-2 break-all">
-              Demand source: {trial.source.url} · {trial.source.verification}. This is not
-              the publishing venue.
+              {trial.source
+                ? `Demand source: ${trial.source.url} · ${trial.source.verification}. This is not the publishing venue.`
+                : `Product facts only (${trial.factIds?.join(", ") || "none"}). No external demand evidence or venue permission verified.`}
             </p>
             <p className="mt-2">
               Venue rules: user checked at {trial.rulesUserCheckedAt}; not independently
@@ -340,6 +371,7 @@ export function PublishDialog({
           )}
           <Button
             disabled={
+              recording ||
               !safety.ready ||
               trialIssues.length > 0 ||
               trackedUrlInvalid ||
@@ -358,7 +390,7 @@ export function PublishDialog({
               })
             }
           >
-            {demo ? "Simulate publish" : "Start tracking"}
+            {recording ? "Recording…" : demo ? "Simulate publish" : "Start tracking"}
           </Button>
           <Button variant="outline" onClick={onClose}>
             Cancel

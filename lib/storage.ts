@@ -30,9 +30,10 @@ const KEY = "postbeacon:draft";
  *   v9 — M25.1: + workspace/experiment Success Contract snapshots
  *   v10 — calibrated observations, immutable publish snapshots, planned queue
  *   v11 — bounded source-research output and confirmed product-trial provenance
+ *   v12 — explicit product-led trial mode, fact references and reviewed-context snapshots
  * Bump this and extend migrateDraft() when the persisted shape changes.
  */
-export const DRAFT_SCHEMA_VERSION = 11;
+export const DRAFT_SCHEMA_VERSION = 12;
 
 export interface Draft {
   schemaVersion?: number; // absent on pre-versioning saves; stamped on write

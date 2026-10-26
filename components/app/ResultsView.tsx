@@ -19,6 +19,9 @@ import { OutcomePanel } from "@/components/app/results/OutcomePanel";
 import { OpportunityWorkbench } from "@/components/app/results/OpportunityWorkbench";
 import { deriveToday, type TodayAction } from "@/lib/today";
 import { latestRelevantExperiment } from "@/lib/execution";
+import { researchContextKey } from "@/lib/opportunityResearch";
+import { trialDraftIssues } from "@/lib/trialDraftSafety";
+import { auditDraftSafety } from "@/lib/contentSafety";
 import { successContractSummary } from "@/lib/successContract";
 import {
   NextExperimentChoices,
@@ -165,6 +168,28 @@ export function ResultsView({
   const [demoGuideOpen, setDemoGuideOpen] = useState(demo);
   const [demoPrepared, setDemoPrepared] = useState(false);
   const [focusedPlanId, setFocusedPlanId] = useState<string>();
+  const [pendingPublish, setPendingPublish] = useState<{
+    id: string;
+    platformName: string;
+  }>();
+  useEffect(() => {
+    if (!pendingPublish) return;
+    const saved = workspace.experiments.find((item) => item.id === pendingPublish.id);
+    if (!saved) return;
+    setNotice({
+      title: demo
+        ? `${pendingPublish.platformName} example experiment started`
+        : `${pendingPublish.platformName} experiment started`,
+      detail: demo
+        ? "Simulated publish only. The temporary workspace is now ready for an example result."
+        : `Publish recorded in this workspace. The first useful result check opens ${new Date(Date.parse(saved.publishedAt) + 24 * 60 * 60 * 1000).toLocaleString()}; cloud save status is shown separately.`,
+    });
+    setPendingPublish(undefined);
+    setPublishFor(null);
+    setOutcomeFor(null);
+    setSurface("today");
+    setFocusedPlanId(undefined);
+  }, [pendingPublish, workspace.experiments, demo]);
 
   const derivedToday = useMemo(
     () => deriveToday({ launchDate, strategy, result, workspace }, new Date()),
@@ -192,6 +217,16 @@ export function ResultsView({
   const primaryPlan = workspace.plannedExperiments?.find(
     (item) => item.id === today.primaryAction.plannedExperimentId
   );
+  const currentTrialContextKey =
+    profile && workspace.successContract && productUrl
+      ? researchContextKey(
+          profile,
+          facts,
+          workspace.successContract,
+          productUrl,
+          memory.bannedClaims
+        )
+      : undefined;
 
   // Print / Cmd+P: force-mount the FULL report so the PDF is the whole plan.
   const [printing, setPrinting] = useState(false);
@@ -248,8 +283,44 @@ export function ResultsView({
       )
     : undefined;
 
+  function requestPublish(platformId: string, requestedPostIdx?: number) {
+    const content = result.content.find((item) => item.platformId === platformId);
+    const postIdx =
+      requestedPostIdx ??
+      Math.max(
+        0,
+        content?.posts.findIndex((_, index) => !posted[`${platformId}-${index}`]) ?? 0
+      );
+    const plan = workspace.plannedExperiments?.find(
+      (item) =>
+        item.status === "ready" &&
+        item.platformId === platformId &&
+        item.postIdx === postIdx
+    );
+    setPublishFor({ platformId, postIdx, plannedExperimentId: plan?.id });
+  }
+
   function confirmPublish(details: PublishDetails) {
-    if (!publishContent) return;
+    if (!publishContent || pendingPublish) return;
+    const draft = publishContent.posts[details.postIdx];
+    if (
+      !draft ||
+      !profile ||
+      !auditDraftSafety(draft, facts, profile, publishContent.platformId).ready ||
+      workspace.experiments.some(
+        (item) =>
+          item.platformId === publishContent.platformId && item.postIdx === details.postIdx
+      ) ||
+      trialDraftIssues(
+        publishContent.platformId,
+        details.postIdx,
+        draft,
+        workspace.plannedExperiments,
+        currentTrialContextKey,
+        memory.bannedClaims
+      ).length
+    )
+      return;
     const rec = strategy?.recommendations.find(
       (r) => r.platformId === publishContent.platformId
     );
@@ -288,20 +359,7 @@ export function ResultsView({
       },
     };
     onPublishExperiment(experiment, postTaskId(publishContent.platformId, details.postIdx));
-    setNotice({
-      title: demo
-        ? `${publishContent.platformName} example experiment started`
-        : `${publishContent.platformName} experiment started`,
-      detail: demo
-        ? "Simulated publish only. The temporary workspace is now ready for an example result."
-        : `Publish saved. The first useful result check opens ${new Date(
-            Date.now() + 24 * 60 * 60 * 1000
-          ).toLocaleString()}; Progress and Weekly Review now follow this experiment.`,
-    });
-    setPublishFor(null);
-    setOutcomeFor(null);
-    setSurface("today");
-    setFocusedPlanId(undefined);
+    setPendingPublish({ id: experiment.id, platformName: publishContent.platformName });
   }
 
   function demoGuideAction(step: DemoGuideStep) {
@@ -318,7 +376,7 @@ export function ResultsView({
     }
     if (step === "publish") {
       const platformId = today.primaryAction.platformId ?? result.content[0]?.platformId;
-      if (platformId) setPublishFor({ platformId, postIdx: 0 });
+      if (platformId) requestPublish(platformId, 0);
       return;
     }
     if (step === "measure" && activeExperiment) {
@@ -419,6 +477,7 @@ export function ResultsView({
             loading={loading}
             onPlan={(plan) => {
               onPlanExperiment(plan);
+              setOutcomeFor(null);
               setNotice({
                 title: "Next experiment confirmed",
                 detail: `${plan.platformName} · ${plan.variable}. Saved in your queue; preparing a draft is a separate action.`,
@@ -480,7 +539,10 @@ export function ResultsView({
             onReviewAgent={onReviewAgent}
             onResearch={onResearchOpportunities}
             onClear={onClearOpportunityResearch}
-            onQueue={onQueueOpportunity}
+            onQueue={(researchId, opportunityId, rulesChecked, trialChecked) => {
+              onQueueOpportunity(researchId, opportunityId, rulesChecked, trialChecked);
+              setFocusedPlanId(opportunityId);
+            }}
           />
         ) : (
           <Card className="p-5 sm:p-6">
@@ -492,7 +554,7 @@ export function ResultsView({
             </h3>
             <p className="my-3 text-sm text-neutral-400">
               {!workspace.successContract || !profile || !productUrl
-                ? "This saved plan needs a product profile and success definition before source-backed research. Your old plan is preserved."
+                ? "This saved plan needs a product profile and success definition before preparing a CMO trial kit. Your old plan is preserved."
                 : "Save this project to your account before starting a persistent task. No research runs in the background yet."}
             </p>
             {!workspace.successContract || !profile || !productUrl ? (
@@ -511,25 +573,14 @@ export function ResultsView({
           successContract={workspace.successContract}
           productUrl={productUrl}
           primaryPlan={primaryPlan}
+          currentTrialContextKey={currentTrialContextKey}
+          trialPlans={workspace.plannedExperiments}
+          bannedClaims={memory.bannedClaims}
           onPreparePlanned={onPreparePlanned}
           facts={facts}
           profile={profile}
           loading={loading}
-          onPublish={(platformId, requestedPostIdx) => {
-            const content = result.content.find((c) => c.platformId === platformId);
-            const firstUnposted =
-              content?.posts.findIndex((_, i) => !posted[`${platformId}-${i}`]) ?? 0;
-            setPublishFor({
-              platformId,
-              postIdx: requestedPostIdx ?? Math.max(0, firstUnposted),
-              plannedExperimentId: workspace.plannedExperiments?.find(
-                (item) =>
-                  item.status === "ready" &&
-                  item.platformId === platformId &&
-                  item.postIdx === requestedPostIdx
-              )?.id,
-            });
-          }}
+          onPublish={requestPublish}
           onRecord={(a) => {
             if (a.experimentId && a.checkpoint) {
               setOutcomeFor({ experimentId: a.experimentId, checkpoint: a.checkpoint });
@@ -616,6 +667,7 @@ export function ResultsView({
 
       {(surface === "plan" || printing) && (
         <PlanReport
+          currentTrialContextKey={currentTrialContextKey}
           result={result}
           strategy={strategy}
           profile={profile}
@@ -634,7 +686,7 @@ export function ResultsView({
           onAddScheduleItem={onAddScheduleItem}
           onRemoveChannel={onRemoveChannel}
           onAddChannel={demo ? () => demoOnlyNotice("Live generation") : onAddChannel}
-          onRequestPublish={(platformId, postIdx) => setPublishFor({ platformId, postIdx })}
+          onRequestPublish={requestPublish}
           printing={printing}
           launchDate={launchDate}
           setLaunchDate={setLaunchDate}
@@ -662,6 +714,7 @@ export function ResultsView({
               loading={loading}
               onPlan={(plan) => {
                 onPlanExperiment(plan);
+                setOutcomeFor(null);
                 setSurface("today");
                 setNotice({
                   title: "Next experiment confirmed",
@@ -685,7 +738,7 @@ export function ResultsView({
                 (candidate) => candidate.platformId === platformId
               );
               if (content?.posts.length) {
-                setPublishFor({ platformId, postIdx: 0 });
+                requestPublish(platformId, 0);
               } else {
                 onAddChannel(platformId);
                 setSurface("plan");
@@ -697,10 +750,13 @@ export function ResultsView({
 
       {publishFor && publishContent && profile && (
         <PublishDialog
+          recording={Boolean(pendingPublish)}
           content={publishContent}
           facts={facts}
           profile={profile}
           bannedClaims={memory.bannedClaims}
+          currentTrialContextKey={currentTrialContextKey}
+          trialPlans={workspace.plannedExperiments}
           successContract={
             workspace.plannedExperiments?.find(
               (item) => item.id === publishFor.plannedExperimentId
@@ -748,7 +804,10 @@ export function ResultsView({
           )}
           demo={demo}
           onConfirm={confirmPublish}
-          onClose={() => setPublishFor(null)}
+          onClose={() => {
+            setPublishFor(null);
+            setPendingPublish(undefined);
+          }}
         />
       )}
     </div>

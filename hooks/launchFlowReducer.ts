@@ -17,6 +17,7 @@ import { rankRecommendations, recommendedPlatformId } from "@/lib/strategyDecisi
 import { refreshLearningMemory } from "@/lib/learningEvidence";
 import {
   normalizeOpportunityResearch,
+  normalizeTrialSnapshot,
   researchContextKey,
   trialSafety,
   trialPublicationIssues,
@@ -838,6 +839,16 @@ function transition(s: FlowState, a: FlowAction): FlowState {
         plan?.opportunity &&
         (trialPublicationIssues(plan.opportunity, draft, s.memory.bannedClaims).length ||
           !s.profile ||
+          (plan.opportunity.contextKey
+            ? plan.opportunity.contextKey !==
+              researchContextKey(
+                s.profile,
+                s.facts,
+                s.workspace.successContract,
+                s.url,
+                s.memory.bannedClaims
+              )
+            : plan.opportunity.mode === "product-led") ||
           !auditDraftSafety(draft, s.facts, s.profile, plan.platformId).ready)
       )
         return s;
@@ -953,6 +964,7 @@ function transition(s: FlowState, a: FlowAction): FlowState {
       const research = s.workspace.opportunityResearch;
       const opportunity = research?.opportunities.find((o) => o.id === a.opportunityId);
       const source = research?.sources.find((item) => item.id === opportunity?.sourceId);
+      const productLed = research?.input.mode === "product-led";
       const queue = s.workspace.plannedExperiments ?? [];
       if (
         !s.profile ||
@@ -960,7 +972,8 @@ function transition(s: FlowState, a: FlowAction): FlowState {
         !s.workspace.successContract ||
         !research ||
         !opportunity ||
-        !source ||
+        (!productLed && !source) ||
+        (productLed && research.contextKey.length > 50_000) ||
         research.id !== a.researchId ||
         !a.rulesUserChecked ||
         !a.trialUserChecked ||
@@ -983,6 +996,19 @@ function transition(s: FlowState, a: FlowAction): FlowState {
       const channel = s.result.content.find((c) => c.platformId === platform.id);
       const postIdx = channel?.posts.length ?? 0;
       if (postIdx >= 12) return s;
+      const opportunitySnapshot = normalizeTrialSnapshot({
+        researchId: research.id,
+        contextKey: research.contextKey,
+        ...(research.input.mode ? { mode: research.input.mode } : {}),
+        ...(productLed ? { factIds: opportunity.factIds } : { source }),
+        audience: research.input.audience,
+        task: research.input.task,
+        entryUrl: research.input.entryUrl,
+        steps: research.input.steps,
+        feedbackQuestion: research.input.feedbackQuestion,
+        rulesUserCheckedAt: a.at,
+      });
+      if (!opportunitySnapshot) return s;
       const plan: PlannedExperiment = {
         id: opportunity.id,
         templateId: "product-trial",
@@ -992,22 +1018,14 @@ function transition(s: FlowState, a: FlowAction): FlowState {
         venue: research.input.venue,
         angle: research.input.task,
         variable: "exploratory",
-        heldConstant:
-          "Exploratory product trial. Source excerpt is not proof of demand, current venue rules or causality.",
+        heldConstant: productLed
+          ? "Exploratory product-fact trial. No external demand evidence; venue permission and causality remain unverified."
+          : "Exploratory product trial. Source excerpt is not proof of demand, current venue rules or causality.",
         successContract: s.workspace.successContract,
         status: "ready",
         postIdx,
         createdAt: a.at,
-        opportunity: {
-          researchId: research.id,
-          source,
-          audience: research.input.audience,
-          task: research.input.task,
-          entryUrl: research.input.entryUrl,
-          steps: research.input.steps,
-          feedbackQuestion: research.input.feedbackQuestion,
-          rulesUserCheckedAt: a.at,
-        },
+        opportunity: opportunitySnapshot,
       };
       return {
         ...s,

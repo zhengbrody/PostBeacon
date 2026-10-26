@@ -27,6 +27,8 @@ export function DraftDecisionSupport({
   productUrl,
   variable,
   heldConstant,
+  externalIssues = [],
+  disableShareCopy = false,
 }: {
   content: PlatformContent;
   facts: Fact[];
@@ -38,6 +40,8 @@ export function DraftDecisionSupport({
   productUrl?: string;
   variable?: import("@/lib/types").TestedVariable;
   heldConstant?: string;
+  externalIssues?: string[];
+  disableShareCopy?: boolean;
 }) {
   const [copyStatus, setCopyStatus] = useState<"x" | "linkedin" | "failed" | null>(null);
   const [shareMode, setShareMode] = useState<"product" | "process">("product");
@@ -62,7 +66,7 @@ export function DraftDecisionSupport({
   });
 
   async function copy(label: "x" | "linkedin", value: string) {
-    if (!shareKit.copyReady) return;
+    if (!shareKit.copyReady || externalIssues.length > 0 || disableShareCopy) return;
     try {
       if (!navigator.clipboard?.writeText) throw new Error("Clipboard unavailable");
       await navigator.clipboard.writeText(value);
@@ -220,7 +224,9 @@ export function DraftDecisionSupport({
             <Button
               size="sm"
               variant="outline"
-              disabled={!shareKit.copyReady}
+              disabled={
+                !shareKit.copyReady || externalIssues.length > 0 || disableShareCopy
+              }
               onClick={() => copy("x", shareKit.xPosts.join("\n\n---\n\n"))}
             >
               {copyStatus === "x" ? "X thread copied ✓" : "Copy X thread"}
@@ -228,12 +234,27 @@ export function DraftDecisionSupport({
             <Button
               size="sm"
               variant="outline"
-              disabled={!shareKit.copyReady}
+              disabled={
+                !shareKit.copyReady || externalIssues.length > 0 || disableShareCopy
+              }
               onClick={() => copy("linkedin", shareKit.linkedIn)}
             >
               {copyStatus === "linkedin" ? "LinkedIn copied ✓" : "Copy LinkedIn version"}
             </Button>
           </div>
+          {disableShareCopy && (
+            <p className="text-amber-300" role="status">
+              Use the reviewed trial invitation below; derived Share Kit versions are not
+              approved trial drafts. Screenshot instructions remain available.
+            </p>
+          )}
+          {externalIssues.length > 0 && (
+            <ul className="list-disc pl-4 text-amber-300" role="alert">
+              {externalIssues.map((issue) => (
+                <li key={issue}>{issue}</li>
+              ))}
+            </ul>
+          )}
           <details>
             <summary className="min-h-11 cursor-pointer text-neutral-300">
               Review exact copy before using it
