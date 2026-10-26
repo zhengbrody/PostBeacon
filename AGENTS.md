@@ -361,6 +361,14 @@ Redeploy: `npx vercel --prod --yes`. Push env from `.env.local`: `~/push-env.sh`
 
 ## Status / changelog
 - **2026-10-25**: **C.2.2 visible CMO Brief / trial kit — release acceptance.**
+  App commit `f5f5565` passed GitHub CI `40250904725`; production deployment
+  `dpl_A5zpNMtNEeGj641E79wW5XdpKz4k` is Ready (41s build), with postbeacon.app/www
+  verified as aliases. Six public smoke checks passed at `2026-10-26T00:47:30.798Z`;
+  the deployment's bounded five-minute error/fatal scan returned zero records.
+  Local Node 24.22.1: 683 offline tests pass, three live skipped, all normal gates
+  and 19 isolated PostgreSQL scenarios pass. Actual 1280×720 / 375×812 browser QA
+  has no page overflow or captured warnings/errors. Production fictional QA verifies
+  editable Brief → review → dual confirm → matching Today draft; no real task writes.
   Three subagents split product-mode orchestration, Brief/UI and independent boundary
   review. Today opens with an editable audience/task/feedback Brief; product-led
   invitations require verified facts but no external demand sources. Evidence mode
