@@ -366,6 +366,28 @@ cross-origin 403. Aggregate product-health reporting is operator-only at `/api/m
 Redeploy: `npx vercel --prod --yes`. Push env from `.env.local`: `~/push-env.sh`.
 
 ## Status / changelog
+- **2026-10-26**: **C.3 Beta released; persistent Agent on, daily search fail-closed.**
+  User approved production installation/enablement and one public-data acceptance
+  (at most three Tavily searches and one OpenAI request). `4f20213` passed CI
+  `40291528947`; daily-trigger follow-up `d3a931b` passed CI `40293017202`.
+  Production `dpl_5a5KTfjtUPaYVFF28ebcAHoLKSWw` is Ready and owns postbeacon.app/www
+  (54s build). Both migrations were installed in PostBeacon main PRODUCTION:
+  base nine + Agent eight + mission ten audit rows all PASS. Production-only
+  `AGENT_RUNS_ENABLED=true` / `AGENT_MISSIONS_ENABLED=true` are configured; Vercel
+  independently confirms the authenticated mission tick once daily at 12:00 UTC.
+  `SEARCH_API_KEY` is absent in this exact project, including linked shared variables;
+  effective daily missions remain unavailable. User deferred this setup and requested
+  a one-time reminder for Oct 27, 10:00 America/Los_Angeles, which was created.
+  A dedicated public/synthetic PostBeacon QA project—not MindMarket—completed exactly
+  one product-led OpenAI `gpt-4o` task, status ready. Refresh restores it and account
+  export includes the single run plus missions array; published executions remain zero.
+  No Tavily/DeepSeek call, social publication or account deletion. The tested draft
+  repeated its opening and exposed an inline fact ID: editorial/native-format review
+  is still required, not silently repaired or claimed publication-ready. Two-real-account,
+  public-search, mission pause/expiry and natural scheduled-run acceptance remain.
+  Node 24: 802 offline tests pass (three live skipped), normal gates and 32 isolated
+  PostgreSQL scenarios pass. Six production smoke gates pass; bounded five-minute
+  error/fatal scan returned zero records. See the C.3 document for exact scope.
 - **2026-10-25**: **C.3 daily research pilot — locally accepted, not released/enabled.**
   Three parallel agents split authorization/SQL/worker, public-source research and
   UI/account-scoped commands, followed by cross-review. Today now exposes explicit
