@@ -103,6 +103,20 @@ describe("privacy single source stays complete", () => {
     expect(handoff?.deletion).toContain("does not delete external");
   });
 
+  it("discloses revocable daily research without promising constant execution or silent fallback", () => {
+    const daily = DATA_CATEGORIES.find((item) =>
+      item.what.startsWith("Daily research authorizations")
+    );
+    expect(daily?.why).toContain("one OpenAI request");
+    expect(daily?.why).toContain("No automatic publication");
+    expect(daily?.retention).toContain("30 days");
+    expect(daily?.retention).toContain("does not extend");
+    expect(daily?.retention).toContain("does not erase");
+    expect(daily?.deletion).toContain("account export");
+    const tavily = SUBPROCESSORS.find((item) => item.name === "Tavily");
+    expect(tavily?.data).toContain("explicitly approve");
+    expect(tavily?.data).toContain("not your account identity");
+  });
   it("hides dormant billing from the current private-beta pages", () => {
     delete process.env.POLAR_ACCESS_TOKEN;
     delete process.env.POLAR_PRODUCT_ID;

@@ -67,9 +67,13 @@ export function AgentRunPanel({
                 className={`rounded-lg border p-2 ${run.phase === phase ? "border-accent-500 text-accent-300" : "border-line text-neutral-400"}`}
               >
                 {index + 1}.{" "}
-                {phase === "sources" && run.input.mode === "product-led"
-                  ? "Input checks / product facts"
-                  : labels[phase]}
+                {phase === "sources" && run.autonomous
+                  ? "Approved public research"
+                  : phase === "sources" && run.input.mode === "product-led"
+                    ? "Input checks / product facts"
+                    : phase === "ready" && run.autonomous && !run.research
+                      ? "Result receipt"
+                      : labels[phase]}
                 {phase === "model" && run.status === "ready" && !run.modelAttempted
                   ? " · not needed"
                   : AGENT_PHASES.indexOf(run.phase) > index
@@ -83,14 +87,34 @@ export function AgentRunPanel({
           </p>
           <p className="mt-2 text-xs text-neutral-500">
             Last server receipt: {run.updatedAt} ·{" "}
-            {run.input.mode === "product-led"
-              ? "Product-facts mode; no external demand sources"
-              : `${run.checkedSources}/${run.sourceCount} source receipts`}{" "}
+            {run.autonomous
+              ? `${run.checkedSources} source-check receipts; search matches are not verified demand`
+              : run.input.mode === "product-led"
+                ? "Product-facts mode; no external demand sources"
+                : `${run.checkedSources}/${run.sourceCount} source receipts`}{" "}
             ·{" "}
             {run.modelAttempted
               ? "1 request reserved (not proof of provider completion)"
               : "No model request reserved"}
           </p>
+          {run.autonomous ? (
+            <div className="mt-2 text-xs text-neutral-400">
+              <p>
+                Daily authorization revision {run.missionRevision ?? "unknown"} ·{" "}
+                {run.searchAttempted
+                  ? "Search attempt reserved; not proof of delivery"
+                  : "No search attempt reserved"}
+              </p>
+              {run.searchReceipt ? (
+                <p className="mt-1">
+                  Search receipt: {run.searchReceipt.status} ·{" "}
+                  {run.searchReceipt.resultCount} results ·{" "}
+                  {run.searchReceipt.candidateCount} eligible candidates. Empty results do
+                  not prove a lack of demand; posting permission remains unreviewed.
+                </p>
+              ) : null}
+            </div>
+          ) : null}
           <div className="mt-3 flex flex-wrap gap-2">
             {run.status === "ready" && run.research && (
               <Button onClick={() => onReview(run.id)}>Review research →</Button>
@@ -101,9 +125,11 @@ export function AgentRunPanel({
                 disabled={agent.busy}
                 onClick={() => void agent.resume(run.id)}
               >
-                {run.input.mode === "product-led"
-                  ? "Resume input checks"
-                  : "Resume source checks"}
+                {run.autonomous
+                  ? "Resume approved public research"
+                  : run.input.mode === "product-led"
+                    ? "Resume input checks"
+                    : "Resume source checks"}
               </Button>
             )}
             {(run.status === "queued" || run.status === "running") && (

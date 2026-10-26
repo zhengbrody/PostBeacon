@@ -12,7 +12,11 @@ import {
 import { PublicError } from "@/lib/errors";
 
 const accountSchema = () =>
-  ["schema.sql", "migrations/20261025_agent_runs.sql"]
+  [
+    "schema.sql",
+    "migrations/20261025_agent_runs.sql",
+    "migrations/20261026_agent_missions.sql",
+  ]
     .map((path) => readFileSync(join(__dirname, "../supabase", path), "utf-8"))
     .join("\n");
 
@@ -160,7 +164,7 @@ describe("deletion cleanup coverage (the 'nothing survives' proof)", () => {
       );
       expect(schema).toMatch(
         new RegExp(
-          `create policy [\\s\\S]{0,80} on public\\.${table}[\\s\\S]{0,160}auth\\.uid\\(\\) = user_id`,
+          `create policy [\\s\\S]{0,80} on public\\.${table}[\\s\\S]{0,160}auth\\.uid\\(\\)\\s*=\\s*user_id`,
           "i"
         )
       );
@@ -318,6 +322,64 @@ describe("deleteAccountData", () => {
 });
 
 describe("exportAccountData", () => {
+  it("keeps pre-mission accounts exportable without hiding later mission history", async () => {
+    const old = exportClient(
+      {
+        entitlements: [{ agent_data_initialized: true }],
+        agent_runs: [],
+        agent_daily_usage: [],
+      },
+      undefined,
+      1000,
+      { missingAgentCode: "PGRST205" }
+    );
+    expect(
+      (await exportAccountData(old.client, { id: "u", email: null })).agentMissions
+    ).toEqual([]);
+    const initialized = exportClient(
+      { entitlements: [{ mission_data_initialized: true }] },
+      undefined,
+      1000,
+      { missingAgentCode: "PGRST205" }
+    );
+    await expect(
+      exportAccountData(initialized.client, { id: "u", email: null })
+    ).rejects.toThrow("no partial export");
+  });
+  it("exports full owned daily authorizations including revision and expiry", async () => {
+    const missions = [
+      {
+        id: "mission-1",
+        revision: 2,
+        enabled: false,
+        expires_at: "2026-11-25T00:00:00Z",
+        settings: {
+          searchQueries: ["portfolio risk education"],
+          allowedDomains: ["example.org"],
+        },
+      },
+    ];
+    const mock = exportClient({
+      entitlements: [{ mission_data_initialized: true }],
+      agent_missions: missions,
+    });
+    const result = await exportAccountData(mock.client, { id: "u", email: null });
+    expect(result.agentMissions).toEqual(missions);
+    expect(mock.filters.filter((filter) => filter.table === "agent_missions")).toEqual([
+      { table: "agent_missions", column: "user_id", value: "u" },
+    ]);
+  });
+  it("does not silently omit a disappearing mission table halfway through export", async () => {
+    const mock = exportClient(
+      { agent_missions: [{ id: "a" }, { id: "b" }] },
+      undefined,
+      1,
+      { failAfterFirst: "PGRST205" }
+    );
+    await expect(exportAccountData(mock.client, { id: "u", email: null })).rejects.toThrow(
+      "Export failed"
+    );
+  });
   it("keeps pre-Agent accounts exportable, but fails closed once task data has existed", async () => {
     const old = exportClient({ projects: [], entitlements: [] }, undefined, 1000, {
       missingAgentCode: "PGRST205",

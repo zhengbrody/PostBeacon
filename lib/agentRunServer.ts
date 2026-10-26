@@ -7,6 +7,13 @@ import { runOpportunityResearch } from "./opportunityResearchServer";
 import { normalizeResearchInput, researchContextKey } from "./opportunityResearch";
 import { opportunityResearchBodySchema, parseBody } from "./validate";
 import { trialResearchInputSchema } from "./opportunityResearch";
+import { runAutonomousResearch } from "./autonomousResearchServer";
+import {
+  agentMissionsEnabled,
+  missionStoreError,
+  readAgentMission,
+  savedMissionSnapshot,
+} from "./agentMissionServer";
 
 export const agentCommandSchema = z.discriminatedUnion("action", [
   z
@@ -149,6 +156,71 @@ export async function executeAgentRun(
     lease = asString(claimed.lease_token);
     if (!lease) return;
     const payload = parseBody(opportunityResearchBodySchema, claimed.payload);
+    if (claimed.mission_id) {
+      const mission = await readAgentMission(sb, userId, asString(claimed.project_id));
+      if (
+        !mission ||
+        mission.id !== claimed.mission_id ||
+        mission.revision !== claimed.mission_revision
+      )
+        throw new PublicError(
+          "Daily mission authorization changed; no further work was allowed.",
+          409
+        );
+      const checkContext = async () => {
+        if (
+          !agentMissionsEnabled() ||
+          !mission.enabled ||
+          Date.parse(mission.expiresAt) <= Date.now()
+        )
+          throw new PublicError(
+            "Daily mission authorization is paused, expired or disabled.",
+            409
+          );
+        return savedMissionSnapshot(
+          sb,
+          userId,
+          mission.projectId,
+          mission.contextKey,
+          mission.settings.brief
+        );
+      };
+      const advanceMission = async (
+        action: "search" | "sources" | "model" | "complete",
+        data?: unknown
+      ) => {
+        const checked = await checkContext();
+        const result = await sb.rpc("transition_agent_mission_run", {
+          p_user_id: userId,
+          p_run_id: runId,
+          p_action: action,
+          p_lease: lease,
+          p_data: data ?? null,
+          p_project_updated_at: checked.updatedAt,
+        });
+        missionStoreError(result.error);
+        if (!result.data)
+          throw new PublicError("Daily mission no longer owns this execution.", 409);
+      };
+      await checkContext();
+      const result = await runAutonomousResearch(
+        {
+          ...payload,
+          provider: "openai",
+          search: {
+            queries: mission.settings.searchQueries,
+            domains: mission.settings.allowedDomains,
+          },
+        },
+        {
+          beforeSearch: () => advanceMission("search"),
+          sources: (sources) => advanceMission("sources", sources),
+          beforeModel: () => advanceMission("model"),
+        }
+      );
+      await advanceMission("complete", result);
+      return;
+    }
     const advance = async (action: "sources" | "model", data?: unknown) => {
       if (!(await transitionAgentRun(sb, userId, runId, action, lease, data)))
         throw new PublicError("Agent task no longer owns this execution.", 409);

@@ -120,7 +120,7 @@ export const SUBPROCESSORS: Subprocessor[] = [
   {
     name: "Supabase",
     role: "Accounts (auth) and database",
-    data: "Email / OAuth identity, saved projects, workspace experiments & outcomes, usage entitlements, explicit Agent research tasks and daily reservations",
+    data: "Email / OAuth identity, saved projects, workspace experiments & outcomes, usage entitlements, explicit Agent research tasks, daily research authorizations and reservations",
     region: "Operator-chosen project region",
     when: "Only when accounts are configured and you sign in",
     policyUrl: "https://supabase.com/privacy",
@@ -161,8 +161,8 @@ export const SUBPROCESSORS: Subprocessor[] = [
   },
   {
     name: "Tavily",
-    role: "Web search for community discovery",
-    data: "Search queries derived from your product profile (never the raw page text)",
+    role: "Web search for community discovery and explicitly authorized daily research",
+    data: "Ordinary discovery uses queries derived from your product profile (never raw page text). Daily research sends only the public search queries and domain filters you explicitly approve; not your account identity or full product profile",
     region: "US",
     when: "Only if configured",
     policyUrl: "https://tavily.com/privacy",
@@ -350,6 +350,16 @@ export const DATA_CATEGORIES: DataCategory[] = [
       "With its project; daily reservation counts survive project deletion to prevent quota resets and follow the configured retention sweep",
     deletion:
       "Delete project removes task content; delete account also removes owner-linked counters. Shared daily counts contain no identity or content",
+  },
+  {
+    what: "Daily research authorizations (approved public search queries, allowed domains, proposed trial Brief, product-context snapshot, approval version and expiry)",
+    where:
+      "Supabase, owner-readable with server-only writes; only when the separately configured daily research pilot is enabled",
+    why: "At most one research reservation per authorization per UTC day, using Tavily search and at most one OpenAI request. No automatic publication, replies, direct messages or contact-list collection",
+    retention:
+      "Authorization expires after 30 days and requires explicit renewal; stored with its project. Background research does not extend the project's inactivity retention period. Pausing stops future work but does not erase saved history or retract requests already sent",
+    deletion:
+      "Included in account export. Delete project or account removes authorization and associated tasks; provider-side records follow the vendors' own policies",
   },
   {
     what: "Prompts to the AI model (page text, profile, plan context, pasted feedback)",

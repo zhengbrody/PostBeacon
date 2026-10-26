@@ -6,6 +6,7 @@ import { tmpdir, userInfo } from "node:os";
 import { join } from "node:path";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { verifyAgentMissions } from "./agent-mission-db-checks.mjs";
 
 const execFile = promisify(callbackExecFile);
 const root = await mkdtemp(join(tmpdir(), "postbeacon-agent-db-"));
@@ -278,6 +279,7 @@ try {
     "100",
     "global counts cannot be reset by account deletion"
   );
+  const missionChecks = await verifyAgentMissions({ sql, file });
   console.log(
     JSON.stringify(
       {
@@ -303,6 +305,7 @@ try {
           "account cleanup",
           "auth-user cascades",
           "anonymous global counts survive deletion",
+          ...missionChecks,
         ],
       },
       null,

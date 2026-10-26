@@ -13,6 +13,7 @@ import { asRecord } from "./coerce";
 /** Every user-owned table, child-before-parent so explicit deletes never hit FK errors. */
 export const USER_TABLES_DELETE_ORDER = [
   "agent_runs",
+  "agent_missions",
   "agent_daily_usage",
   "outcomes",
   "tasks",
@@ -38,6 +39,7 @@ export interface AccountExport {
   entitlement: unknown | null;
   agentRuns: unknown[];
   agentUsage: unknown[];
+  agentMissions: unknown[];
 }
 
 /** Tables the export reads (superset check lives in tests against schema.sql). */
@@ -50,6 +52,7 @@ export const EXPORT_TABLES = [
   "entitlements",
   "agent_runs",
   "agent_daily_usage",
+  "agent_missions",
 ] as const;
 
 /**
@@ -64,6 +67,7 @@ export async function exportAccountData(
   user: { id: string; email: string | null }
 ): Promise<AccountExport> {
   const missingAgentTables = new Set<string>();
+  let missionTableMissing = false;
   async function rows(table: (typeof EXPORT_TABLES)[number]): Promise<unknown[]> {
     const result: unknown[] = [];
     let expected: number | undefined;
@@ -82,6 +86,14 @@ export async function exportAccountData(
             );
       const { data, error, count } = await query.range(result.length, result.length + 499);
       if (error) {
+        if (
+          table === "agent_missions" &&
+          ["42P01", "PGRST205"].includes(error.code) &&
+          result.length === 0
+        ) {
+          missionTableMissing = true;
+          return [];
+        }
         if (
           ["agent_runs", "agent_daily_usage"].includes(table) &&
           ["42P01", "PGRST205"].includes(error.code) &&
@@ -136,11 +148,17 @@ export async function exportAccountData(
     entitlements,
     agentRuns,
     agentUsage,
+    agentMissions,
   ] = await Promise.all(EXPORT_TABLES.map(rows));
 
   if (missingAgentTables.size && asRecord(entitlements[0]).agent_data_initialized === true)
     throw new PublicError(
       "Your Agent history could not be read completely. Retry after the database schema is available; no partial export was returned.",
+      503
+    );
+  if (missionTableMissing && asRecord(entitlements[0]).mission_data_initialized === true)
+    throw new PublicError(
+      "Your daily research authorization could not be exported completely. Retry after the database schema is available; no partial export was returned.",
       503
     );
 
@@ -157,6 +175,7 @@ export async function exportAccountData(
     entitlement: entitlements[0] ?? null,
     agentRuns,
     agentUsage,
+    agentMissions,
   };
 }
 
@@ -186,7 +205,10 @@ export async function deleteAccountData(sb: SupabaseClient, userId: string): Pro
       if (
         error &&
         error.code !== "42P01" &&
-        !(["agent_runs", "agent_daily_usage"].includes(table) && error.code === "PGRST205")
+        !(
+          ["agent_runs", "agent_daily_usage", "agent_missions"].includes(table) &&
+          error.code === "PGRST205"
+        )
       ) {
         throw new PublicError(
           "Account deletion stopped before the account record was removed. Some data may already be deleted; retry or contact us.",

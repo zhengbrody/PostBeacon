@@ -1,5 +1,6 @@
 -- PostBeacon schema. Run this in the Supabase SQL editor.
 -- Persistent Agent tasks additionally require migrations/20261025_agent_runs.sql.
+-- Daily research additionally requires migrations/20261026_agent_missions.sql.
 -- Keep AGENT_RUNS_ENABLED off until that additive migration and its audit pass.
 
 create table if not exists public.projects (
@@ -181,6 +182,9 @@ begin
   -- Re-running this base schema must not remove their deletion coverage.
   if to_regclass('public.agent_runs') is not null then
     execute 'delete from public.agent_runs where user_id = $1' using target_user_id;
+  end if;
+  if to_regclass('public.agent_missions') is not null then
+    execute 'delete from public.agent_missions where user_id = $1' using target_user_id;
   end if;
   if to_regclass('public.agent_daily_usage') is not null then
     execute 'delete from public.agent_daily_usage where user_id = $1' using target_user_id;

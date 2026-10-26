@@ -1,5 +1,10 @@
 import { getSupabase } from "./supabase/client";
 import type { AgentRun, AgentRunList } from "./agentRuns";
+import type {
+  AgentMissionCommand,
+  AgentMissionList,
+  AgentMissionResponse,
+} from "./agentMissions";
 import type { ApiErrorCode } from "./errors";
 import type {
   Provider,
@@ -122,6 +127,24 @@ export function boundedCopilotRequest(body: CopilotRequest): CopilotRequest {
 }
 
 export const api = {
+  agentMission: async (
+    projectId: string,
+    ownerId: string,
+    signal?: AbortSignal
+  ): Promise<AgentMissionList> => {
+    const authorization = await authHeader(ownerId);
+    signal?.throwIfAborted();
+    const res = await fetch(
+      `/api/agent-missions?projectId=${encodeURIComponent(projectId)}`,
+      { headers: authorization, cache: "no-store", signal }
+    );
+    const data = await res.json();
+    if (!res.ok)
+      throw new Error(data.error || "Daily research settings could not be loaded.");
+    return data;
+  },
+  agentMissionCommand: (body: AgentMissionCommand, ownerId: string, signal?: AbortSignal) =>
+    post<AgentMissionResponse>("/api/agent-missions", body, signal, ownerId),
   agentRuns: async (
     projectId: string,
     ownerId: string,

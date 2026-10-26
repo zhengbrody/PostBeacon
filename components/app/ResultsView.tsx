@@ -17,6 +17,7 @@ import { DemoGuide, type DemoGuideStep } from "@/components/app/DemoGuide";
 import { PublishDialog, type PublishDetails } from "@/components/app/results/PublishDialog";
 import { OutcomePanel } from "@/components/app/results/OutcomePanel";
 import { OpportunityWorkbench } from "@/components/app/results/OpportunityWorkbench";
+import { DailyResearchMission } from "@/components/app/results/DailyResearchMission";
 import { deriveToday, type TodayAction } from "@/lib/today";
 import { latestRelevantExperiment } from "@/lib/execution";
 import { researchContextKey } from "@/lib/opportunityResearch";
@@ -97,6 +98,7 @@ export function ResultsView({
   growthAgent,
   onReviewAgent,
   projectId,
+  ownerId,
   onCompleteSetup,
   onSaveProject,
 }: {
@@ -144,6 +146,7 @@ export function ResultsView({
   growthAgent: GrowthAgentControls;
   onReviewAgent: (id: string) => void;
   projectId: string;
+  ownerId?: string | null;
   onCompleteSetup: () => void;
   onSaveProject: () => Promise<boolean>;
   onClearOpportunityResearch: () => void;
@@ -520,30 +523,45 @@ export function ResultsView({
       {surface === "today" &&
         !printing &&
         (profile && workspace.successContract && productUrl && (demo || projectId) ? (
-          <OpportunityWorkbench
-            key={`${projectId}:${productUrl}:${demo}`}
-            profile={profile}
-            facts={facts}
-            contract={workspace.successContract}
-            bannedClaims={memory.bannedClaims}
-            productUrl={productUrl}
-            provider={provider}
-            research={workspace.opportunityResearch}
-            queue={workspace.plannedExperiments ?? []}
-            draftCounts={Object.fromEntries(
-              result.content.map((c) => [c.platformId, c.posts.length])
-            )}
-            loading={loading}
-            demo={demo}
-            agent={growthAgent}
-            onReviewAgent={onReviewAgent}
-            onResearch={onResearchOpportunities}
-            onClear={onClearOpportunityResearch}
-            onQueue={(researchId, opportunityId, rulesChecked, trialChecked) => {
-              onQueueOpportunity(researchId, opportunityId, rulesChecked, trialChecked);
-              setFocusedPlanId(opportunityId);
-            }}
-          />
+          <>
+            <DailyResearchMission
+              key={`daily:${ownerId ?? ""}:${projectId}:${demo}`}
+              ownerId={ownerId}
+              projectId={projectId}
+              demo={demo}
+              profile={profile}
+              facts={facts}
+              contract={workspace.successContract}
+              productUrl={productUrl}
+              bannedClaims={memory.bannedClaims}
+              initialBrief={workspace.opportunityResearch?.input}
+              onRunsChanged={growthAgent.refresh}
+            />
+            <OpportunityWorkbench
+              key={`${projectId}:${productUrl}:${demo}`}
+              profile={profile}
+              facts={facts}
+              contract={workspace.successContract}
+              bannedClaims={memory.bannedClaims}
+              productUrl={productUrl}
+              provider={provider}
+              research={workspace.opportunityResearch}
+              queue={workspace.plannedExperiments ?? []}
+              draftCounts={Object.fromEntries(
+                result.content.map((c) => [c.platformId, c.posts.length])
+              )}
+              loading={loading}
+              demo={demo}
+              agent={growthAgent}
+              onReviewAgent={onReviewAgent}
+              onResearch={onResearchOpportunities}
+              onClear={onClearOpportunityResearch}
+              onQueue={(researchId, opportunityId, rulesChecked, trialChecked) => {
+                onQueueOpportunity(researchId, opportunityId, rulesChecked, trialChecked);
+                setFocusedPlanId(opportunityId);
+              }}
+            />
+          </>
         ) : (
           <Card className="p-5 sm:p-6">
             <p className="text-xs font-semibold uppercase tracking-wider text-accent-300">

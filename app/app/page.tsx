@@ -145,6 +145,7 @@ export default function AppPage() {
       ) : (
         <AppFlow
           key={userId ?? "local"}
+          ownerId={userId}
           f={f}
           onSaveProject={saveNow}
           canReceiveEmail={Boolean(userEmail)}
@@ -169,6 +170,7 @@ export default function AppPage() {
 }
 
 function AppFlow({
+  ownerId,
   f,
   onSaveProject,
   canReceiveEmail,
@@ -178,6 +180,7 @@ function AppFlow({
   onHandoffAnalyzed,
   onClearHandoff,
 }: {
+  ownerId: string | null | undefined;
   f: ReturnType<typeof useLaunchFlow>;
   onSaveProject: () => Promise<boolean>;
   canReceiveEmail: boolean;
@@ -393,6 +396,7 @@ function AppFlow({
 
       {f.step === "results" && f.result && (
         <ResultsView
+          ownerId={ownerId}
           result={f.result}
           strategy={f.strategy}
           profile={f.profile}

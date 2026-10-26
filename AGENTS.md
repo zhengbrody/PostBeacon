@@ -59,6 +59,8 @@ app/
                                  request, no automatic fallback or autonomous publishing
     agent-runs/route.ts         C.2.0 flag-gated persistent research tasks; owner-scoped
                                  reads, atomic reservations and request-backed fenced worker
+    agent-missions/{route,tick/route}.ts C.3 standing public-research authorization and
+                                 bounded operator dispatch; separately gated, not enabled
     billing/{checkout,webhook}/route.ts                              Polar checkout + webhook
 lib/
   types.ts              All shared types (Provider, ProductProfile, MarketingStrategy, ...)
@@ -138,6 +140,10 @@ lib/
   agentRuns.ts                Owner-visible job receipts, bounded status projection; no fake progress
   agentRunServer.ts           Saved-context/owner check, reserve/transition RPC seam and
                               at-most-one-model worker; not an always-on scheduler
+  agentMissions.ts / agentMissionServer.ts C.3 owner/revision/expiry authorization,
+                              shared-budget daily reservation and bounded dispatch
+  autonomousResearch.ts / autonomousResearchServer.ts Approved exact-host public search,
+                              independent quote checks and one existing OpenAI attempt
   execution.ts          M19 Prepare→Publish→Measure→Learn lifecycle projection,
                         countdowns and operator-controlled platform destinations
   publishHandoff.ts     C.2.1 pure Truth-Gate checked, user-initiated X single-post
@@ -360,6 +366,22 @@ cross-origin 403. Aggregate product-health reporting is operator-only at `/api/m
 Redeploy: `npx vercel --prod --yes`. Push env from `.env.local`: `~/push-env.sh`.
 
 ## Status / changelog
+- **2026-10-25**: **C.3 daily research pilot — locally accepted, not released/enabled.**
+  Three parallel agents split authorization/SQL/worker, public-source research and
+  UI/account-scoped commands, followed by cross-review. Today now exposes explicit
+  query/domain delegation, separate search/OpenAI approvals, revision/30-day expiry,
+  Check now and Pause. No automatic posts, contacts or DeepSeek standing fallback.
+  Shared atomic budgets, no ambiguous search retry, owner isolation and account
+  export/delete cover the new authorization. Background work does not refresh
+  project activity/retention. No production migration, enablement, scheduler, paid
+  call or release occurred. See `docs/M26.C3-daily-research-pilot.md` for scope and
+  separate installation/acceptance gates; this is not an always-on 24-hour assistant.
+  Cross-review also closed autosave/paid-checkpoint TOCTOU and delete/worker lock
+  ordering. Node 24.22.1: 801 offline tests pass (three live skipped), 32 isolated
+  PostgreSQL scenarios and both SQL audits pass; typecheck/lint/format/build and
+  dependency audit pass (zero known advisories). Built-app fictional desktop/mobile
+  QA at 1280×720/375×812 has no page overflow or captured warnings/errors; ten
+  local signed-out smoke probes pass. Real account/provider/cron acceptance remains.
 - **2026-10-25**: **C.2.2 visible CMO Brief / trial kit — release acceptance.**
   App commit `f5f5565` passed GitHub CI `40250904725`; production deployment
   `dpl_A5zpNMtNEeGj641E79wW5XdpKz4k` is Ready (41s build), with postbeacon.app/www
