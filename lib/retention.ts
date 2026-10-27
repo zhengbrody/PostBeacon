@@ -20,6 +20,11 @@ export interface RetentionResult {
   agentUsageDeleted?: number;
   agentTotalsDeleted?: number;
   agentCleanupUnavailable?: boolean;
+  bufferUsageDeleted?: number;
+  bufferTotalsDeleted?: number;
+  bufferAccountUsageDeleted?: number;
+  bufferOauthStatesDeleted?: number;
+  bufferCleanupUnavailable?: boolean;
 }
 
 /** The ISO timestamp N days before `now` — the line everything older dies at. */
@@ -76,6 +81,40 @@ export async function runRetention(
       503
     );
 
+  // Provider grants persist until disconnect/account deletion. Only short-lived
+  // OAuth material and content-free/pseudonymous abuse counters are swept here.
+  const bufferTables = [
+    "buffer_delivery_daily_usage",
+    "buffer_delivery_daily_totals",
+    "buffer_delivery_account_daily_usage",
+    "buffer_oauth_states",
+  ] as const;
+  const bufferCleanup = await Promise.all(
+    bufferTables.map((table) =>
+      sb
+        .from(table)
+        .delete({ count: "exact" })
+        .lt(
+          table === "buffer_oauth_states" ? "expires_at" : "day",
+          table === "buffer_oauth_states" ? now.toISOString() : cutoff.slice(0, 10)
+        )
+    )
+  );
+  const bufferErrors = bufferCleanup.flatMap((result) =>
+    result.error ? [result.error] : []
+  );
+  if (
+    bufferErrors.some(
+      (error) =>
+        !["42P01", "PGRST205"].includes(error.code) ||
+        process.env.BUFFER_PUBLISHING_ENABLED === "true"
+    )
+  )
+    throw new PublicError(
+      "Retention could not finish publishing cleanup. Retry the sweep.",
+      503
+    );
+
   return {
     enabled: true,
     cutoff,
@@ -84,5 +123,10 @@ export async function runRetention(
     agentUsageDeleted: usage.error ? 0 : (usage.count ?? 0),
     agentTotalsDeleted: totals.error ? 0 : (totals.count ?? 0),
     ...(agentErrors.length ? { agentCleanupUnavailable: true } : {}),
+    bufferUsageDeleted: bufferCleanup[0].error ? 0 : (bufferCleanup[0].count ?? 0),
+    bufferTotalsDeleted: bufferCleanup[1].error ? 0 : (bufferCleanup[1].count ?? 0),
+    bufferAccountUsageDeleted: bufferCleanup[2].error ? 0 : (bufferCleanup[2].count ?? 0),
+    bufferOauthStatesDeleted: bufferCleanup[3].error ? 0 : (bufferCleanup[3].count ?? 0),
+    ...(bufferErrors.length ? { bufferCleanupUnavailable: true } : {}),
   };
 }

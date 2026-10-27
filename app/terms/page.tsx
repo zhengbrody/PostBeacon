@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { LegalShell, LegalSection } from "@/components/legal/LegalShell";
-import { providerFallbackNotice } from "@/lib/privacy";
+import { bufferPublishingDisclosed, providerFallbackNotice } from "@/lib/privacy";
 
 export const metadata: Metadata = {
   title: "Private beta use — PostBeacon",
@@ -9,6 +9,7 @@ export const metadata: Metadata = {
 };
 
 export default function TermsPage() {
+  const buffer = bufferPublishingDisclosed();
   return (
     <LegalShell
       title="Private beta use"
@@ -21,9 +22,24 @@ export default function TermsPage() {
           Features and output may change while the product is being tested.
         </p>
         <p>
-          <strong>PostBeacon never posts anywhere on your behalf.</strong> It has no access
-          to your social or community accounts. You decide whether to publish anything it
-          drafts.
+          {buffer ? (
+            <>
+              <strong>
+                Only separately approved posts may be scheduled through your connected
+                Buffer account.
+              </strong>{" "}
+              Review the exact text, destination and UTC time. Approval is short-lived and
+              applies to one post, not future autonomous writing or outreach. Buffer handles
+              the actual send; queued posts may still publish after local disconnect or
+              deletion.
+            </>
+          ) : (
+            <>
+              <strong>PostBeacon never posts anywhere on your behalf.</strong> It has no
+              access to your social or community accounts. You decide whether to publish
+              anything it drafts.
+            </>
+          )}
         </p>
       </LegalSection>
 

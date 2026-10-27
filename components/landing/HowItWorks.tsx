@@ -1,3 +1,4 @@
+import { bufferPublishingDisclosed } from "@/lib/privacy";
 const STEPS = [
   {
     n: "1",
@@ -38,7 +39,11 @@ export function HowItWorks() {
               {s.n}
             </div>
             <h3 className="mt-4 font-semibold">{s.title}</h3>
-            <p className="mt-1.5 text-sm text-neutral-400">{s.body}</p>
+            <p className="mt-1.5 text-sm text-neutral-400">
+              {s.n === "3" && bufferPublishingDisclosed()
+                ? "Edit a platform-native draft and pass the truth check. Publish manually, or separately approve its exact text, Buffer account and schedule."
+                : s.body}
+            </p>
           </div>
         ))}
       </div>

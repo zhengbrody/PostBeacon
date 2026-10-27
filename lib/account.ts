@@ -12,6 +12,11 @@ import { asRecord } from "./coerce";
 
 /** Every user-owned table, child-before-parent so explicit deletes never hit FK errors. */
 export const USER_TABLES_DELETE_ORDER = [
+  "buffer_deliveries",
+  "buffer_oauth_states",
+  "buffer_connection_secrets",
+  "buffer_connections",
+  "buffer_delivery_daily_usage",
   "agent_runs",
   "agent_missions",
   "agent_daily_usage",
@@ -22,6 +27,39 @@ export const USER_TABLES_DELETE_ORDER = [
   "projects",
   "entitlements",
 ] as const;
+
+/** Deliberately NOT readable by owners: encrypted provider grants and one-time OAuth material. */
+export const PRIVATE_ACCOUNT_TABLES = [
+  "buffer_oauth_states",
+  "buffer_connection_secrets",
+] as const;
+const BUFFER_EXPORT_COLUMNS = {
+  buffer_connections:
+    "id,user_id,revision,status,account_label,buffer_account_id,channels,control_started_at,created_at,updated_at",
+  buffer_deliveries:
+    "id,user_id,project_id,connection_id,connection_revision,approval_hash,snapshot,project_updated_at,scheduled_at,expires_at,status,attempted_at,provider_post_id,message,observed_at,actual_published_at,created_at,updated_at",
+  buffer_delivery_daily_usage: "user_id,day,reserved_deliveries,read_requests",
+} as const;
+function exportProjection(table: string, row: unknown): unknown {
+  if (!(table in BUFFER_EXPORT_COLUMNS)) return row;
+  const columns =
+    BUFFER_EXPORT_COLUMNS[table as keyof typeof BUFFER_EXPORT_COLUMNS].split(",");
+  const source = asRecord(row);
+  const result = Object.fromEntries(
+    columns.filter((column) => column in source).map((column) => [column, source[column]])
+  );
+  if (table === "buffer_deliveries" && result.snapshot) {
+    const {
+      accountQuotaKey: _quota,
+      approvalNonce: _nonce,
+      ...snapshot
+    } = asRecord(result.snapshot);
+    void _quota;
+    void _nonce;
+    result.snapshot = snapshot;
+  }
+  return result;
+}
 
 export const DELETE_USER_DATA_RPC = "delete_postbeacon_user_data";
 
@@ -40,6 +78,9 @@ export interface AccountExport {
   agentRuns: unknown[];
   agentUsage: unknown[];
   agentMissions: unknown[];
+  bufferConnections: unknown[];
+  bufferDeliveries: unknown[];
+  bufferUsage: unknown[];
 }
 
 /** Tables the export reads (superset check lives in tests against schema.sql). */
@@ -53,6 +94,9 @@ export const EXPORT_TABLES = [
   "agent_runs",
   "agent_daily_usage",
   "agent_missions",
+  "buffer_connections",
+  "buffer_deliveries",
+  "buffer_delivery_daily_usage",
 ] as const;
 
 /**
@@ -68,16 +112,25 @@ export async function exportAccountData(
 ): Promise<AccountExport> {
   const missingAgentTables = new Set<string>();
   let missionTableMissing = false;
+  const missingBufferTables = new Set<string>();
   async function rows(table: (typeof EXPORT_TABLES)[number]): Promise<unknown[]> {
     const result: unknown[] = [];
     let expected: number | undefined;
     for (let page = 0; page < 200; page += 1) {
-      let query = sb.from(table).select("*", { count: "exact" }).eq("user_id", user.id);
+      let query = sb
+        .from(table)
+        .select(
+          table in BUFFER_EXPORT_COLUMNS
+            ? BUFFER_EXPORT_COLUMNS[table as keyof typeof BUFFER_EXPORT_COLUMNS]
+            : "*",
+          { count: "exact" }
+        )
+        .eq("user_id", user.id);
       query =
         table === "tasks"
           ? query.order("campaign_id", { ascending: true }).order("id", { ascending: true })
           : query.order(
-              table === "agent_daily_usage"
+              table === "agent_daily_usage" || table === "buffer_delivery_daily_usage"
                 ? "day"
                 : table === "entitlements"
                   ? "user_id"
@@ -86,6 +139,14 @@ export async function exportAccountData(
             );
       const { data, error, count } = await query.range(result.length, result.length + 499);
       if (error) {
+        if (
+          table.startsWith("buffer_") &&
+          ["42P01", "PGRST205"].includes(error.code) &&
+          result.length === 0
+        ) {
+          missingBufferTables.add(table);
+          return [];
+        }
         if (
           table === "agent_missions" &&
           ["42P01", "PGRST205"].includes(error.code) &&
@@ -130,7 +191,7 @@ export async function exportAccountData(
           "Export stopped because some rows could not be read. Try again.",
           500
         );
-      result.push(...batch);
+      result.push(...batch.map((row) => exportProjection(table, row)));
       if (result.length === expected) return result;
     }
     throw new PublicError(
@@ -149,6 +210,9 @@ export async function exportAccountData(
     agentRuns,
     agentUsage,
     agentMissions,
+    bufferConnections,
+    bufferDeliveries,
+    bufferUsage,
   ] = await Promise.all(EXPORT_TABLES.map(rows));
 
   if (missingAgentTables.size && asRecord(entitlements[0]).agent_data_initialized === true)
@@ -159,6 +223,14 @@ export async function exportAccountData(
   if (missionTableMissing && asRecord(entitlements[0]).mission_data_initialized === true)
     throw new PublicError(
       "Your daily research authorization could not be exported completely. Retry after the database schema is available; no partial export was returned.",
+      503
+    );
+  if (
+    missingBufferTables.size &&
+    asRecord(entitlements[0]).buffer_data_initialized === true
+  )
+    throw new PublicError(
+      "Your publishing history could not be exported completely. Retry after the database schema is available; no partial export was returned.",
       503
     );
 
@@ -176,6 +248,9 @@ export async function exportAccountData(
     agentRuns,
     agentUsage,
     agentMissions,
+    bufferConnections,
+    bufferDeliveries,
+    bufferUsage,
   };
 }
 
@@ -206,7 +281,8 @@ export async function deleteAccountData(sb: SupabaseClient, userId: string): Pro
         error &&
         error.code !== "42P01" &&
         !(
-          ["agent_runs", "agent_daily_usage", "agent_missions"].includes(table) &&
+          (["agent_runs", "agent_daily_usage", "agent_missions"].includes(table) ||
+            table.startsWith("buffer_")) &&
           error.code === "PGRST205"
         )
       ) {

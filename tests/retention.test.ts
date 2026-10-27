@@ -31,7 +31,7 @@ function req(auth?: string): NextRequest {
   }) as unknown as NextRequest;
 }
 
-const ENV_KEYS = ["CRON_SECRET", "RETENTION_DAYS"] as const;
+const ENV_KEYS = ["CRON_SECRET", "RETENTION_DAYS", "BUFFER_PUBLISHING_ENABLED"] as const;
 const saved = ENV_KEYS.map((k) => [k, process.env[k]] as const);
 afterEach(() => {
   for (const [k, v] of saved) {
@@ -59,6 +59,18 @@ describe("retention configuration", () => {
 });
 
 describe("runRetention sweep", () => {
+  it("reports incomplete publishing cleanup and tolerates only pre-install missing tables while off", async () => {
+    delete process.env.BUFFER_PUBLISHING_ENABLED;
+    await expect(
+      runRetention(sweepClient("buffer_oauth_states").client, 30)
+    ).rejects.toThrow("publishing cleanup");
+    const old = await runRetention(sweepClient("buffer_oauth_states", "42P01").client, 30);
+    expect(old.bufferCleanupUnavailable).toBe(true);
+    process.env.BUFFER_PUBLISHING_ENABLED = "true";
+    await expect(
+      runRetention(sweepClient("buffer_oauth_states", "PGRST205").client, 30)
+    ).rejects.toThrow("publishing cleanup");
+  });
   it("never reports a failed Agent cleanup as successful", async () => {
     await expect(runRetention(sweepClient("agent_daily_usage").client, 30)).rejects.toThrow(
       "could not finish"
@@ -90,6 +102,14 @@ describe("runRetention sweep", () => {
       },
       { table: "agent_daily_usage", column: "day", cutoff: "2026-06-12" },
       { table: "agent_daily_totals", column: "day", cutoff: "2026-06-12" },
+      { table: "buffer_delivery_daily_usage", column: "day", cutoff: "2026-06-12" },
+      { table: "buffer_delivery_daily_totals", column: "day", cutoff: "2026-06-12" },
+      { table: "buffer_delivery_account_daily_usage", column: "day", cutoff: "2026-06-12" },
+      {
+        table: "buffer_oauth_states",
+        column: "expires_at",
+        cutoff: "2026-07-12T00:00:00.000Z",
+      },
     ]);
     expect(out).toEqual({
       enabled: true,
@@ -98,6 +118,10 @@ describe("runRetention sweep", () => {
       webhookEventsDeleted: 5,
       agentUsageDeleted: 5,
       agentTotalsDeleted: 5,
+      bufferUsageDeleted: 5,
+      bufferTotalsDeleted: 5,
+      bufferAccountUsageDeleted: 5,
+      bufferOauthStatesDeleted: 5,
     });
   });
 });

@@ -694,6 +694,14 @@ const result: GenerateResult = {
           caveats:
             "Don't turn it into a thread of growth tips. One story, one line of code, one link.",
         },
+        {
+          hook: "How do you notice when a cron job stops checking in?",
+          body: "Cronwise watches scheduled jobs and sends missed-check-in alerts.\n\nSee the fictional demo product: https://cronwise.dev/",
+          imageSuggestion: "No image required for this single-post scheduling example.",
+          bestTime: "Choose a future UTC time in the fictional Buffer review.",
+          caveats:
+            "Fictional example only. Not a connected account or a real publishing schedule.",
+        },
       ],
       playbook: {
         whyThisPlatform:

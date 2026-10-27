@@ -3,6 +3,7 @@ import Link from "next/link";
 import { LegalShell, LegalSection, LegalTable } from "@/components/legal/LegalShell";
 import {
   accountsConfigured,
+  bufferPublishingDisclosed,
   configuredProviderPrivacy,
   deepseekAutomaticFallbackEnabled,
   guestPreviewConfigured,
@@ -24,6 +25,7 @@ export default function PrivacyPage() {
   const providerPrivacy = configuredProviderPrivacy();
   const guestPreview = guestPreviewConfigured();
   const accounts = accountsConfigured();
+  const buffer = bufferPublishingDisclosed();
   return (
     <LegalShell
       title="Privacy"
@@ -59,7 +61,17 @@ export default function PrivacyPage() {
             {providerFallbackNotice()}
           </li>
           <li>
-            We <strong>never post to any platform for you</strong>, set no advertising
+            {buffer ? (
+              <>
+                Optional Buffer scheduling requires your approval of the{" "}
+                <strong>exact text, account and time</strong>. Connecting does not grant
+                autonomous posting authority. We set no advertising
+              </>
+            ) : (
+              <>
+                We <strong>never post to any platform for you</strong>, set no advertising
+              </>
+            )}{" "}
             cookies, and don’t use your content to train models or build cross-user content
             or outcome-benchmark datasets.
           </li>
@@ -142,8 +154,21 @@ export default function PrivacyPage() {
       <LegalSection title="What we deliberately don’t do">
         <ul className="list-disc space-y-1.5 pl-5">
           <li>
-            <strong>No auto-posting.</strong> PostBeacon never holds your social accounts’
-            credentials and never publishes on your behalf — you copy and post.
+            {buffer ? (
+              <>
+                <strong>No unapproved posting.</strong> Manual copy/paste remains available.
+                Optional Buffer grants are encrypted server-side; each scheduled post
+                requires a fresh, exact approval. No automatic rewrites, replies, direct
+                messages or bulk campaigns. A scheduled receipt is not proof of publication;
+                uncertain requests are not blindly retried.
+              </>
+            ) : (
+              <>
+                <strong>No auto-posting.</strong> PostBeacon never holds your social
+                accounts’ credentials and never publishes on your behalf — you copy and
+                post.
+              </>
+            )}
           </li>
           <li>
             <strong>No training or cross-user content/outcome benchmarking.</strong> Your
@@ -189,6 +214,14 @@ export default function PrivacyPage() {
           Residual copies can persist briefly in encrypted database backups until those
           backups age out on the vendor’s schedule.
         </p>
+        {buffer && (
+          <p>
+            Disconnecting or deleting data here cannot recall a post already accepted by
+            Buffer. Manage queued posts and revoke the connected app in Buffer. Shared,
+            pseudonymous anti-abuse counters expire through retention rather than account
+            deletion.
+          </p>
+        )}
       </LegalSection>
 
       <LegalSection title="Retention">

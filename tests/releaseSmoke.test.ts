@@ -8,7 +8,10 @@ function successfulFetch() {
     if (path === "/privacy")
       return new Response("<p>Explicit trial research sends short excerpts.</p>");
     if (path === "/app") return new Response("Public shell");
-    if (path === "/api/opportunities" && origin === "https://untrusted.example")
+    if (
+      ["/api/opportunities", "/api/buffer/deliveries"].includes(path) &&
+      origin === "https://untrusted.example"
+    )
       return new Response("Denied", { status: 403 });
     return new Response("Denied", { status: 401 });
   });
@@ -36,7 +39,7 @@ describe("release acceptance cannot be confused with a mock or public smoke", ()
     const report = await runReleaseSmoke({ baseUrl: "https://postbeacon.app", fetchFn });
     expect(report.smokePassed).toBe(true);
     expect(report.productionAccepted).toBe(false);
-    expect(report.stillRequired).toHaveLength(5);
+    expect(report.stillRequired).toHaveLength(6);
     expect(report.deploymentRevision).toContain("not verified");
     for (const [url, options] of fetchFn.mock.calls) {
       expect(String(url)).not.toContain("/delete");
@@ -84,7 +87,7 @@ describe("release acceptance cannot be confused with a mock or public smoke", ()
     );
     const report = await runReleaseSmoke({ baseUrl: "https://postbeacon.app", fetchFn });
     expect(report.smokePassed).toBe(false);
-    expect(fetchFn).toHaveBeenCalledTimes(6);
+    expect(fetchFn).toHaveBeenCalledTimes(9);
   });
   it("requires the actual new privacy notice rather than any successful privacy page", async () => {
     const original = successfulFetch();

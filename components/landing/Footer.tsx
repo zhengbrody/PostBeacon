@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ButtonLink } from "@/components/ui/Button";
+import { bufferPublishingDisclosed } from "@/lib/privacy";
 
 export function Footer() {
   return (
@@ -27,7 +28,8 @@ export function Footer() {
           </Link>
         </div>
         <p className="mt-4 text-xs text-neutral-600">
-          © {new Date().getFullYear()} PostBeacon · postbeacon.app · No auto-posting.
+          © {new Date().getFullYear()} PostBeacon · postbeacon.app ·{" "}
+          {bufferPublishingDisclosed() ? "No unapproved posting." : "No auto-posting."}{" "}
           PostBeacon does not train on your content; your selected AI provider’s policy
           applies.
         </p>

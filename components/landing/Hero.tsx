@@ -1,4 +1,5 @@
 import { ButtonLink } from "@/components/ui/Button";
+import { bufferPublishingDisclosed } from "@/lib/privacy";
 
 export function Hero() {
   return (
@@ -23,7 +24,9 @@ export function Hero() {
           </ButtonLink>
         </div>
         <p className="mt-4 text-xs text-neutral-500">
-          No auto-posting. Every draft passes a truth check; you review and publish by hand.
+          {bufferPublishingDisclosed()
+            ? "Every draft passes a truth check. Publish manually, or approve an exact Buffer schedule when enabled."
+            : "No auto-posting. Every draft passes a truth check; you review and publish by hand."}
         </p>
       </div>
     </section>

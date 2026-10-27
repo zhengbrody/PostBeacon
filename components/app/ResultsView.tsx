@@ -18,6 +18,7 @@ import { PublishDialog, type PublishDetails } from "@/components/app/results/Pub
 import { OutcomePanel } from "@/components/app/results/OutcomePanel";
 import { OpportunityWorkbench } from "@/components/app/results/OpportunityWorkbench";
 import { DailyResearchMission } from "@/components/app/results/DailyResearchMission";
+import { BufferPublishingCard } from "@/components/app/results/BufferPublishingCard";
 import { deriveToday, type TodayAction } from "@/lib/today";
 import { latestRelevantExperiment } from "@/lib/execution";
 import { researchContextKey } from "@/lib/opportunityResearch";
@@ -530,6 +531,19 @@ export function ResultsView({
             aria-label="Growth Agent workbench"
             className="space-y-4"
           >
+            <BufferPublishingCard
+              key={`publishing:${ownerId ?? ""}:${projectId}:${demo}`}
+              ownerId={ownerId}
+              projectId={projectId}
+              demo={demo}
+              result={result}
+              profile={profile}
+              facts={facts}
+              contract={workspace.successContract}
+              plans={workspace.plannedExperiments ?? []}
+              bannedClaims={memory.bannedClaims}
+              productUrl={productUrl}
+            />
             <DailyResearchMission
               key={`daily:${ownerId ?? ""}:${projectId}:${demo}`}
               ownerId={ownerId}

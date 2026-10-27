@@ -9,9 +9,11 @@ specific product, then generates **ready-to-post** native content + a launch cal
 The plan opens into an action-first growth workspace: one next best move → manual publish →
 24h/72h result → verdict → next experiment. Launch mode becomes Growth mode after the first
 measured publish; weekly completed learning loops are the retention north star.
-**No autonomous social publishing is implemented.** The current flow is manual.
-The owner approved a future Buffer/X/LinkedIn review-then-schedule design, not a
-connected publisher, standing write authorization or permission to post test content.
+**No unapproved autonomous social publishing.** Production still uses manual publishing.
+A local default-OFF Buffer/X/LinkedIn connector now implements exact review →
+short-lived approval → scheduled delivery. It has not been connected, enabled or
+production-tested. Research consent is not permission to post; real account setup,
+new SQL and any test post require separate approval.
 
 - Brand: **PostBeacon**, domain **postbeacon.app** (owned). `postbeacon.com` was also
   free at selection time if a `.com` is wanted later. (Renamed from earlier "PostPilot",
@@ -63,6 +65,8 @@ app/
                                  reads, atomic reservations and request-backed fenced worker
     agent-missions/{route,tick/route}.ts C.3 standing public-research authorization and
                                  bounded operator dispatch; separately gated, not enabled
+    buffer/{connections,callback,deliveries}/route.ts C.5 default-OFF owner-bound
+                                 OAuth, exact publishing approvals and delivery receipts
     billing/{checkout,webhook}/route.ts                              Polar checkout + webhook
 lib/
   types.ts              All shared types (Provider, ProductProfile, MarketingStrategy, ...)
@@ -153,6 +157,13 @@ lib/
                         countdowns and operator-controlled platform destinations
   publishHandoff.ts     C.2.1 pure Truth-Gate checked, user-initiated X single-post
                         composer shortcut; complete manual fallback, never publication
+  bufferConfig/Crypto/Connections/Provider.ts C.5 fail-closed setup, AES-GCM vault,
+                        browser-safe metadata and fixed OAuth/GraphQL transport
+  bufferConnectionServer.ts C.5 staged PKCE/owner/browser binding, rotating refresh
+                        lease, DB setup cooldown, metadata and disconnect
+  bufferPublishing{,Server,Provider}.ts C.5 canonical truth-checked approval hashes,
+                        atomic one-attempt budgets, uncertainty and exact status reads;
+                        no automatic experiment bridge or autonomous rewriting
   experimentHistory.ts M24.1 Outcome-owned verdict reads, honest legacy-final fallback
                         and v7 workspace compatibility repair
   experimentIdentity.ts M24.1 draft/execution/checkpoint task identity helpers
@@ -192,6 +203,8 @@ hooks/
   useAutosave.ts        Debounced persist: localStorage (anon) / Supabase upsert (signed-in)
   useGrowthAgent.ts     Account/project-scoped remote job reads/commands, bounded polling,
                         explicit review into the reducer; no localStorage job ledger
+  useBufferPublishing.ts C.5 account/project-scoped reads and explicit publishing
+                        commands; aborts stale work, no connect/send on focus or refresh
 components/
   ui/                   Button, Card, Badge, Spinner, Field, Tabs (design system primitives)
   app/                  Stepper, UrlStep, ProfileForm, FactLedger (provenance UI + questions),
@@ -246,6 +259,8 @@ docs/M26.C1-cloud-boundary-audit.md Async ownership/save/export audit, regressio
                                   remaining major dependency and real-account gates
 docs/M26.C1-dependency-migration.md Approved Zod 4/OpenAI SDK 7 security migration,
                                   installed-SDK wire regression and release boundaries
+docs/M26.C5-approved-buffer-scheduling.md Default-OFF approved scheduling contract,
+                        threat/data-rights boundaries and operator installation gates
 tests/                  vitest suites: urlPolicy, safeFetch, billing, webhook route, validate,
                         golden (12-fixture offline evals), generateRoute, flowReducer
                         (state-machine invariants), storage (draft migrations), workspace
@@ -371,6 +386,27 @@ cross-origin 403. Aggregate product-health reporting is operator-only at `/api/m
 Redeploy: `npx vercel --prod --yes`. Push env from `.env.local`: `~/push-env.sh`.
 
 ## Status / changelog
+- **2026-10-27, C.5 candidate**: **Approved Buffer scheduling implemented
+  locally; NOT deployed/enabled/connected.** Two backend agents plus root UI/data-rights
+  work and an implementation-independent reviewer built exact canonical draft/account/
+  UTC review, short-lived explicit approval, one-attempt scheduling and separate provider
+  receipts. OAuth PKCE+browser/owner state, AES-GCM server-only grants, distributed
+  rotating-refresh leases, 30-second shared setup cooldown, duplicate active-content
+  guard, owner-composite FKs and atomic user/account/global limits are included.
+  Export excludes vault/OAuth/fence keys; delete and retention cover new data, with
+  project→connection lock order preserved on base-schema rerun. Fictional Demo can
+  show review, invalidation and scheduled-not-published feedback without any API call.
+  Independent narrow review found no unresolved P1/P2 in this scope; exact final
+  gate results are recorded in the C.5 document. No production SQL, env change,
+  model/provider call, social connection or real publication. The prior C.4 two-SQL
+  install gate still blocks pushing main; three new Buffer migrations/audits and
+  real OAuth/explicit-post acceptance are additional gates. Feature remains OFF.
+  Node 24: 974 offline tests pass, three live skipped; typecheck/lint/format/build
+  and dependency audit pass (zero known advisories). Root/independent isolated PG
+  verification passes 72 scenario groups with productionTouched=false; Buffer
+  audits are 8/8/5 PASS. Nine local signed-out smoke probes and actual fictional
+  desktop/mobile review/invalidation/scheduled-not-published checks pass without
+  horizontal overflow or captured warnings/errors.
 - **2026-10-26 evening**: **C.4 local hardening accepted; NOT deployed.**
   Two implementation agents plus a separate read-only reviewer closed confirmed
   P1 cross-owner workspace parent attachment and racy/fail-open legacy daily usage,

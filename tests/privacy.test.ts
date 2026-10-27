@@ -36,6 +36,8 @@ const KEY_ENVS = [
   "GUEST_PREVIEW_ALLOW_DEEPSEEK",
   "UPSTASH_REDIS_REST_URL",
   "UPSTASH_REDIS_REST_TOKEN",
+  "BUFFER_PUBLISHING_ENABLED",
+  "BUFFER_CLIENT_ID",
 ] as const;
 const saved = KEY_ENVS.map((k) => [k, process.env[k]] as const);
 afterEach(() => {
@@ -46,6 +48,21 @@ afterEach(() => {
 });
 
 describe("privacy single source stays complete", () => {
+  it("discloses encrypted Buffer grants and exact approval only when configured, including a disabled connection", () => {
+    delete process.env.BUFFER_PUBLISHING_ENABLED;
+    delete process.env.BUFFER_CLIENT_ID;
+    expect(activeSubprocessors().some((v) => v.name === "Buffer")).toBe(false);
+    expect(visibleDataCategories().some((v) => v.requires === "buffer")).toBe(false);
+    process.env.BUFFER_CLIENT_ID = "configured-app";
+    expect(activeSubprocessors().some((v) => v.name === "Buffer")).toBe(true);
+    const data = JSON.stringify(
+      visibleDataCategories().filter((v) => v.requires === "buffer")
+    );
+    expect(data).toContain("encrypted");
+    expect(data).toContain("pseudonymous");
+    expect(data).toContain("does not cancel");
+    expect(data).toContain("ten minutes");
+  });
   it("every provider has a privacy note, policy link, and a subprocessor entry", () => {
     for (const p of ALL_PROVIDERS) {
       const info = PROVIDER_PRIVACY[p];

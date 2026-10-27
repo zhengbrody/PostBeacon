@@ -11,6 +11,42 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("data-rights requests bind to the initiating account", () => {
+  it.each(["connections", "deliveries", "connect", "approve"])(
+    "stops Buffer %s before transmission after an account switch",
+    async (kind) => {
+      mock.session.mockResolvedValue({
+        data: { session: { user: { id: "B" }, access_token: "test-B" } },
+      });
+      const request =
+        kind === "connections"
+          ? api.bufferConnections("A")
+          : kind === "deliveries"
+            ? api.bufferDeliveries("project", "A")
+            : kind === "connect"
+              ? api.bufferConnectionCommand({ action: "connect" }, "A")
+              : api.bufferDeliveryCommand(
+                  { action: "approve", deliveryId: "id", approvalHash: "0".repeat(64) },
+                  "A"
+                );
+      await expect(request).rejects.toThrow("session changed");
+      expect(fetch).not.toHaveBeenCalled();
+    }
+  );
+  it("stops a Buffer approval aborted while authentication is resolving", async () => {
+    const controller = new AbortController();
+    mock.session.mockImplementation(async () => {
+      controller.abort();
+      return { data: { session: { user: { id: "A" }, access_token: "test-A" } } };
+    });
+    await expect(
+      api.bufferDeliveryCommand(
+        { action: "approve", deliveryId: "id", approvalHash: "0".repeat(64) },
+        "A",
+        controller.signal
+      )
+    ).rejects.toThrow();
+    expect(fetch).not.toHaveBeenCalled();
+  });
   it("rejects an empty initiating account instead of using the current session", async () => {
     mock.session.mockResolvedValue({
       data: { session: { user: { id: "A" }, access_token: "test-A" } },

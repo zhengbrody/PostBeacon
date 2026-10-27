@@ -9,7 +9,7 @@ import type { Provider } from "./types";
 import { guestPreviewQuotaConfigured } from "./guestPreviewQuota";
 
 /** Bump when the published policy text meaningfully changes. */
-export const PRIVACY_LAST_UPDATED = "2026-10-24";
+export const PRIVACY_LAST_UPDATED = "2026-10-27";
 
 /**
  * How each LLM provider handles API data, per its PUBLIC policy as of
@@ -168,6 +168,14 @@ export const SUBPROCESSORS: Subprocessor[] = [
     policyUrl: "https://tavily.com/privacy",
   },
   {
+    name: "Buffer",
+    role: "Optional user-approved scheduled publishing to X and LinkedIn",
+    data: "The exact approved post text, selected connected channel and UTC schedule; OAuth account/channel metadata and server-held authorization grants. Never receives model prompts or unrelated saved projects",
+    region: "Provider infrastructure; see Buffer's policy",
+    when: "Only after you connect Buffer; a scheduling request requires a separate, short-lived approval of the complete text, destination and time",
+    policyUrl: "https://buffer.com/legal#privacy-policy",
+  },
+  {
     name: "Polar",
     role: "Merchant of record (checkout, invoices, tax)",
     data: "Purchase identity and transaction data — card numbers never touch PostBeacon",
@@ -227,6 +235,15 @@ export function accountsConfigured(): boolean {
   );
 }
 
+/** Keep disclosures when credentials remain configured even if sends are
+ * temporarily disabled. Never exposes any credential value to the browser. */
+export function bufferPublishingDisclosed(): boolean {
+  return (
+    process.env.BUFFER_PUBLISHING_ENABLED === "true" ||
+    Boolean(process.env.BUFFER_CLIENT_ID)
+  );
+}
+
 /** Public only when the model path and persistent, fail-closed quota boundary
  * are both configured. */
 export function guestPreviewConfigured(): boolean {
@@ -269,6 +286,8 @@ export function activeSubprocessors(): Subprocessor[] {
         return Boolean(process.env.SEARCH_API_KEY);
       case "Polar":
         return billingConfigured();
+      case "Buffer":
+        return bufferPublishingDisclosed();
       case "Resend":
         return emailRemindersConfigured();
       case "Upstash":
@@ -287,7 +306,7 @@ export interface DataCategory {
   retention: string;
   deletion: string;
   /** Hide dormant product surfaces from the current public beta notice. */
-  requires?: "billing" | "reminders" | "guestPreview" | "localDraft";
+  requires?: "billing" | "reminders" | "guestPreview" | "localDraft" | "buffer";
 }
 
 export const DATA_CATEGORIES: DataCategory[] = [
@@ -382,6 +401,28 @@ export const DATA_CATEGORIES: DataCategory[] = [
       "Clear browser history and manage drafts/posts on the destination. Deleting a PostBeacon project does not delete external drafts or posts",
   },
   {
+    what: "Optional Buffer connection and authorization",
+    where:
+      "Supabase: owner-readable account/channel metadata; encrypted OAuth access/refresh grants and one-time codes in separate server-only tables, never sent to AI models, browser responses, analytics or account exports",
+    why: "Connect your own Buffer account and verify the exact destination. Connecting alone never approves a post",
+    retention:
+      "Connection metadata and encrypted grants remain until disconnect or account deletion. Authorization codes and browser-bound state expire after ten minutes and are physically removed by the next enabled daily retention sweep",
+    deletion:
+      "Disconnect wipes our grants and pending authorization material, but does not revoke the app in Buffer or cancel items Buffer already accepted. Revoke access and manage queued or published posts in Buffer too",
+    requires: "buffer",
+  },
+  {
+    what: "Buffer approval snapshots, delivery receipts and abuse limits",
+    where:
+      "Supabase owner-readable rows; Buffer receives only the approved post, channel and schedule after final approval",
+    why: "Freeze an exact approval for fifteen minutes, permit at most one send attempt, and distinguish scheduled, sent, failed and uncertain provider receipts. No blind retry or automatic experiment creation",
+    retention:
+      "Delivery content follows its project's deletion/inactivity retention. Owner daily counts follow account deletion and the configured retention sweep. Shared daily counts and keyed, pseudonymous Buffer-account counters survive deletion to prevent allowance resets, and expire through the same configured sweep; they contain no post text or credentials",
+    deletion:
+      "Export includes connection metadata, delivery history and owner usage, not grants, one-time codes or shared anti-abuse keys. Deleting a PostBeacon project/account does not cancel Buffer queues or delete external posts",
+    requires: "buffer",
+  },
+  {
     what: "Copilot chat transcripts",
     where: "Your browser session only",
     why: "The conversation you're having",
@@ -429,6 +470,7 @@ export function visibleDataCategories(): DataCategory[] {
     if (category.requires === "reminders") return emailRemindersConfigured();
     if (category.requires === "guestPreview") return guestPreviewConfigured();
     if (category.requires === "localDraft") return !accountsConfigured();
+    if (category.requires === "buffer") return bufferPublishingDisclosed();
     return true;
   });
 }

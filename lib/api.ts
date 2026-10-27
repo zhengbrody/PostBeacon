@@ -1,6 +1,16 @@
 import { getSupabase } from "./supabase/client";
 import type { AgentRun, AgentRunList } from "./agentRuns";
 import type {
+  BufferConnectionCommand,
+  BufferConnectionList,
+  BufferConnectionResult,
+} from "./bufferConnections";
+import type {
+  BufferDeliveryCommand,
+  BufferDeliveryList,
+  BufferDeliveryResult,
+} from "./bufferPublishing";
+import type {
   AgentMissionCommand,
   AgentMissionList,
   AgentMissionResponse,
@@ -127,6 +137,48 @@ export function boundedCopilotRequest(body: CopilotRequest): CopilotRequest {
 }
 
 export const api = {
+  bufferConnections: async (
+    ownerId: string,
+    signal?: AbortSignal
+  ): Promise<BufferConnectionList> => {
+    const authorization = await authHeader(ownerId);
+    signal?.throwIfAborted();
+    const response = await fetch("/api/buffer/connections", {
+      headers: authorization,
+      cache: "no-store",
+      signal,
+    });
+    const data = await response.json();
+    if (!response.ok)
+      throw new Error(data.error || "Publishing connection could not be read.");
+    return data;
+  },
+  bufferConnectionCommand: (
+    body: BufferConnectionCommand,
+    ownerId: string,
+    signal?: AbortSignal
+  ) => post<BufferConnectionResult>("/api/buffer/connections", body, signal, ownerId),
+  bufferDeliveries: async (
+    projectId: string,
+    ownerId: string,
+    signal?: AbortSignal
+  ): Promise<BufferDeliveryList> => {
+    const authorization = await authHeader(ownerId);
+    signal?.throwIfAborted();
+    const response = await fetch(
+      `/api/buffer/deliveries?projectId=${encodeURIComponent(projectId)}`,
+      { headers: authorization, cache: "no-store", signal }
+    );
+    const data = await response.json();
+    if (!response.ok)
+      throw new Error(data.error || "Publishing receipts could not be read.");
+    return data;
+  },
+  bufferDeliveryCommand: (
+    body: BufferDeliveryCommand,
+    ownerId: string,
+    signal?: AbortSignal
+  ) => post<BufferDeliveryResult>("/api/buffer/deliveries", body, signal, ownerId),
   agentMission: async (
     projectId: string,
     ownerId: string,

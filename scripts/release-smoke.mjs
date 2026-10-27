@@ -27,6 +27,25 @@ export function releaseOrigin(raw) {
 const PROBES = [
   { id: "workspace-page", path: "/app", method: "GET", expected: [200] },
   {
+    id: "buffer-connections-sign-in-gate",
+    path: "/api/buffer/connections",
+    method: "GET",
+    expected: [401],
+  },
+  {
+    id: "buffer-deliveries-sign-in-gate",
+    path: "/api/buffer/deliveries",
+    method: "GET",
+    expected: [401],
+  },
+  {
+    id: "buffer-write-cross-origin-gate",
+    path: "/api/buffer/deliveries",
+    method: "POST",
+    expected: [403],
+    foreignOrigin: true,
+  },
+  {
     id: "trial-privacy-notice",
     path: "/privacy",
     method: "GET",
@@ -138,6 +157,7 @@ export async function runReleaseSmoke({ baseUrl, fetchFn = fetch }) {
       "Cloud save, refresh, export and dedicated test-project deletion",
       "Two-account isolation and provider failure handling",
       "Real activation, feedback and repeat-experiment retention",
+      "Separately authorized real Buffer OAuth and exact-copy/account/time scheduling acceptance; signed-out gates never prove publication",
     ],
   };
 }

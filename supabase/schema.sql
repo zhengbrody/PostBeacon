@@ -324,6 +324,26 @@ begin
   -- Keep the same project-first lock order as Agent save/reserve/worker RPCs,
   -- including when this base schema is re-run after optional Agent migrations.
   perform 1 from public.projects where user_id = target_user_id order by id for update;
+  -- Optional Buffer rows use project → connection → child lock order. Keep
+  -- grants, OAuth codes and approvals covered when the base schema is rerun.
+  if to_regclass('public.buffer_connections') is not null then
+    execute 'select 1 from public.buffer_connections where user_id = $1 order by id for update' using target_user_id;
+  end if;
+  if to_regclass('public.buffer_deliveries') is not null then
+    execute 'delete from public.buffer_deliveries where user_id = $1' using target_user_id;
+  end if;
+  if to_regclass('public.buffer_oauth_states') is not null then
+    execute 'delete from public.buffer_oauth_states where user_id = $1' using target_user_id;
+  end if;
+  if to_regclass('public.buffer_connection_secrets') is not null then
+    execute 'delete from public.buffer_connection_secrets where user_id = $1' using target_user_id;
+  end if;
+  if to_regclass('public.buffer_connections') is not null then
+    execute 'delete from public.buffer_connections where user_id = $1' using target_user_id;
+  end if;
+  if to_regclass('public.buffer_delivery_daily_usage') is not null then
+    execute 'delete from public.buffer_delivery_daily_usage where user_id = $1' using target_user_id;
+  end if;
   -- Agent tables are optional until their separate migration is installed.
   -- Re-running this base schema must not remove their deletion coverage.
   if to_regclass('public.agent_runs') is not null then

@@ -7,6 +7,7 @@ import {
   deleteAccountData,
   exportAccountData,
   EXPORT_TABLES,
+  PRIVATE_ACCOUNT_TABLES,
   USER_TABLES_DELETE_ORDER,
 } from "@/lib/account";
 import { PublicError } from "@/lib/errors";
@@ -16,6 +17,8 @@ const accountSchema = () =>
     "schema.sql",
     "migrations/20261025_agent_runs.sql",
     "migrations/20261026_agent_missions.sql",
+    "migrations/20261026_buffer_connections.sql",
+    "migrations/20261026_buffer_deliveries.sql",
   ]
     .map((path) => readFileSync(join(__dirname, "../supabase", path), "utf-8"))
     .join("\n");
@@ -138,7 +141,12 @@ describe("deletion cleanup coverage (the 'nothing survives' proof)", () => {
     expect(tables.length).toBeGreaterThanOrEqual(7);
     // webhook_events stores Polar event ids only (no user linkage, no personal
     // data) — it is swept by the retention task instead (tests/retention.test.ts).
-    const nonPersonal = ["webhook_events", "agent_daily_totals"];
+    const nonPersonal = [
+      "webhook_events",
+      "agent_daily_totals",
+      "buffer_delivery_daily_totals",
+      "buffer_delivery_account_daily_usage",
+    ];
     for (const table of tables) {
       const covered =
         (USER_TABLES_DELETE_ORDER as readonly string[]).includes(table) ||
@@ -162,6 +170,16 @@ describe("deletion cleanup coverage (the 'nothing survives' proof)", () => {
       expect(schema).toMatch(
         new RegExp(`alter table public\\.${table} enable row level security`, "i")
       );
+      if ((PRIVATE_ACCOUNT_TABLES as readonly string[]).includes(table)) {
+        expect(EXPORT_TABLES).not.toContain(table);
+        expect(schema).toContain(
+          `revoke all on public.${table} from public,anon,authenticated`
+        );
+        expect(schema).not.toMatch(
+          new RegExp(`create policy[^;]*on public\\.${table}\\b`, "i")
+        );
+        continue;
+      }
       expect(schema).toMatch(
         new RegExp(
           `create policy [\\s\\S]{0,80} on public\\.${table}[\\s\\S]{0,160}auth\\.uid\\(\\)\\s*=\\s*user_id`,
@@ -322,6 +340,45 @@ describe("deleteAccountData", () => {
 });
 
 describe("exportAccountData", () => {
+  it("exports publishing metadata and full approved text, never grants or server fence keys", async () => {
+    const mock = exportClient({
+      entitlements: [{ buffer_data_initialized: true }],
+      buffer_connections: [
+        { id: "conn", account_label: "My X", access_ciphertext: "NEVER_EXPORT" },
+      ],
+      buffer_deliveries: [
+        {
+          id: "d",
+          snapshot: { body: "Exact approved text", accountQuotaKey: "PRIVATE_HMAC" },
+          attempt_token: "PRIVATE_FENCE",
+        },
+      ],
+      buffer_delivery_daily_usage: [{ day: "2026-10-26", reserved_deliveries: 1 }],
+    });
+    const out = await exportAccountData(mock.client, { id: "u", email: null });
+    expect(out.bufferConnections).toEqual([{ id: "conn", account_label: "My X" }]);
+    expect(out.bufferDeliveries).toEqual([
+      { id: "d", snapshot: { body: "Exact approved text" } },
+    ]);
+    expect(out.bufferUsage).toHaveLength(1);
+    for (const table of [
+      ...PRIVATE_ACCOUNT_TABLES,
+      "buffer_delivery_daily_totals",
+      "buffer_delivery_account_daily_usage",
+    ])
+      expect(mock.queried).not.toContain(table);
+    expect(JSON.stringify(out)).not.toMatch(/NEVER_EXPORT|PRIVATE_HMAC|PRIVATE_FENCE/);
+  });
+  it("does not hide missing publishing tables after an OAuth round trip has started", async () => {
+    const mock = exportClient({ entitlements: [{ buffer_data_initialized: true }] });
+    await expect(exportAccountData(mock.client, { id: "u", email: null })).rejects.toThrow(
+      "no partial export"
+    );
+    expect(
+      (await exportAccountData(exportClient({}).client, { id: "old", email: null }))
+        .bufferConnections
+    ).toEqual([]);
+  });
   it("keeps pre-mission accounts exportable without hiding later mission history", async () => {
     const old = exportClient(
       {

@@ -9,6 +9,8 @@ import { randomUUID } from "node:crypto";
 import { verifyAgentMissions } from "./agent-mission-db-checks.mjs";
 import { verifyWorkspaceOwnership } from "./workspace-ownership-db-checks.mjs";
 import { verifyAtomicUsage } from "./atomic-usage-db-checks.mjs";
+import { verifyBufferConnections } from "./buffer-connection-db-checks.mjs";
+import { verifyBufferDeliveries } from "./buffer-delivery-db-checks.mjs";
 
 const execFile = promisify(callbackExecFile);
 const root = await mkdtemp(join(tmpdir(), "postbeacon-agent-db-"));
@@ -284,6 +286,8 @@ try {
   const missionChecks = await verifyAgentMissions({ sql, file });
   const workspaceChecks = await verifyWorkspaceOwnership({ sql, file });
   const usageChecks = await verifyAtomicUsage({ sql, file });
+  const bufferConnectionChecks = await verifyBufferConnections({ sql, file });
+  const bufferDeliveryChecks = await verifyBufferDeliveries({ sql, file });
   console.log(
     JSON.stringify(
       {
@@ -312,6 +316,8 @@ try {
           ...missionChecks,
           ...workspaceChecks,
           ...usageChecks,
+          ...bufferConnectionChecks,
+          ...bufferDeliveryChecks,
         ],
       },
       null,
