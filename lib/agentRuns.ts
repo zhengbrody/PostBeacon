@@ -42,6 +42,28 @@ export interface AgentRunList {
   runs: AgentRun[];
 }
 
+/** Storage completion is not draft readiness, provider completion or publication. */
+export function agentRunLabel(run: AgentRun): string {
+  if (run.interrupted) return "Interrupted — review receipt";
+  if (run.status === "ready") {
+    if (run.autonomous && run.searchReceipt?.status === "no-results")
+      return "Finished — no search matches";
+    if (run.autonomous && run.searchReceipt?.status === "no-eligible-results")
+      return "Finished — no allowed sources";
+    if (run.autonomous && run.searchReceipt?.status === "no-verified-sources")
+      return "Finished — sources not verified";
+    return run.research?.opportunities.length
+      ? "Drafts need your review"
+      : "Finished — no draft";
+  }
+  return {
+    queued: "Task saved",
+    running: "In progress",
+    failed: "Stopped — review receipt",
+    cancelled: "Cancelled",
+  }[run.status];
+}
+
 export function publicAgentRun(raw: unknown, now = Date.now()): AgentRun | undefined {
   const row = asRecord(raw),
     payload = asRecord(row.payload);

@@ -9,7 +9,9 @@ specific product, then generates **ready-to-post** native content + a launch cal
 The plan opens into an action-first growth workspace: one next best move → manual publish →
 24h/72h result → verdict → next experiment. Launch mode becomes Growth mode after the first
 measured publish; weekly completed learning loops are the retention north star.
-**No auto-posting** by design (copy-paste keeps users off platform ban radar).
+**No autonomous social publishing is implemented.** The current flow is manual.
+The owner approved a future Buffer/X/LinkedIn review-then-schedule design, not a
+connected publisher, standing write authorization or permission to post test content.
 
 - Brand: **PostBeacon**, domain **postbeacon.app** (owned). `postbeacon.com` was also
   free at selection time if a `.com` is wanted later. (Renamed from earlier "PostPilot",
@@ -115,7 +117,8 @@ lib/
   export.ts             Launch plan → Markdown / JSON; downloadFile helper
   dates.ts              scheduleDate(launchDate, day) for the calendar
   auth.ts               bearer(req) — read the Supabase token from a request
-  usage.ts              Entitlement read/increment + FREE_LAUNCHES + daily cap (server metering)
+  usage.ts              Service-only atomic daily reservation/success counter; storage
+                        failures close before model spend; new usage RPC migration required
   plan.ts               Shared plan shaping: rank ordering, canonical calendar entries (M14)
   today.ts              Workspace engine (M15): Today derivation (≤3 actions), 24h/72h
                         check-in due logic, one primary move + collapsed alternatives,
@@ -135,6 +138,8 @@ lib/
                          verified facts and reviewed-context trial provenance; not AgentRun jobs
   trialBrief.ts          Editable three-question CMO Brief suggestions, not feature evidence
   trialDraftSafety.ts    Actual platform/post-index trial exit checks shared by Today/library
+  trialEditorial.ts      Deterministic repeated-opening/internal-ID/platform-budget exits;
+                         preserves rejected text for explicit review, never silent repair
   opportunityResearchServer.ts Explicit source-only safe fetch and single-request provider
                               orchestration; quote verification is not demand/rules review
   agentRuns.ts                Owner-visible job receipts, bounded status projection; no fake progress
@@ -366,6 +371,46 @@ cross-origin 403. Aggregate product-health reporting is operator-only at `/api/m
 Redeploy: `npx vercel --prod --yes`. Push env from `.env.local`: `~/push-env.sh`.
 
 ## Status / changelog
+- **2026-10-26 evening**: **C.4 local hardening accepted; NOT deployed.**
+  Two implementation agents plus a separate read-only reviewer closed confirmed
+  P1 cross-owner workspace parent attachment and racy/fail-open legacy daily usage,
+  plus P2 silent dispatcher outages, stale A→B→A busy locks and partial account-config
+  fail-open behavior. Additive ownership/usage migrations and 7+4 read-only audit
+  rows are ready, not installed in production. New metering code must not be pushed
+  before its RPC installation/audit; code-release approval alone is insufficient.
+  Autonomous source fetching permits at most two approved same-origin redirects
+  with per-hop capability/SSRF/DNS checks; explicit sources remain redirect-free.
+  Repeated hook/internal evidence-ID leaks and oversized trial segments block all
+  relevant exits without overwriting history; obvious private Fact IDs also reject
+  public delegation before spend. Agent inbox distinguishes draft proposals from
+  no-source/no-draft receipts and refreshes on return without starting paid work.
+  Empty first launches no longer claim completion. Base schema alone preserves
+  project-first deletion locking after Agent installation. Node 24: 877 offline
+  tests pass, three live skipped; typecheck/lint/format/build pass, dependency audit
+  reports zero known advisories. Root and independent reviewer each verified the
+  disposable PostgreSQL harness: 50 scenario groups pass, productionTouched=false.
+  Built-app fictional 1280×720/375×812 browser QA verifies authorization/check/pause,
+  trial review/dual-confirm/Today, editorial exit blocking, no horizontal overflow
+  and no captured warnings/errors. No new paid call, production SQL/env change,
+  deployment or real social operation. Buffer remains a reviewed design, not an
+  implemented connection. Natural cron/real expiry/two-account/provider acceptance
+  and new SQL authorization remain release gates; billing stays off. See
+  `docs/M26.C4-beta-hardening-and-distribution.md` for exact scope and blockers.
+- **2026-10-26 afternoon**: **Search connected; no-source safety path accepted.**
+  Production `SEARCH_API_KEY` is now a Secret in the correct project; no value
+  was retrieved. Reviewed `8ad345d` (CI `40294741291` green) was redeployed as
+  `dpl_6hCGTVH7Niv4obDT3bF77i654Cis`, Ready, 108s build, production aliases assigned.
+  Six public smoke gates and four mission auth/origin/operator probes passed;
+  bounded five-minute error/fatal scan returned zero records. Separately approved
+  one-query Tavily Basic acceptance on the public/synthetic QA project returned
+  five results, two candidates, both source reads excluded, `no-verified-sources`.
+  No OpenAI request was reserved, no invitation invented. Both Buffer candidate
+  URLs return a same-host trailing-slash 301; the zero-redirect source boundary
+  correctly refuses them but needs a separately tested compatibility repair.
+  Test mission paused at revision 2; refresh restores pause and history. No paid
+  retry, application-code change, social publication or DeepSeek call. Successful
+  source-to-model, natural cron, real expiry and two-account acceptance remain.
+  See the afternoon acceptance section in `docs/M26.C3-daily-research-pilot.md`.
 - **2026-10-26**: **C.3 Beta released; persistent Agent on, daily search fail-closed.**
   User approved production installation/enablement and one public-data acceptance
   (at most three Tavily searches and one OpenAI request). `4f20213` passed CI

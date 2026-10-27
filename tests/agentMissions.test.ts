@@ -218,6 +218,33 @@ describe("daily mission authorization and projections", () => {
 });
 
 describe("saved context, owner and revocation boundaries", () => {
+  it.each([
+    ["budget_exhausted", false],
+    ["revision_conflict", false],
+    ["storage offline", true],
+  ])("does not hide dispatcher failure %s as an expected skip", async (message, failed) => {
+    const store = db();
+    const from = store.sb.from.bind(store.sb);
+    store.sb.from = vi.fn((table: string) => {
+      if (table !== "agent_missions") return from(table);
+      const q = {
+        select: () => q,
+        eq: () => q,
+        gt: () => q,
+        or: () => q,
+        order: () => q,
+        limit: async () => ({ data: [missionRow], error: null }),
+        update: () => q,
+        then: (resolve: (value: { error: null }) => unknown) =>
+          Promise.resolve({ error: null }).then(resolve),
+      };
+      return q as unknown as ReturnType<SupabaseClient["from"]>;
+    });
+    store.rpc.mockResolvedValue({ data: null, error: { message } } as never);
+    expect(await reserveDueAgentMissions(store.sb)).toEqual(
+      failed ? { reserved: [], skipped: 0, failed: 1 } : { reserved: [], skipped: 1 }
+    );
+  });
   it("reads by project and verified owner rather than browser state", async () => {
     const store = db();
     expect((await readAgentMission(store.sb, "owner", projectId))?.id).toBe(missionId);

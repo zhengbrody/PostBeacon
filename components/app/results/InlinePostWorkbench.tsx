@@ -357,7 +357,7 @@ export function InlinePostWorkbench({
         </div>
       </div>
 
-      <DraftSafetyNotice report={safety} />
+      {(!safety.ready || !trialStale) && <DraftSafetyNotice report={safety} />}
       {trialStale && (
         <p
           role="alert"

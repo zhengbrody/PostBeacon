@@ -69,6 +69,10 @@ describe("autonomous task receipts stay distinct from source-free product drafts
     expect(value).toContain("not evidence of no demand");
     expect(value).toContain("0 results");
     expect(value).toContain("No model request reserved");
+    expect(value).toContain("Finished — no search matches");
+    expect(value).toContain("model not called");
+    expect(value).toContain("Agent inbox");
+    expect(value).toContain("not email, device push or social publication");
     expect(value).not.toContain("Review research");
   });
   it("uses research-specific resume wording before a search has been attempted", () => {

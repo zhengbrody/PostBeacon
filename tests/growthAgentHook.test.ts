@@ -24,6 +24,76 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllGlobals());
 describe("Agent hook owner/project boundary", () => {
+  it("does not strand busy state when returning A→B→A before an aborted command settles", async () => {
+    const gate = deferred<AgentRunList["runs"][number]>();
+    calls.agentCommand.mockReturnValue(gate.promise);
+    const hook = await mountHook<string, ReturnType<typeof useGrowthAgent>>(
+      (project) => useGrowthAgent("owner", project, false),
+      "A"
+    );
+    let command: Promise<void> | undefined;
+    try {
+      await act(async () => {
+        command = hook.current.start(input, "openai", "context", false);
+      });
+      expect(hook.current.busy).toBe(true);
+      await hook.render("B");
+      await hook.render("A");
+      expect(hook.current.busy).toBe(false);
+    } finally {
+      await act(async () => {
+        gate.resolve({ id: "old", projectId: "A" } as AgentRunList["runs"][number]);
+        await command;
+      });
+      await hook.unmount();
+    }
+  });
+  it("refreshes background receipts when returning to the page without starting work", async () => {
+    const hook = await mountHook(
+      () => useGrowthAgent("owner", "project", false),
+      undefined
+    );
+    try {
+      expect(calls.agentRuns).toHaveBeenCalledTimes(1);
+      await act(async () => {
+        window.dispatchEvent(new Event("focus"));
+      });
+      expect(calls.agentRuns).toHaveBeenCalledTimes(2);
+      expect(calls.agentCommand).not.toHaveBeenCalled();
+    } finally {
+      await hook.unmount();
+    }
+  });
+  it("ignores a pre-command list response instead of overwriting the command receipt", async () => {
+    const read = deferred<AgentRunList>();
+    calls.agentRuns.mockReturnValueOnce(read.promise);
+    const commandGate = deferred<AgentRunList["runs"][number]>();
+    calls.agentCommand.mockReturnValue(commandGate.promise);
+    const hook = await mountHook(
+      () => useGrowthAgent("owner", "project", false),
+      undefined
+    );
+    let command: Promise<void> | undefined;
+    try {
+      await act(async () => {
+        command = hook.current.start(input, "openai", "context", false);
+      });
+      await act(async () => {
+        read.resolve({ enabled: false, runs: [] });
+      });
+      expect(hook.current.enabled).toBe(false);
+      expect(calls.agentRuns.mock.calls[0][2].aborted).toBe(true);
+    } finally {
+      await act(async () => {
+        commandGate.resolve({
+          id: "current",
+          projectId: "project",
+        } as AgentRunList["runs"][number]);
+        await command;
+      });
+      await hook.unmount();
+    }
+  });
   it("does not let an aborted A→B→A command unlock a newer command", async () => {
     const oldGate = deferred<AgentRunList["runs"][number]>();
     const newGate = deferred<AgentRunList["runs"][number]>();

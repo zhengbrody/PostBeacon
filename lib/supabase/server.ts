@@ -10,6 +10,12 @@ const SERVICE = process.env.SUPABASE_SERVICE_ROLE_KEY;
 let client: SupabaseClient | null = null;
 let verifier: SupabaseClient | null = null;
 
+/** Only a genuinely unconfigured app may use keyless mode. A missing URL must
+ * not turn remaining account credentials into anonymous model access. */
+export function authConfigurationPresent(): boolean {
+  return Boolean(URL || ANON || SERVICE);
+}
+
 /** Login can be enforced server-side whenever the public Supabase keys exist. */
 export function authConfigured(): boolean {
   return !!(URL && ANON);

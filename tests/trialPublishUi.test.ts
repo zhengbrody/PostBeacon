@@ -111,6 +111,27 @@ async function mountInline(
 }
 
 describe("reviewed product-trial draft exits", () => {
+  it("does not show a green passed notice when the trial editorial gate blocks", async () => {
+    const ui = await mountInline({
+      content: {
+        ...content,
+        posts: [
+          {
+            ...content.posts[0],
+            body: `${content.posts[0].body}\n\n[tagline]`,
+          },
+        ],
+      },
+    });
+    try {
+      expect(ui.container.textContent).toContain("Internal evidence IDs");
+      expect(ui.container.textContent).not.toContain("Truth check passed");
+      expect(ui.button("Copy draft").disabled).toBe(true);
+      expect(ui.button("I published it →").disabled).toBe(true);
+    } finally {
+      await ui.close();
+    }
+  });
   it("selects an appended reviewed invitation without claiming a hook-only change", async () => {
     const ui = await mountInline({ plan: undefined, trialPlans: [] });
     try {

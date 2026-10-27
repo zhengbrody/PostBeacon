@@ -5,6 +5,7 @@ import { apiError } from "@/lib/validate";
 import { getServiceSupabase } from "@/lib/supabase/server";
 import { agentMissionsEnabled, reserveDueAgentMissions } from "@/lib/agentMissionServer";
 import { executeAgentRun } from "@/lib/agentRunServer";
+import { logError } from "@/lib/log";
 
 export const maxDuration = 60;
 export const dynamic = "force-dynamic";
@@ -19,11 +20,28 @@ export async function GET(req: NextRequest) {
     const sb = getServiceSupabase();
     if (!sb)
       throw new PublicError("Daily research requires verified persistent storage.", 503);
-    const { reserved, skipped } = await reserveDueAgentMissions(sb);
+    const { reserved, skipped, failed = 0 } = await reserveDueAgentMissions(sb);
     if (reserved.length)
       after(async () => {
         await Promise.all(reserved.map((run) => executeAgentRun(sb, run.userId, run.id)));
       });
+    if (failed) {
+      logError(
+        "agent-missions.dispatch",
+        new Error("Some due tasks could not be reserved.")
+      );
+      return json(
+        {
+          enabled: true,
+          reserved: reserved.length,
+          skipped,
+          failed,
+          error:
+            "Some daily checks could not be reserved. Reserved tasks will still be processed; no automatic retry.",
+        },
+        503
+      );
+    }
     return json({ enabled: true, reserved: reserved.length, skipped });
   } catch (error) {
     return apiError(error, "Daily research dispatch failed. No automatic retry.");

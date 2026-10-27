@@ -3,6 +3,7 @@ import { asRecord, asRecordList, asString } from "./coerce";
 import { assertPublicHttpUrl } from "./urlPolicy";
 import { auditDraftSafety } from "./contentSafety";
 import { PLATFORMS } from "./platforms";
+import { trialEditorialIssues } from "./trialEditorial";
 import type {
   Fact,
   OpportunityResearch,
@@ -291,17 +292,37 @@ export function trialSafety(
     profile
   );
   issues.push(...instructionSafety.issues.map((issue) => issue.title));
-  issues.push(...trialPublicationIssues(research.input, opportunity.draft, bannedClaims));
+  issues.push(
+    ...trialPublicationIssues(
+      {
+        ...research.input,
+        factIds: opportunity.factIds,
+        source: research.sources.find((source) => source.id === opportunity.sourceId),
+      },
+      opportunity.draft,
+      bannedClaims,
+      research.input.platformId
+    )
+  );
   return [...new Set(issues)];
 }
 
 /** Re-run after queued drafts are edited; approved entry/claim boundaries persist. */
 export function trialPublicationIssues(
-  trial: Pick<TrialOpportunitySnapshot, "entryUrl" | "task" | "steps" | "feedbackQuestion">,
+  trial: Pick<
+    TrialOpportunitySnapshot,
+    "entryUrl" | "task" | "steps" | "feedbackQuestion"
+  > &
+    Partial<Pick<TrialOpportunitySnapshot, "factIds" | "source">>,
   draft: Pick<PlatformPost, "hook" | "body">,
-  bannedClaims: string[] = []
+  bannedClaims: string[] = [],
+  platformId?: string
 ): string[] {
-  const issues: string[] = [];
+  const issues = trialEditorialIssues(
+    draft,
+    [...(trial.factIds ?? []), ...(trial.source ? [trial.source.id] : [])],
+    platformId
+  );
   const proposedText = [
     draft.hook,
     draft.body,
@@ -379,7 +400,7 @@ export function normalizeTrialSnapshot(raw: unknown): TrialOpportunitySnapshot |
       audience,
       ...(contextKey ? { contextKey } : {}),
       ...(item.mode === undefined ? {} : { mode: item.mode }),
-      ...(productLed ? { factIds } : {}),
+      ...(factIds.length ? { factIds } : {}),
       ...(productLed
         ? {}
         : {

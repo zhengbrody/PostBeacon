@@ -1,8 +1,9 @@
 import * as cheerio from "cheerio";
 import { renderUrl, renderConfigured } from "./render";
-import { PublicError } from "./errors";
+import { BlockedUrlError, PublicError } from "./errors";
 import { assertPublicHttpUrl } from "./urlPolicy";
 import { safeFetch } from "./safeFetch";
+import { autonomousSourceUrl, normalizeApprovedDomain } from "./autonomousResearch";
 
 export interface ScrapedPage {
   url: string;
@@ -64,13 +65,19 @@ function looksEmpty(page: ScrapedPage): boolean {
   return page.text.length < 400 && page.headings.length === 0;
 }
 
-async function fetchStatic(url: string, timeoutMs = 15000, maxRedirects = 3) {
+async function fetchStatic(
+  url: string,
+  timeoutMs = 15000,
+  maxRedirects = 3,
+  assertAllowedUrl?: (url: string) => void
+) {
   const res = await safeFetch(url, {
     headers: {
       "User-Agent": "Mozilla/5.0 (compatible; PostBeaconBot/1.0; +https://postbeacon.app)",
     },
     timeoutMs,
     maxRedirects,
+    ...(assertAllowedUrl ? { assertAllowedUrl } : {}),
     maxBytes: 2_000_000,
     // A landing page must be text; anything else (pdf, zip, image) is useless
     // to the extractor and shouldn't be pulled at all.
@@ -121,9 +128,46 @@ export async function scrapeUrl(rawUrl: string): Promise<ScrapedPage> {
   }
 }
 
-/** Explicit research sources never invoke a paid renderer or crawl neighbors. */
-export async function scrapeStaticSource(url: string): Promise<ScrapedPage> {
-  // No redirect may transfer this permission to a different/restricted host.
-  const response = await fetchStatic(assertPublicHttpUrl(url).toString(), 8000, 0);
+/** Explicit sources keep zero redirects. Autonomous exact-host authorization may
+ * follow two same-origin canonical redirects; neither mode invokes a renderer. */
+export async function scrapeStaticSource(
+  url: string,
+  options?: { approvedDomains: readonly string[] }
+): Promise<ScrapedPage> {
+  const initial = assertPublicHttpUrl(url);
+  let assertAllowedUrl: ((url: string) => void) | undefined;
+  if (options) {
+    const domains = [...options.approvedDomains];
+    if (
+      !domains.length ||
+      domains.some((domain) => normalizeApprovedDomain(domain) !== domain)
+    )
+      throw new BlockedUrlError("Approve exact public source hostnames first.");
+    const visited = new Set<string>();
+    // URL.search/hash omit empty delimiters; those are not part of a public
+    // source capability either, even if they contain no value yet.
+    const permittedSource = (candidate: string) =>
+      /[?#]/.test(candidate) ? undefined : autonomousSourceUrl(candidate, domains);
+    const check = (candidate: string) => {
+      const permitted = permittedSource(candidate);
+      if (!permitted || new URL(permitted).origin !== initial.origin)
+        throw new BlockedUrlError(
+          "This source redirect is outside the approved public origin."
+        );
+      if (visited.has(permitted))
+        throw new BlockedUrlError("This source redirects in a loop.");
+      visited.add(permitted);
+    };
+    // Enforce approval before handing the initial URL to any network seam.
+    if (!permittedSource(initial.toString()))
+      throw new BlockedUrlError("This source is outside the approved public hosts.");
+    assertAllowedUrl = check;
+  }
+  const response = await fetchStatic(
+    initial.toString(),
+    8000,
+    options ? 2 : 0,
+    assertAllowedUrl
+  );
   return extract(response.body, response.finalUrl, false, response.truncated);
 }

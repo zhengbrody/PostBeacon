@@ -1,6 +1,6 @@
 import http from "node:http";
 import type { AddressInfo } from "node:net";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { safeFetch, type SafeFetchOptions } from "@/lib/safeFetch";
 import { BlockedUrlError, PublicError } from "@/lib/errors";
 
@@ -52,6 +52,12 @@ beforeAll(async () => {
     } else if (url === "/loop") {
       res.writeHead(302, { location: "/loop" });
       res.end();
+    } else if (/^\/chain\/[0-2]$/.test(url)) {
+      res.writeHead(301, { location: `/chain/${Number(url.at(-1)) + 1}` });
+      res.end();
+    } else if (url === "/chain/3") {
+      res.writeHead(200, { "content-type": "text/html" });
+      res.end("<html><body>third redirect must not be followed</body></html>");
     } else if (url === "/big") {
       res.writeHead(200, { "content-type": "text/html" });
       res.end("x".repeat(100_000));
@@ -96,6 +102,63 @@ describe("safeFetch", () => {
     const abs = await safeFetch(`${base()}/absolute-redir`, seams);
     expect(abs.body).toContain("hello");
   });
+  it("applies a stricter capability boundary to initial and redirected URLs", async () => {
+    const urls: string[] = [];
+    const response = await safeFetch(`${base()}/redir`, {
+      ...seams,
+      assertAllowedUrl: (url) => {
+        urls.push(url);
+      },
+    });
+    expect(response.status).toBe(200);
+    expect(urls).toEqual([`${base()}/redir`, `${base()}/ok`]);
+  });
+  it("rejects an unapproved initial URL before DNS lookup", async () => {
+    const lookupFn = vi.fn(localLookup);
+    await expect(
+      safeFetch(`${base()}/ok`, {
+        ...seams,
+        lookupFn: lookupFn as unknown as SafeFetchOptions["lookupFn"],
+        assertAllowedUrl: () => {
+          throw new BlockedUrlError("Outside capability");
+        },
+      })
+    ).rejects.toThrow(BlockedUrlError);
+    expect(lookupFn).not.toHaveBeenCalled();
+  });
+  it("rejects an unapproved redirect before its DNS lookup or connection", async () => {
+    const lookupFn = vi.fn(localLookup);
+    await expect(
+      safeFetch(`${base()}/redir`, {
+        ...seams,
+        lookupFn: lookupFn as unknown as SafeFetchOptions["lookupFn"],
+        assertAllowedUrl: (url) => {
+          if (new URL(url).pathname !== "/redir")
+            throw new BlockedUrlError("Outside capability");
+        },
+      })
+    ).rejects.toThrow(BlockedUrlError);
+    expect(lookupFn).toHaveBeenCalledOnce();
+  });
+  it("revalidates DNS on an approved redirect instead of trusting the first connection", async () => {
+    let lookups = 0;
+    const lookupFn = ((_hostname: string, options: unknown, cb: unknown) => {
+      lookups++;
+      const callback = (typeof options === "function" ? options : cb) as (
+        error: null,
+        addresses: { address: string; family: number }[]
+      ) => void;
+      callback(null, [{ address: lookups === 1 ? "127.0.0.1" : "10.0.0.1", family: 4 }]);
+    }) as unknown as SafeFetchOptions["lookupFn"];
+    await expect(
+      safeFetch(`${base()}/redir`, {
+        ...seams,
+        lookupFn,
+        assertAllowedUrl: () => undefined,
+      })
+    ).rejects.toThrow(BlockedUrlError);
+    expect(lookups).toBe(2);
+  });
 
   it("blocks a redirect into cloud metadata", async () => {
     await expect(safeFetch(`${base()}/meta`, seams)).rejects.toThrow(BlockedUrlError);
@@ -111,6 +174,19 @@ describe("safeFetch", () => {
     await expect(
       safeFetch(`${base()}/loop`, { ...seams, maxRedirects: 2 })
     ).rejects.toThrow(/redirects too many times/);
+  });
+  it("does not fetch the third redirect destination under the two-hop source budget", async () => {
+    const urls: string[] = [];
+    await expect(
+      safeFetch(`${base()}/chain/0`, {
+        ...seams,
+        maxRedirects: 2,
+        assertAllowedUrl: (url) => {
+          urls.push(url);
+        },
+      })
+    ).rejects.toThrow(/redirects too many times/);
+    expect(urls).toEqual([`${base()}/chain/0`, `${base()}/chain/1`, `${base()}/chain/2`]);
   });
 
   it("truncates the body at maxBytes", async () => {

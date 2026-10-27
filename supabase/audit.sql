@@ -82,7 +82,7 @@ expected_fks(child_schema, child_table, parent_schema, parent_table) as (
     ('public', 'tasks', 'public', 'campaigns')
 ),
 cascade_fks as (
-  select
+  select distinct
     child_ns.nspname as child_schema,
     child.relname as child_table,
     parent_ns.nspname as parent_schema,

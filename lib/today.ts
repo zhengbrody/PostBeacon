@@ -45,7 +45,7 @@ const CUSTOM_MINUTES = 15;
 
 export interface TodayAction {
   id: string; // stable across renders — TaskRecord references it
-  kind: "record" | "post" | "prepare" | "custom" | "review";
+  kind: "record" | "post" | "prepare" | "custom" | "review" | "research";
   title: string;
   whyNow: string;
   estMinutes: number;
@@ -264,12 +264,16 @@ export function deriveToday(plan: PlanSlice, now: Date): TodayView {
     actions.push(u);
   }
   if (actions.length === 0) {
+    const firstExperiment = workspace.experiments.length === 0;
     actions.push({
-      id: "review:week",
-      kind: "review",
-      title: "All caught up — read your weekly review",
-      whyNow:
-        "Every planned post is out and every check-in is recorded. The review shows what your loops learned this week.",
+      id: firstExperiment ? "research:first" : "review:week",
+      kind: firstExperiment ? "research" : "review",
+      title: firstExperiment
+        ? "Prepare your first product trial"
+        : "Review your experiment progress",
+      whyNow: firstExperiment
+        ? "No publish has been recorded. Use Growth Agent to prepare a trial, review its evidence and draft, then choose whether to publish. An empty queue is not a completed launch."
+        : "No scheduled action is due right now. Review recorded results and pending experiments; a check that is still waiting is not a completed learning loop.",
       estMinutes: RECORD_MINUTES,
       due: false,
     });
@@ -713,7 +717,7 @@ export function buildBriefing(plan: PlanSlice, now: Date): Briefing {
       }): ${due.map((a) => a.title).join(" · ")}`
     );
   } else {
-    lines.push("Today: all caught up — nothing due.");
+    lines.push(`Today: no scheduled action due. ${today.primaryAction.title}.`);
   }
 
   if (today.dueRecordCount > 0) {

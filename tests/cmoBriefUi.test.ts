@@ -384,7 +384,7 @@ describe("visible task-first CMO workbench", () => {
       )!;
       await act(async () => consent.click());
       expect(ui.button("Prepare my trial kit").disabled).toBe(false);
-      await act(async () => ui.button("Review research").click());
+      await act(async () => ui.button("Review draft proposals").click());
       expect(consent.checked).toBe(false);
       expect(ui.button("Prepare my trial kit").disabled).toBe(true);
       expect(ui.props.onReviewAgent).toHaveBeenCalledWith("saved-run");

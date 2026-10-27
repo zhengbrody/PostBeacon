@@ -122,7 +122,9 @@ export function PostCard({
       )}
 
       <div className="no-print mt-4">
-        <DraftSafetyNotice report={safety} />
+        {(!safety.ready || trialIssues.length === 0) && (
+          <DraftSafetyNotice report={safety} />
+        )}
         {trialIssues.length > 0 && (
           <p role="alert" className="mt-2 text-xs text-amber-200">
             Trial review required: {trialIssues.join(" ")}

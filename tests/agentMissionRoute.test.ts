@@ -196,4 +196,21 @@ describe("bounded operator dispatcher", () => {
     expect(seam.execute).toHaveBeenCalledWith({}, "owner-a", "run-a");
     expect(seam.execute).toHaveBeenCalledWith({}, "owner-b", "run-b");
   });
+  it("signals partial dispatcher failure but still processes successfully reserved jobs", async () => {
+    seam.due.mockResolvedValue({
+      reserved: [{ id: "reserved", userId: "owner" }],
+      skipped: 0,
+      failed: 1,
+    });
+    const response = await tick(tickRequest("operator-secret"));
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({
+      enabled: true,
+      reserved: 1,
+      skipped: 0,
+      failed: 1,
+    });
+    await seam.after.mock.calls[0][0]();
+    expect(seam.execute).toHaveBeenCalledWith({}, "owner", "reserved");
+  });
 });

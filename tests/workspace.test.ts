@@ -96,6 +96,16 @@ const plan = (workspace: WorkspaceState, launchDate = "2026-07-10") => ({
 });
 
 describe("deriveToday", () => {
+  it("does not label an empty first-launch queue as a completed launch", () => {
+    const view = deriveToday(
+      { strategy, result: { content: [], schedule: [] }, workspace: ws() },
+      NOW
+    );
+    expect(view.primaryAction.kind).toBe("research");
+    expect(view.primaryAction.title).toContain("first product trial");
+    expect(view.primaryAction.whyNow).toContain("No publish has been recorded");
+    expect(view.primaryAction.whyNow).not.toContain("Every planned post is out");
+  });
   it("never shows more than 3 actions", () => {
     const view = deriveToday(plan(ws()), NOW);
     expect(view.actions.length).toBeLessThanOrEqual(MAX_TODAY_ACTIONS);
@@ -196,7 +206,7 @@ describe("deriveToday", () => {
     expect(second?.platformId).toBe(P0);
   });
 
-  it("all caught up → a single review pointer", () => {
+  it("legacy done markers alone do not prove a published experiment", () => {
     const done = (id: string) => ({
       id,
       kind: "post" as const,
@@ -210,7 +220,7 @@ describe("deriveToday", () => {
       NOW
     );
     expect(view.actions).toHaveLength(1);
-    expect(view.actions[0].kind).toBe("review");
+    expect(view.actions[0].kind).toBe("research");
   });
 
   it("budget line sums only due actions against the weekly budget", () => {

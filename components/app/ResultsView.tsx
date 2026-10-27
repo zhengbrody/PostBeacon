@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { Tabs, type TabDef } from "@/components/ui/Tabs";
 import { Card } from "@/components/ui/Card";
@@ -158,6 +158,7 @@ export function ResultsView({
   ) => void;
 }) {
   const [surface, setSurface] = useState<Surface>("today");
+  const agentEntry = useRef<HTMLDivElement>(null);
   const [publishFor, setPublishFor] = useState<{
     platformId: string;
     postIdx: number;
@@ -523,7 +524,12 @@ export function ResultsView({
       {surface === "today" &&
         !printing &&
         (profile && workspace.successContract && productUrl && (demo || projectId) ? (
-          <>
+          <div
+            ref={agentEntry}
+            tabIndex={-1}
+            aria-label="Growth Agent workbench"
+            className="space-y-4"
+          >
             <DailyResearchMission
               key={`daily:${ownerId ?? ""}:${projectId}:${demo}`}
               ownerId={ownerId}
@@ -561,7 +567,7 @@ export function ResultsView({
                 setFocusedPlanId(opportunityId);
               }}
             />
-          </>
+          </div>
         ) : (
           <Card className="p-5 sm:p-6">
             <p className="text-xs font-semibold uppercase tracking-wider text-accent-300">
@@ -608,6 +614,15 @@ export function ResultsView({
           onDoneCustom={doneCustom}
           onOpenContent={() => setSurface("plan")}
           onOpenReview={() => setSurface("review")}
+          onOpenAgent={() => {
+            if (!agentEntry.current) {
+              if (!workspace.successContract || !profile || !productUrl) onCompleteSetup();
+              else void onSaveProject();
+              return;
+            }
+            agentEntry.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+            agentEntry.current?.focus({ preventScroll: true });
+          }}
           onAskCopilot={(action, direction, postIdx) => {
             if (demo) return demoOnlyNotice("Copilot");
             onAskCopilot(

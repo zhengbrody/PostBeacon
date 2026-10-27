@@ -6,6 +6,7 @@ import {
 } from "@/lib/autonomousResearchServer";
 import { searchApprovedPublicSources, searchWeb } from "@/lib/search";
 import { researchContextKey } from "@/lib/opportunityResearch";
+import { opportunityResearchBodySchema } from "@/lib/validate";
 
 const calls = vi.hoisted(() => ({ fetch: vi.fn(), model: vi.fn(), scrape: vi.fn() }));
 vi.mock("@/lib/fetch", () => ({ fetchWithTimeout: calls.fetch }));
@@ -166,6 +167,15 @@ describe("strict bounded search transport", () => {
 });
 
 describe("search to independently verified trial research", () => {
+  it("strips forged autonomous redirect capability from one-off browser input", () => {
+    const request = args();
+    const body = opportunityResearchBodySchema.parse({
+      ...request,
+      approvedSourceDomains: ["example.org"],
+    });
+    expect(body).not.toHaveProperty("approvedSourceDomains");
+    expect(body).not.toHaveProperty("search");
+  });
   it("refuses a different provider before search or model spend even if runtime input bypasses TypeScript", async () => {
     const request = args();
     // @ts-expect-error Deliberately exercise the runtime provider boundary.
@@ -185,7 +195,9 @@ describe("search to independently verified trial research", () => {
     expect(hooks.beforeSearch.mock.invocationCallOrder[0]).toBeLessThan(
       calls.fetch.mock.invocationCallOrder[0]
     );
-    expect(calls.scrape).toHaveBeenCalledExactlyOnceWith("https://example.org/jobs");
+    expect(calls.scrape).toHaveBeenCalledExactlyOnceWith("https://example.org/jobs", {
+      approvedDomains: ["example.org"],
+    });
     expect(hooks.beforeModel.mock.invocationCallOrder[0]).toBeLessThan(
       calls.model.mock.invocationCallOrder[0]
     );
@@ -299,13 +311,14 @@ describe("search to independently verified trial research", () => {
     expect(calls.model).toHaveBeenCalledOnce();
     expect(calls.fetch).toHaveBeenCalledOnce();
   });
-  it.each(["query", "fact", "brief", "entry"])(
+  it.each(["query", "fact", "fact-id", "brief", "entry"])(
     "rejects private %s data before spend",
     async (kind) => {
       const request = args();
       if (kind === "query") request.search.queries = ["Email owner@example.org"];
       if (kind === "fact")
         request.facts[0].claim = "Contact owner@example.org for this feature";
+      if (kind === "fact-id") request.facts[0].id = "private@example.org";
       if (kind === "brief") request.input.audience = "People following @someone";
       if (kind === "entry") request.input.entryUrl += "?email=owner%40example.org";
       await expect(runAutonomousResearch(request, progress())).rejects.toMatchObject({

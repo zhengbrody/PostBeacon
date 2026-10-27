@@ -22,13 +22,17 @@ export function useGrowthAgent(
     checked: boolean;
     error: string;
   }>({ scope, runs: [], enabled: false, checked: false, error: "" });
-  const [busyScope, setBusyScope] = useState<string | null>(null);
+  const [busyCommand, setBusyCommand] = useState<{
+    scope: string;
+    controller: AbortController;
+  } | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const pending = useRef<{ scope: string; fingerprint: string; requestId: string } | null>(
     null
   );
   const inFlight = useRef(false);
   const commands = useRef<AbortController | null>(null);
+  const readsController = useRef<AbortController | null>(null);
   const runs = snapshot.scope === scope ? snapshot.runs : [];
   const enabled = snapshot.scope === scope && snapshot.enabled;
   const error = snapshot.scope === scope ? snapshot.error : "";
@@ -36,12 +40,34 @@ export function useGrowthAgent(
 
   useEffect(() => {
     commands.current?.abort();
+    commands.current = null;
     pending.current = null;
     inFlight.current = false;
   }, [scope]);
 
+  // Returning to a visible page reads jobs created by the scheduler while away.
+  // This never authorizes or starts a search/model request.
+  useEffect(() => {
+    if (!ownerId || !projectId || demo) return;
+    let lastRefresh = 0;
+    const onReturn = () => {
+      if (document.visibilityState === "hidden" || inFlight.current) return;
+      const now = Date.now();
+      if (now - lastRefresh < 1000) return;
+      lastRefresh = now;
+      refresh();
+    };
+    window.addEventListener("focus", onReturn);
+    document.addEventListener("visibilitychange", onReturn);
+    return () => {
+      window.removeEventListener("focus", onReturn);
+      document.removeEventListener("visibilitychange", onReturn);
+    };
+  }, [ownerId, projectId, demo, refresh]);
+
   useEffect(() => {
     const controller = new AbortController();
+    readsController.current = controller;
     if (!ownerId || !projectId || demo) return () => controller.abort();
     let timer: ReturnType<typeof setTimeout> | undefined;
     let reads = 0;
@@ -85,10 +111,11 @@ export function useGrowthAgent(
     if (!ownerId || !projectId || demo || inFlight.current) return;
     const capturedScope = scope;
     const controller = new AbortController();
+    readsController.current?.abort();
     commands.current?.abort();
     commands.current = controller;
     inFlight.current = true;
-    setBusyScope(scope);
+    setBusyCommand({ scope, controller });
     try {
       const run = await api.agentCommand(body, ownerId, controller.signal);
       if (current.current !== capturedScope || controller.signal.aborted) return;
@@ -118,7 +145,7 @@ export function useGrowthAgent(
       // aborted command settles. Only the current command may release its lock.
       if (current.current === capturedScope && commands.current === controller) {
         inFlight.current = false;
-        setBusyScope(null);
+        setBusyCommand(null);
       }
     }
   };
@@ -148,7 +175,7 @@ export function useGrowthAgent(
       ownerId && projectId && !demo && (snapshot.scope !== scope || !snapshot.checked)
     ),
     error,
-    busy: busyScope === scope,
+    busy: Boolean(busyCommand?.scope === scope && !busyCommand.controller.signal.aborted),
     refresh,
     start,
     cancel: (runId: string) => command({ action: "cancel", runId }),

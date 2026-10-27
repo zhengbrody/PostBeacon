@@ -209,6 +209,40 @@ describe("bounded, source-first opportunity research", () => {
     });
     expect((await runOpportunityResearch(args())).opportunities).toEqual([]);
   });
+  it("keeps repeated model copy reviewable but blocks its copy/queue gate without retrying", async () => {
+    const body = `${invitation.hook}\n\n${invitation.body}`;
+    calls.model.mockResolvedValue({
+      data: { opportunities: [{ ...invitation, body }] },
+      meta: { provider: "openai", model: "test-model" },
+    });
+    const research = await runOpportunityResearch(args());
+    expect(research.opportunities).toHaveLength(1);
+    expect(research.opportunities[0].draft.body).toBe(body);
+    expect(trialSafety(research, research.opportunities[0].id, facts, profile)).toContain(
+      "The body repeats the opening hook. Edit the repetition before copying or adding this trial."
+    );
+    expect(calls.model).toHaveBeenCalledOnce();
+    expect(calls.model.mock.calls[0][0].system).toContain(
+      "Never put internal IDs, citation brackets or evidence labels in hook/body"
+    );
+  });
+  it("rejects leaked internal compound fact IDs without deleting the submitted copy", async () => {
+    const request = args();
+    request.facts = [{ ...facts[0], id: "manual-draft" }];
+    const body = `${invitation.body}\nEvidence: manual-draft`;
+    calls.model.mockResolvedValue({
+      data: { opportunities: [{ ...invitation, factIds: ["manual-draft"], body }] },
+      meta: { provider: "openai", model: "test-model" },
+    });
+    const research = await runOpportunityResearch(request);
+    expect(research.opportunities[0].draft.body).toBe(body);
+    expect(
+      trialSafety(research, research.opportunities[0].id, request.facts, profile)
+    ).toContain(
+      "Internal evidence IDs appear in the invitation. Keep citations in the evidence panel, not public copy."
+    );
+    expect(calls.model).toHaveBeenCalledOnce();
+  });
   it.each([
     "http://127.0.0.1/a",
     "http://169.254.169.254/a",
@@ -496,7 +530,10 @@ describe("review → confirm → independent trial execution", () => {
       status: "ready",
       sourceExperimentId: "",
       venue: "Own X profile",
-      opportunity: { source: { url: input.sources[0].url, rules: "unknown" } },
+      opportunity: {
+        factIds: ["feature"],
+        source: { url: input.sources[0].url, rules: "unknown" },
+      },
     });
     expect(
       deriveToday(
@@ -510,6 +547,17 @@ describe("review → confirm → independent trial execution", () => {
       ).primaryAction.plannedExperimentId
     ).toBe(plan.id);
     expect(flowReducer(state, confirm)).toEqual(state);
+  });
+  it("does not queue a reviewable result containing repeated public copy", () => {
+    const state = withResearch();
+    const draft = state.workspace.opportunityResearch!.opportunities[0].draft;
+    draft.body = `${draft.hook}\n\n${draft.body}`;
+    const next = flowReducer(state, confirm);
+    expect(next).toEqual(state);
+    expect(next.workspace.plannedExperiments ?? []).toEqual([]);
+    expect(next.workspace.opportunityResearch!.opportunities[0].draft.body).toBe(
+      draft.body
+    );
   });
   it("rejects unsafe/overlong/invented copy and unauthorized links at confirmation", () => {
     for (const draft of [

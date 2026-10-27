@@ -35,6 +35,9 @@ export interface SafeFetchOptions {
   maxBytes?: number;
   /** If set and the response HAS a Content-Type, it must match this. */
   contentTypes?: RegExp;
+  /** Optional stricter capability boundary, checked before connecting on the
+   * initial URL and every redirect. Cannot relax URL policy or DNS validation. */
+  assertAllowedUrl?: (url: string) => void;
   /** TEST-ONLY seams — never set these in production code. */
   lookupFn?: typeof dnsLookup;
   isAllowedIp?: (ip: string) => boolean;
@@ -248,6 +251,7 @@ export async function safeFetch(
   let url = assertPublicHttpUrl(rawUrl, policyOpts);
 
   for (let hop = 0; ; hop++) {
+    options.assertAllowedUrl?.(url.toString());
     const remaining = deadline - Date.now();
     if (remaining <= 0) throw new PublicError("Timed out fetching that URL.", 504);
 

@@ -141,7 +141,7 @@ export async function savedMissionSnapshot(
       ...input.steps,
       ...trialProductFacts(payload.facts)
         .slice(0, 20)
-        .map((fact) => fact.claim),
+        .flatMap((fact) => [fact.id, fact.claim]),
       ...(payload.bannedClaims ?? []),
     ].some(containsPrivateResearchText)
   )
@@ -290,23 +290,24 @@ export async function reserveDueAgentMissions(sb: SupabaseClient, now = new Date
   missionStoreError(error);
   const reserved: { id: string; userId: string }[] = [];
   let skipped = 0;
+  let failed = 0;
   for (const raw of data ?? []) {
     const mission = publicAgentMission(raw),
       row = asRecord(raw);
     if (!mission || typeof row.user_id !== "string") {
-      skipped++;
+      failed++;
       continue;
     }
     // Rotate even stale authorizations fairly without changing their context,
     // authorization expiry or the user's project activity/retention clock.
-    const marked = await sb
-      .from("agent_missions")
-      .update({ last_dispatch_at: now.toISOString() })
-      .eq("id", mission.id)
-      .eq("user_id", row.user_id)
-      .eq("revision", mission.revision);
-    missionStoreError(marked.error);
     try {
+      const marked = await sb
+        .from("agent_missions")
+        .update({ last_dispatch_at: now.toISOString() })
+        .eq("id", mission.id)
+        .eq("user_id", row.user_id)
+        .eq("revision", mission.revision);
+      missionStoreError(marked.error);
       const run = await reserveAgentMissionRun(
         sb,
         row.user_id,
@@ -315,9 +316,11 @@ export async function reserveDueAgentMissions(sb: SupabaseClient, now = new Date
       );
       if (run.status === "queued") reserved.push({ id: run.id, userId: row.user_id });
     } catch (error) {
-      if (!(error instanceof PublicError)) throw error;
-      skipped++;
+      if (error instanceof PublicError && [409, 429].includes(error.status)) skipped++;
+      else failed++;
     }
   }
-  return { reserved, skipped };
+  // Preserve earlier reservations even when a later mission cannot be read or
+  // reserved. The route must dispatch those jobs AND report the partial outage.
+  return { reserved, skipped, ...(failed ? { failed } : {}) };
 }

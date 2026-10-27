@@ -28,7 +28,7 @@ export function trialDraftIssues(
       issues.push(
         "Product facts or the success goal changed. Prepare and review a fresh trial kit first."
       );
-    issues.push(...trialPublicationIssues(trial, post, [...bannedClaims]));
+    issues.push(...trialPublicationIssues(trial, post, [...bannedClaims], platformId));
   }
   return [...new Set(issues)];
 }

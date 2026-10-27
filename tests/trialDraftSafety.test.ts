@@ -89,6 +89,41 @@ describe("reviewed trial constraints at every draft exit", () => {
       )
     ).toContain("The trial kit contains a claim you marked as never to use.");
   });
+  it("rechecks editorial defects introduced after queue confirmation", () => {
+    expect(
+      trialDraftIssues(
+        "twitter",
+        1,
+        { ...post, body: `${post.hook}\n\n${post.body}` },
+        [plan],
+        "reviewed-context"
+      )
+    ).toContain(
+      "The body repeats the opening hook. Edit the repetition before copying or adding this trial."
+    );
+    expect(
+      trialDraftIssues(
+        "twitter",
+        1,
+        { ...post, body: `${post.body}\nFact: [feature]` },
+        [plan],
+        "reviewed-context"
+      )
+    ).toContain(
+      "Internal evidence IDs appear in the invitation. Keep citations in the evidence panel, not public copy."
+    );
+    expect(
+      trialDraftIssues(
+        "twitter",
+        1,
+        { ...post, body: `${"x".repeat(281)}\n\n${entry}` },
+        [plan],
+        "reviewed-context"
+      )
+    ).toContain(
+      "A public-copy segment exceeds this channel's character limit. Shorten it or split it before copying."
+    );
+  });
   it("preserves source-backed legacy semantics while still enforcing its entry", () => {
     const legacy = {
       ...plan,
@@ -129,6 +164,43 @@ async function mount(element: ReturnType<typeof createElement>) {
 }
 
 describe("library cannot bypass trial review", () => {
+  it.each(["repeated opening", "internal citation"])(
+    "blocks library Copy and Mark as posted for %s",
+    async (defect) => {
+      const broken = {
+        ...post,
+        body:
+          defect === "repeated opening"
+            ? `${post.hook}\n\n${post.body}`
+            : `${post.body}\nFact: [feature]`,
+      };
+      const dom = await mount(
+        createElement(PostCard, {
+          post: broken,
+          platformId: "twitter",
+          postIdx: 1,
+          facts: DEMO_PROJECT.facts,
+          profile: DEMO_PROJECT.profile,
+          posted: false,
+          onTogglePosted: vi.fn(),
+          onPublish: vi.fn(),
+          onUpdate: vi.fn(),
+          plans: [plan],
+          currentTrialContextKey: "reviewed-context",
+        })
+      );
+      for (const label of ["Copy", "Mark as posted"])
+        expect(
+          [...dom.querySelectorAll("button")].find((button) => button.textContent === label)
+            ?.disabled
+        ).toBe(true);
+      expect(dom.textContent).toContain(
+        defect === "repeated opening"
+          ? "The body repeats the opening hook"
+          : "Internal evidence IDs appear in the invitation"
+      );
+    }
+  );
   it("blocks individual Copy and Mark as posted for a stale reviewed trial", async () => {
     const onPublish = vi.fn();
     const dom = await mount(

@@ -1,7 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/Button";
-import { AGENT_PHASES, agentRunMessage } from "@/lib/agentRuns";
+import { AGENT_PHASES, agentRunMessage, agentRunLabel } from "@/lib/agentRuns";
 import type { GrowthAgentControls } from "@/hooks/useGrowthAgent";
 
 const labels = {
@@ -21,12 +21,32 @@ export function AgentRunPanel({
     <div className="mt-4 space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-xs text-neutral-400">
-          Saved tasks · latest 5 · refresh restores server receipts
+          Agent inbox · latest 5 tasks · refresh restores server receipts
         </p>
         <Button variant="ghost" onClick={agent.refresh} disabled={agent.busy}>
           Refresh tasks
         </Button>
       </div>
+      <p className="text-xs text-neutral-400">
+        Results are saved here while you are away and refreshed when you return to this
+        page. This is in-app delivery, not email, device push or social publication.
+      </p>
+      {agent.runs.length > 0 && (
+        <p role="status" aria-live="polite" className="text-sm text-accent-200">
+          {
+            agent.runs.filter(
+              (run) => run.status === "ready" && Boolean(run.research?.opportunities.length)
+            ).length
+          }{" "}
+          tasks with draft proposals ·{" "}
+          {
+            agent.runs.filter(
+              (run) => run.status === "ready" && !run.research?.opportunities.length
+            ).length
+          }{" "}
+          finished without a draft
+        </p>
+      )}
       {agent.error && (
         <p role="alert" className="text-sm text-amber-300">
           {agent.error}
@@ -53,7 +73,8 @@ export function AgentRunPanel({
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h4 className="min-w-0 break-words font-medium">{run.input.task}</h4>
             <span className="text-xs text-accent-300">
-              {run.interrupted ? "interrupted" : run.status} · {run.provider}
+              {agentRunLabel(run)} ·{" "}
+              {run.modelAttempted ? run.provider : "model not called"}
             </span>
           </div>
           <ol
@@ -117,7 +138,11 @@ export function AgentRunPanel({
           ) : null}
           <div className="mt-3 flex flex-wrap gap-2">
             {run.status === "ready" && run.research && (
-              <Button onClick={() => onReview(run.id)}>Review research →</Button>
+              <Button onClick={() => onReview(run.id)}>
+                {run.research.opportunities.length
+                  ? "Review draft proposals →"
+                  : "Review source checks →"}
+              </Button>
             )}
             {run.canResume && (
               <Button

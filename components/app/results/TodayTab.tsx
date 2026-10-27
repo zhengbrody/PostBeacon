@@ -28,6 +28,7 @@ interface TodayActions {
   onDoneCustom: (action: TodayAction) => void;
   onOpenContent: (platformId?: string) => void;
   onOpenReview: () => void;
+  onOpenAgent?: () => void;
   onAskCopilot: (action: TodayAction, direction?: string, postIdx?: number) => void;
   onRegenerate: (platformId: string) => void;
   onUpdatePost: (platformId: string, idx: number, patch: Partial<PlatformPost>) => void;
@@ -85,12 +86,17 @@ function ActionButtons({
         </Button>
       )}
       {a.kind === "review" && <Button onClick={onOpenReview}>Open weekly review</Button>}
+      {a.kind === "research" && (
+        <Button onClick={handlers.onOpenAgent ?? (() => onOpenContent())}>
+          Open Growth Agent
+        </Button>
+      )}
       {primary && (
         <Button variant="outline" disabled={loading} onClick={() => onAskCopilot(a)}>
           ✦ Ask Copilot
         </Button>
       )}
-      {a.kind !== "review" && (
+      {a.kind !== "review" && a.kind !== "research" && (
         <Button variant="ghost" disabled={loading} onClick={() => onSkip(a)}>
           Skip
         </Button>

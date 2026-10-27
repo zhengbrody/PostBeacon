@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { billingEnabled, meteringEnabled } from "@/lib/supabase/server";
 import { getUserFromRequest, getEntitlement, FREE_LAUNCHES } from "@/lib/usage";
+import { apiError } from "@/lib/validate";
 
 // Current plan + remaining free launches for the signed-in user. Returns
 // { enabled:false } when metering is off so the UI can hide the indicator.
@@ -8,20 +9,24 @@ import { getUserFromRequest, getEntitlement, FREE_LAUNCHES } from "@/lib/usage";
 // once Polar is wired (see /api/generate), so during the free beta a
 // "N launches left" badge would be pure noise.
 export async function GET(req: NextRequest) {
-  if (!meteringEnabled() || !billingEnabled()) {
-    return NextResponse.json({ enabled: false });
+  try {
+    if (!meteringEnabled() || !billingEnabled()) {
+      return NextResponse.json({ enabled: false });
+    }
+    const user = await getUserFromRequest(req);
+    if (!user) {
+      return NextResponse.json({ enabled: true, signedIn: false });
+    }
+    const ent = await getEntitlement(user.id);
+    return NextResponse.json({
+      enabled: true,
+      signedIn: true,
+      plan: ent.plan,
+      used: ent.launchesUsed,
+      limit: FREE_LAUNCHES,
+      remaining: ent.plan === "pro" ? null : Math.max(0, FREE_LAUNCHES - ent.launchesUsed),
+    });
+  } catch (error) {
+    return apiError(error, "Usage could not be loaded.");
   }
-  const user = await getUserFromRequest(req);
-  if (!user) {
-    return NextResponse.json({ enabled: true, signedIn: false });
-  }
-  const ent = await getEntitlement(user.id);
-  return NextResponse.json({
-    enabled: true,
-    signedIn: true,
-    plan: ent.plan,
-    used: ent.launchesUsed,
-    limit: FREE_LAUNCHES,
-    remaining: ent.plan === "pro" ? null : Math.max(0, FREE_LAUNCHES - ent.launchesUsed),
-  });
 }

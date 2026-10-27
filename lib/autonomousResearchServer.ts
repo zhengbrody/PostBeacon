@@ -73,7 +73,7 @@ export async function runAutonomousResearch(
       brief.venue,
       brief.feedbackQuestion,
       ...brief.steps,
-      ...facts.map((fact) => fact.claim),
+      ...facts.flatMap((fact) => [fact.id, fact.claim]),
       ...(args.bannedClaims ?? []),
     ].some(containsPrivateResearchText)
   )
@@ -111,7 +111,11 @@ export async function runAutonomousResearch(
   };
   if (!sources.length) return { search: receipt };
   const research = await runOpportunityResearch(
-    { ...args, input: { ...brief, mode: "evidence-led", sources } },
+    {
+      ...args,
+      approvedSourceDomains: search.domains,
+      input: { ...brief, mode: "evidence-led", sources },
+    },
     progress
   );
   receipt.status = research.sources.some((source) => source.verification === "quote-found")
