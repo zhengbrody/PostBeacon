@@ -386,6 +386,14 @@ cross-origin 403. Aggregate product-health reporting is operator-only at `/api/m
 Redeploy: `npx vercel --prod --yes`. Push env from `.env.local`: `~/push-env.sh`.
 
 ## Status / changelog
+- **2026-10-27 production preparation**: Owner approved exactly five migrations
+  (C.4 ownership/usage + C.5 connections/deliveries/data-rights), audit-first release,
+  Buffer OFF. Vercel team access/target/Node 24 verified; production still `8ad345d`.
+  Explicit Production `BUFFER_PUBLISHING_ENABLED=false` added without OAuth secrets.
+  No SQL executed and no code pushed: Supabase CLI SQL requests lack an access token;
+  native Chrome accessibility stalls; in-app SQL page requires owner sign-in.
+  Installation approval remains valid; resume after sign-in rather than requesting
+  new credentials in chat or deploying before the required RPC audits.
 - **2026-10-27, C.5 candidate**: **Approved Buffer scheduling implemented
   locally; NOT deployed/enabled/connected.** Two backend agents plus root UI/data-rights
   work and an implementation-independent reviewer built exact canonical draft/account/
