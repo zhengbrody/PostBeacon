@@ -386,6 +386,14 @@ cross-origin 403. Aggregate product-health reporting is operator-only at `/api/m
 Redeploy: `npx vercel --prod --yes`. Push env from `.env.local`: `~/push-env.sh`.
 
 ## Status / changelog
+- **2026-10-27 production SQL accepted**: Owner's five approved incremental
+  migrations installed in PostBeacon `gceeifnjykuuxapqjvdr` main via its authenticated
+  SQL Editor, in ownership→usage→Buffer connections→deliveries→data-rights order.
+  All commits returned success; no account deletion or external provider call.
+  Unified final audit: base 9, workspace ownership 7, usage 4, Buffer connection 8,
+  delivery 8, data rights 5, Agent 8, mission 10 — **59 PASS, zero FAIL**.
+  Production `BUFFER_PUBLISHING_ENABLED=false` remains explicit. SQL blocker is
+  resolved; application release/CI/HTTP/browser verification is now in progress.
 - **2026-10-27 production preparation**: Owner approved exactly five migrations
   (C.4 ownership/usage + C.5 connections/deliveries/data-rights), audit-first release,
   Buffer OFF. Vercel team access/target/Node 24 verified; production still `8ad345d`.
