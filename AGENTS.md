@@ -10,7 +10,7 @@ The plan opens into an action-first growth workspace: one next best move → man
 24h/72h result → verdict → next experiment. Launch mode becomes Growth mode after the first
 measured publish; weekly completed learning loops are the retention north star.
 **No unapproved autonomous social publishing.** Production still uses manual publishing.
-A local default-OFF Buffer/X/LinkedIn connector now implements exact review →
+A deployed default-OFF Buffer/X/LinkedIn connector now implements exact review →
 short-lived approval → scheduled delivery. It has not been connected, enabled or
 production-tested. Research consent is not permission to post; real account setup,
 new SQL and any test post require separate approval.
@@ -386,6 +386,17 @@ cross-origin 403. Aggregate product-health reporting is operator-only at `/api/m
 Redeploy: `npx vercel --prod --yes`. Push env from `.env.local`: `~/push-env.sh`.
 
 ## Status / changelog
+- **2026-10-27 production release accepted (Buffer OFF)**: Application revision
+  `ec6e29b` is READY at `postbeacon.app` through
+  `dpl_79X252qADUvm5xuhXSpxXQvUSnNW`; GitHub CI run `40643770186` passed every gate.
+  All 59 production schema/security audit checks and nine signed-out HTTP probes
+  pass. The production fictional demo verifies exact account/text/UTC approval,
+  consent-only scheduling and a scheduled-not-published receipt without provider
+  calls, saved schedules or captured browser warnings/errors; desktop document
+  width has no horizontal overflow. Deployment-scoped error/fatal scan returned
+  no groups in the inspected five-minute window; no log drains are configured.
+  This is not real OAuth/publication or full signed-in data-rights acceptance.
+  Buffer remains explicitly false with no OAuth app credentials installed.
 - **2026-10-27 production SQL accepted**: Owner's five approved incremental
   migrations installed in PostBeacon `gceeifnjykuuxapqjvdr` main via its authenticated
   SQL Editor, in ownership→usage→Buffer connections→deliveries→data-rights order.
@@ -393,7 +404,7 @@ Redeploy: `npx vercel --prod --yes`. Push env from `.env.local`: `~/push-env.sh`
   Unified final audit: base 9, workspace ownership 7, usage 4, Buffer connection 8,
   delivery 8, data rights 5, Agent 8, mission 10 — **59 PASS, zero FAIL**.
   Production `BUFFER_PUBLISHING_ENABLED=false` remains explicit. SQL blocker is
-  resolved; application release/CI/HTTP/browser verification is now in progress.
+  resolved; application release/CI/HTTP/browser verification passed (see above).
 - **2026-10-27 production preparation**: Owner approved exactly five migrations
   (C.4 ownership/usage + C.5 connections/deliveries/data-rights), audit-first release,
   Buffer OFF. Vercel team access/target/Node 24 verified; production still `8ad345d`.
