@@ -171,6 +171,21 @@ export const opportunityResearchBodySchema = z.object({
   bannedClaims: z.array(s(200)).max(20).default([]),
 });
 
+/** M27.1 — inputs for one weekly-task proposal. OpenAI only: DeepSeek needs its
+ *  own explicit consent step, which this surface does not have yet. */
+export const weeklyTaskBodySchema = z.object({
+  provider: z.literal("openai"),
+  profile: profileSchema,
+  facts: z.array(factSchema).max(60),
+  successContract: successContractSchema.optional(),
+  intake: z.object({
+    pain: s(600).min(8),
+    successSignal: s(600).min(8),
+    hoursAvailable: z.number().finite().min(0.5).max(80),
+  }),
+  bannedClaims: z.array(s(200)).max(20).default([]),
+});
+
 /** Output provenance stamp (M13). */
 const generationMetaSchema = z.object({
   provider: providerSchema,

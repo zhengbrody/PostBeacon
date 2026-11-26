@@ -430,6 +430,7 @@ function AppFlow({
           onClearOpportunityResearch={f.clearOpportunityResearch}
           onQueueOpportunity={f.queueOpportunity}
           growthAgent={f.growthAgent}
+          weeklyTask={f.weeklyTask}
           onReviewAgent={f.reviewAgentResearch}
           projectId={f.projectId}
           onCompleteSetup={() => f.setStep("profile")}

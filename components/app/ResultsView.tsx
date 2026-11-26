@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/Button";
 import type { GrowthAgentControls } from "@/hooks/useGrowthAgent";
 import { FailuresCard } from "@/components/app/results/FailuresCard";
 import { TodayTab } from "@/components/app/results/TodayTab";
+import { WeeklyTaskCard } from "@/components/app/results/WeeklyTaskCard";
+import type { WeeklyTaskController } from "@/hooks/useWeeklyTask";
 import { PlanReport } from "@/components/app/results/PlanReport";
 import { TimelineTab } from "@/components/app/results/TimelineTab";
 import { normalizeTrackedUrl } from "@/lib/trackedUrl";
@@ -97,6 +99,7 @@ export function ResultsView({
   onClearOpportunityResearch,
   onQueueOpportunity,
   growthAgent,
+  weeklyTask,
   onReviewAgent,
   projectId,
   ownerId,
@@ -145,6 +148,7 @@ export function ResultsView({
   provider: Provider;
   onResearchOpportunities: (input: TrialResearchInput, deepseekConsent?: boolean) => void;
   growthAgent: GrowthAgentControls;
+  weeklyTask: WeeklyTaskController;
   onReviewAgent: (id: string) => void;
   projectId: string;
   ownerId?: string | null;
@@ -521,6 +525,18 @@ export function ResultsView({
           onSelect={(id) => setSurface(id as Surface)}
         />
       </div>
+
+      {surface === "today" && !printing && profile && (
+        <WeeklyTaskCard
+          key={`weekly:${ownerId ?? ""}:${projectId}:${demo}:${weeklyTask.task?.id ?? ""}`}
+          controller={weeklyTask}
+          workspace={workspace}
+          facts={facts}
+          productName={profile.name}
+          productUrl={productUrl ?? ""}
+          demo={demo}
+        />
+      )}
 
       {surface === "today" &&
         !printing &&

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { api } from "@/lib/api";
+import { useWeeklyTask } from "./useWeeklyTask";
 import { useGrowthAgent } from "./useGrowthAgent";
 import { createAsyncScope, StaleRequestError } from "@/lib/asyncScope";
 import { clearDraft, loadDraft } from "@/lib/storage";
@@ -75,6 +76,12 @@ export function useLaunchFlow(accountId?: string | null) {
   const [loadingMsg, setLoadingMsg] = useState("");
   const [error, setError] = useState("");
   const [paywall, setPaywall] = useState<"auth" | "limit" | null>(null);
+  const weeklyTask = useWeeklyTask(
+    state,
+    dispatch,
+    accountId,
+    availProviders.includes("openai")
+  );
   const [generations, setGenerations] = useState(0); // bumps once per successful generate (usage refetch trigger)
   const [pendingDraft, setPendingDraft] = useState<LoadedProject | null>(null); // saved draft offered for resume on mount
 
@@ -788,6 +795,7 @@ export function useLaunchFlow(accountId?: string | null) {
     preparePlannedExperiment,
     researchOpportunities,
     growthAgent,
+    weeklyTask,
     reviewAgentResearch,
     clearOpportunityResearch: () => dispatch({ type: "OPPORTUNITY_RESEARCH_CLEARED" }),
     queueOpportunity: (

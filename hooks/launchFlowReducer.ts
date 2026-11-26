@@ -1,3 +1,9 @@
+import {
+  applyWeeklyTaskCommand,
+  contextFingerprint,
+  type WeeklyTaskCommand,
+  type WeeklyTaskContext,
+} from "@/lib/weeklyTask";
 import { PLATFORMS } from "@/lib/platforms";
 import {
   answerFact,
@@ -213,6 +219,7 @@ export type FlowAction =
       research: OpportunityResearch;
     }
   | { type: "OPPORTUNITY_RESEARCH_CLEARED" }
+  | { type: "WEEKLY_TASK_COMMAND"; projectId: string; command: WeeklyTaskCommand }
   | {
       type: "OPPORTUNITY_QUEUED";
       researchId: string;
@@ -321,6 +328,25 @@ export function normalize(s: FlowState): FlowState {
   return next;
 }
 
+/** The exact product version a weekly-task command is judged against. */
+export function weeklyTaskContext(s: FlowState): WeeklyTaskContext {
+  return {
+    facts: s.facts,
+    contextKey: s.profile
+      ? contextFingerprint(
+          researchContextKey(
+            s.profile,
+            s.facts,
+            s.workspace.successContract,
+            s.url,
+            s.memory.bannedClaims
+          )
+        )
+      : "",
+    demo: s.demo,
+  };
+}
+
 /** Remember hand-edited plan fields (drives the copilot overwrite confirm). */
 function withUserEdits(s: FlowState, fields: string[]): FlowState {
   const merged = Array.from(new Set([...s.memory.userEditedFields, ...fields])).slice(
@@ -347,6 +373,9 @@ function transition(s: FlowState, a: FlowAction): FlowState {
         ...emptyWorkspace,
         ...(p.workspace ?? p.meta?.workspace ?? {}),
       });
+      // Example data belongs to the demo only, however it reached storage.
+      if (!a.demo && workspace.weeklyTask?.example)
+        workspace = { ...workspace, weeklyTask: undefined };
       if (!workspace.successContract && p.profile?.conversionGoal?.trim()) {
         workspace = {
           ...workspace,
@@ -437,6 +466,13 @@ function transition(s: FlowState, a: FlowAction): FlowState {
           ...emptyWorkspace,
           weeklyMinutes: s.workspace.weeklyMinutes,
           reminderPreferences: s.workspace.reminderPreferences,
+          // A confirmed task is a self-contained snapshot and survives
+          // re-analysis; an unconfirmed one answered the old facts.
+          // Fictional demo tasks never cross into a real project.
+          ...(!s.demo && s.workspace.weeklyTask?.confirmedAt
+            ? { weeklyTask: s.workspace.weeklyTask }
+            : {}),
+          ...(!s.demo ? { weeklyTaskHistory: s.workspace.weeklyTaskHistory } : {}),
           ...(a.profile.conversionGoal?.trim()
             ? { successContract: defaultSuccessContract(a.profile.conversionGoal) }
             : {}),
@@ -960,6 +996,11 @@ function transition(s: FlowState, a: FlowAction): FlowState {
     }
     case "OPPORTUNITY_RESEARCH_CLEARED":
       return { ...s, workspace: { ...s.workspace, opportunityResearch: undefined } };
+    case "WEEKLY_TASK_COMMAND": {
+      if (a.projectId !== s.projectId) return s;
+      const applied = applyWeeklyTaskCommand(s.workspace, a.command, weeklyTaskContext(s));
+      return applied.ok ? { ...s, workspace: { ...s.workspace, ...applied.next } } : s;
+    }
     case "OPPORTUNITY_QUEUED": {
       const research = s.workspace.opportunityResearch;
       const opportunity = research?.opportunities.find((o) => o.id === a.opportunityId);

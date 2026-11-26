@@ -1,3 +1,4 @@
+import { idleWeeklyTask } from "./helpers/weeklyTask";
 import { createElement, type ComponentProps } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
@@ -62,6 +63,7 @@ describe("visible Agent entry and honest receipts", () => {
       onResearchOpportunities: vi.fn(),
       onClearOpportunityResearch: vi.fn(),
       onQueueOpportunity: vi.fn(),
+      weeklyTask: idleWeeklyTask(),
       growthAgent: controls(),
       onReviewAgent: vi.fn(),
       projectId: "project",
