@@ -7,6 +7,7 @@ vi.mock("@/lib/usage", () => ({ guardRoute: seams.guard }));
 vi.mock("@/lib/llm", () => ({ generateJsonOnce: seams.llm }));
 import { POST } from "@/app/api/weekly-task/route";
 import { trialProductFacts } from "@/lib/opportunityResearch";
+import { WEEKLY_TASK_BUDGET } from "@/lib/weeklyTaskServer";
 
 const factId = trialProductFacts(DEMO_PROJECT.facts)[0].id;
 const proposal = (extra: Record<string, unknown> = {}) => ({
@@ -110,6 +111,28 @@ describe("weekly task route: spend, identity and grounding boundary", () => {
       expect(response.status).toBe(502);
       expect((await response.json()).error).toMatch(/unchanged/);
     }
+  });
+  it("keeps the whole request inside a small fixed budget however large the ledger is", async () => {
+    const many = Array.from({ length: 60 }, (_, index) => ({
+      id: `f${index}`,
+      field: "features",
+      claim: "x".repeat(500),
+      sourceType: "user",
+      status: "user-confirmed",
+      confidence: 1,
+    }));
+    seams.llm.mockResolvedValueOnce({
+      data: { proposal: proposal({ factIds: ["f0"] }) },
+      meta: { provider: "openai", model: "m" },
+    });
+    expect((await POST(request(body({ facts: many })))).status).toBe(200);
+    const call = seams.llm.mock.calls[0][0];
+    const sent = JSON.parse(call.user);
+    expect(sent.verifiedFacts).toHaveLength(WEEKLY_TASK_BUDGET.facts);
+    expect(sent.verifiedFacts[0].claim).toHaveLength(WEEKLY_TASK_BUDGET.claimChars);
+    expect(call.maxTokens).toBe(WEEKLY_TASK_BUDGET.maxTokens);
+    // ~4 chars per token: prompt + data stay near 1.5k input tokens at the cap.
+    expect(call.system.length + call.user.length).toBeLessThan(6500);
   });
   it("says which rule discarded the proposal", async () => {
     const reply = async (data: unknown) => {

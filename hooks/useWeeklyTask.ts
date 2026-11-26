@@ -102,6 +102,8 @@ export function useWeeklyTask(
       return fail(
         "Sign in to ask the Agent for a proposal — or write the task yourself below."
       );
+    if (!source.projectId)
+      return fail("Your project is still being saved. Try again in a moment.");
     if (!openaiAvailable)
       return fail(
         "Agent proposals need OpenAI, which is not configured here. You can write the task yourself below."

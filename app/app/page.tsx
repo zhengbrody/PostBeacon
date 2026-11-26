@@ -1,5 +1,6 @@
 "use client";
 
+import { WeeklyTaskCard } from "@/components/app/results/WeeklyTaskCard";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useLaunchFlow, type Step } from "@/hooks/useLaunchFlow";
@@ -349,6 +350,17 @@ function AppFlow({
               const profile = f.profile;
               if (profile) f.setProfile({ ...profile, publisherVoice });
             }}
+          />
+          {/* Shortest path to value: one task needs the facts and the goal above,
+              not the full channel plan. Same card and state as on Today. */}
+          <WeeklyTaskCard
+            key={`weekly:${f.demo}:${f.weeklyTask.task?.id ?? ""}`}
+            controller={f.weeklyTask}
+            workspace={f.workspace}
+            facts={f.facts}
+            productName={f.profile.name}
+            productUrl={f.url}
+            demo={f.demo}
           />
           <EvidenceReview facts={f.facts}>
             {f.analysisReceipt && (

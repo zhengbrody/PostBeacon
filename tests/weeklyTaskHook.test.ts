@@ -237,6 +237,24 @@ describe("weekly task planning request", () => {
     await noProvider.unmount();
     expect(calls.weeklyTask).not.toHaveBeenCalled();
   });
+  it("waits for the project to have an id before spending a request", async () => {
+    const base = flowReducer(initialFlowState, {
+      type: "PROJECT_LOADED",
+      project: { ...DEMO_PROJECT, id: undefined },
+      demo: false,
+    });
+    const hook = await mountHook(() => {
+      const [state, dispatch] = useReducer(flowReducer, base);
+      return { ...useWeeklyTask(state, dispatch, "owner-a", true) };
+    }, undefined);
+    await act(async () => {
+      hook.current.send({ type: "intake-saved", id: "task-1", intake, at: AT });
+    });
+    await act(async () => hook.current.plan());
+    expect(calls.weeklyTask).not.toHaveBeenCalled();
+    expect(hook.current.message).toMatch(/still being saved/);
+    await hook.unmount();
+  });
   it("the demo uses a code-written fictional proposal with no API call", async () => {
     const hook = await mount({ owner: null, demo: true });
     await act(async () => hook.current.plan());
