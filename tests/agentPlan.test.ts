@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { deriveAgentPlan, type AgentPlanInput } from "@/lib/agentPlan";
+import {
+  canRunAhead,
+  deriveAgentPlan,
+  nextAgentRunStep,
+  type AgentAction,
+  type AgentPlanInput,
+} from "@/lib/agentPlan";
 import type { Experiment, Fact, MarketingStrategy, SuccessContract } from "@/lib/types";
 
 const now = new Date("2026-11-26T12:00:00Z");
@@ -134,5 +140,68 @@ describe("deriveAgentPlan", () => {
     expect(step(ready, "improve").status).toBe("ready");
     expect(plan(ready).current?.id).not.toBe("improve");
     expect(step(analyzed, "improve").status).toBe("waiting");
+  });
+});
+
+describe("nextAgentRunStep", () => {
+  const goal = { ...analyzed, successContract: contract };
+  const ranked = { ...goal, strategy, selectedCount: 1 };
+  const idle = { loading: false, failed: false };
+  const tried = (...actions: AgentAction[]) => new Set(actions);
+
+  it("is offered only where it does more than one step", () => {
+    expect(canRunAhead(plan(goal))).toBe(true);
+    expect(canRunAhead(plan(ranked))).toBe(false);
+    expect(canRunAhead(plan(analyzed))).toBe(false);
+  });
+
+  it("ranks, then writes drafts, then stops at the founder's step", () => {
+    expect(nextAgentRunStep(plan(goal), tried(), idle)).toEqual({
+      kind: "run",
+      action: "strategy",
+    });
+    expect(nextAgentRunStep(plan(ranked), tried("strategy"), idle)).toEqual({
+      kind: "run",
+      action: "generate",
+    });
+    expect(
+      nextAgentRunStep(
+        plan({ ...ranked, hasResult: true }),
+        tried("strategy", "generate"),
+        idle
+      )
+    ).toEqual({ kind: "stop", reason: "needs-you" });
+  });
+
+  it("waits while a request is in flight", () => {
+    expect(
+      nextAgentRunStep(plan({ ...goal, loading: true }), tried("strategy"), {
+        loading: true,
+        failed: false,
+      })
+    ).toEqual({ kind: "wait" });
+  });
+
+  it("stops on a failure and never retries the step", () => {
+    expect(
+      nextAgentRunStep(plan(goal), tried("strategy"), { loading: false, failed: true })
+    ).toEqual({ kind: "stop", reason: "failed" });
+    // The step returned without an error and without its result.
+    expect(nextAgentRunStep(plan(goal), tried("strategy"), idle)).toEqual({
+      kind: "stop",
+      reason: "incomplete",
+    });
+  });
+
+  it("does not treat an old on-screen error as this run's failure", () => {
+    expect(nextAgentRunStep(plan(goal), tried(), { loading: false, failed: true })).toEqual(
+      { kind: "run", action: "strategy" }
+    );
+  });
+
+  it("stops instead of writing drafts when no channel is selected", () => {
+    expect(
+      nextAgentRunStep(plan({ ...ranked, selectedCount: 0 }), tried("strategy"), idle)
+    ).toEqual({ kind: "stop", reason: "needs-you" });
   });
 });

@@ -236,3 +236,39 @@ export function deriveAgentPlan(input: AgentPlanInput): AgentPlan {
       .reduce((sum, step) => sum + step.modelRequests, 0),
   };
 }
+
+/* ---------- run several agent steps in a row ---------- */
+
+export type AgentRunStop =
+  | "needs-you" // reached a step only the founder can do — the normal ending
+  | "failed" // the step reported an error or hit a usage limit
+  | "incomplete"; // the step returned without producing its result
+
+export type AgentRunDecision =
+  | { kind: "wait" }
+  | { kind: "run"; action: AgentAction }
+  | { kind: "stop"; reason: AgentRunStop };
+
+/**
+ * What a multi-step run does next. It only ever continues into a step the plan
+ * itself offers, tries each step once, and stops at the first failure — so a
+ * run can spend at most one attempt per agent step and can never loop.
+ */
+export function nextAgentRunStep(
+  plan: AgentPlan,
+  attempted: ReadonlySet<AgentAction>,
+  flags: { loading: boolean; failed: boolean }
+): AgentRunDecision {
+  if (flags.loading) return { kind: "wait" };
+  // An error left on screen from before the run is not this run's failure.
+  if (flags.failed && attempted.size > 0) return { kind: "stop", reason: "failed" };
+  const action = plan.current?.action;
+  if (!action) return { kind: "stop", reason: "needs-you" };
+  if (attempted.has(action)) return { kind: "stop", reason: "incomplete" };
+  return { kind: "run", action };
+}
+
+/** A run is worth offering only when it would do more than the single-step button. */
+export function canRunAhead(plan: AgentPlan): boolean {
+  return plan.current?.action === "strategy";
+}

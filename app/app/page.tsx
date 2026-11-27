@@ -7,7 +7,8 @@ import { useLaunchFlow, type Step } from "@/hooks/useLaunchFlow";
 import { useAutosave } from "@/hooks/useAutosave";
 import { Stepper } from "@/components/app/Stepper";
 import { AgentPlanCard } from "@/components/app/AgentPlanCard";
-import { deriveAgentPlan } from "@/lib/agentPlan";
+import { deriveAgentPlan, type AgentAction } from "@/lib/agentPlan";
+import { useAgentRun } from "@/hooks/useAgentRun";
 import { UrlStep } from "@/components/app/UrlStep";
 import { ProfileForm } from "@/components/app/ProfileForm";
 import { FactLedger } from "@/components/app/FactLedger";
@@ -228,6 +229,17 @@ function AppFlow({
     demo: f.demo,
     now: new Date(),
   });
+  const runAgentStep = (action: AgentAction) => {
+    if (action === "strategy") void f.buildStrategy();
+    else if (f.demo) f.openPreparedDemo();
+    else void f.generate();
+  };
+  const agentRun = useAgentRun({
+    plan: agentPlan,
+    loading: f.loading,
+    failed: Boolean(f.error) || Boolean(f.paywall),
+    run: runAgentStep,
+  });
 
   return (
     <>
@@ -238,11 +250,8 @@ function AppFlow({
         view={f.step}
         loading={f.loading}
         demo={f.demo}
-        onRun={(action) => {
-          if (action === "strategy") void f.buildStrategy();
-          else if (f.demo) f.openPreparedDemo();
-          else void f.generate();
-        }}
+        onRun={runAgentStep}
+        agentRun={agentRun}
         onOpen={(view) => {
           if (reachable.includes(view)) f.setStep(view);
         }}

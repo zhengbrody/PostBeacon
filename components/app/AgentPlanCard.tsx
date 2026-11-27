@@ -2,6 +2,7 @@
 
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { AGENT_STEP_REQUESTS, canRunAhead } from "@/lib/agentPlan";
 import type {
   AgentAction,
   AgentPlan,
@@ -82,6 +83,7 @@ export function AgentPlanCard({
   demo,
   onRun,
   onOpen,
+  agentRun,
 }: {
   plan: AgentPlan;
   view: AgentView;
@@ -89,8 +91,16 @@ export function AgentPlanCard({
   demo: boolean;
   onRun: (action: AgentAction) => void;
   onOpen: (view: AgentView) => void;
+  agentRun: {
+    active: boolean;
+    stopped: "needs-you" | "failed" | "incomplete" | "by-you" | null;
+    start: () => void;
+    stop: () => void;
+  };
 }) {
   const current = plan.current;
+  const runAheadRequests =
+    AGENT_STEP_REQUESTS.channel + AGENT_STEP_REQUESTS.draftsPerChannel;
   const requests = plan.remainingModelRequests;
   return (
     <Card className="no-print mb-6 p-4 sm:p-5">
@@ -132,18 +142,54 @@ export function AgentPlanCard({
           The agent prepares and never posts. Every step marked You waits for you.
         </p>
       </details>
-      {current?.action && (
-        <div className="mt-4 flex flex-wrap items-center gap-3">
-          <Button size="sm" disabled={loading} onClick={() => onRun(current.action!)}>
-            {current.actionLabel}
+      {agentRun.active ? (
+        <div className="mt-4 flex flex-wrap items-center gap-3" role="status">
+          <span className="text-xs text-accent-200">
+            Running the agent steps in a row. It stops at the next step that needs you.
+          </span>
+          <Button size="sm" variant="outline" onClick={agentRun.stop}>
+            Stop after this step
           </Button>
-          {!demo && (
-            <span className="text-xs text-neutral-500">
-              Uses about {current.modelRequests} model request
-              {current.modelRequests === 1 ? "" : "s"}.
-            </span>
-          )}
         </div>
+      ) : (
+        current?.action && (
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <Button size="sm" disabled={loading} onClick={() => onRun(current.action!)}>
+              {current.actionLabel}
+            </Button>
+            {!demo && canRunAhead(plan) && (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={loading}
+                onClick={agentRun.start}
+              >
+                Run through to drafts
+              </Button>
+            )}
+            {!demo && (
+              <span className="text-xs text-neutral-500">
+                One step uses about {current.modelRequests} model request
+                {current.modelRequests === 1 ? "" : "s"}.
+                {canRunAhead(plan) &&
+                  ` Running through uses about ${runAheadRequests} and writes drafts for the agent's top channel without asking you first.`}
+              </span>
+            )}
+          </div>
+        )
+      )}
+      {!agentRun.active && agentRun.stopped && (
+        <p className="mt-3 text-xs leading-relaxed text-neutral-400" role="status">
+          {
+            {
+              "needs-you": "The run finished its steps. The next step is yours.",
+              failed: "The run stopped because a step failed. Nothing after it was run.",
+              incomplete:
+                "The run stopped because a step did not finish, usually because the project changed while it ran. Nothing after it was run.",
+              "by-you": "You stopped the run. A step already in flight may still finish.",
+            }[agentRun.stopped]
+          }
+        </p>
       )}
     </Card>
   );
