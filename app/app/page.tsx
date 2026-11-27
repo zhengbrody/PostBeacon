@@ -6,6 +6,8 @@ import Link from "next/link";
 import { useLaunchFlow, type Step } from "@/hooks/useLaunchFlow";
 import { useAutosave } from "@/hooks/useAutosave";
 import { Stepper } from "@/components/app/Stepper";
+import { AgentPlanCard } from "@/components/app/AgentPlanCard";
+import { deriveAgentPlan } from "@/lib/agentPlan";
 import { UrlStep } from "@/components/app/UrlStep";
 import { ProfileForm } from "@/components/app/ProfileForm";
 import { FactLedger } from "@/components/app/FactLedger";
@@ -213,9 +215,38 @@ function AppFlow({
   if (f.strategy) reachable.push("strategy");
   if (f.result) reachable.push("results");
 
+  const agentPlan = deriveAgentPlan({
+    url: f.url,
+    hasProfile: Boolean(f.profile),
+    facts: f.facts,
+    successContract: f.successContract,
+    strategy: f.strategy,
+    selectedCount: f.selected.length,
+    hasResult: Boolean(f.result),
+    workspace: f.workspace,
+    loading: f.loading,
+    demo: f.demo,
+    now: new Date(),
+  });
+
   return (
     <>
       <Stepper step={f.step} enabled={reachable} onNavigate={f.setStep} />
+
+      <AgentPlanCard
+        plan={agentPlan}
+        view={f.step}
+        loading={f.loading}
+        demo={f.demo}
+        onRun={(action) => {
+          if (action === "strategy") void f.buildStrategy();
+          else if (f.demo) f.openPreparedDemo();
+          else void f.generate();
+        }}
+        onOpen={(view) => {
+          if (reachable.includes(view)) f.setStep(view);
+        }}
+      />
 
       {previewHandoff && f.step === "input" && !f.demo && (
         <div className="no-print mb-6 rounded-xl border border-accent-700/50 bg-accent-950/20 p-4 sm:p-5">
