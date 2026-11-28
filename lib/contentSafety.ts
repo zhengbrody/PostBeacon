@@ -9,6 +9,7 @@ export type DraftSafetyCode =
   | "invented-testimonial"
   | "unsupported-limitation"
   | "unsupported-metric"
+  | "invented-result"
   | "regulated-outcome"
   | "over-limit";
 
@@ -40,6 +41,20 @@ const LIMITATION =
 // invented traction ("10k users", "$50k in revenue", "40% of teams").
 const UNSUPPORTED_METRIC =
   /(?:\$\s*)?\b\d[\d,.]*\s*(?:[kmb]\b)?\+?\s*%?\s*(?:of\s+|in\s+)?(?:users?|customers?|signups?|downloads?|installs?|revenue|mrr|arr|hours? saved|countries|teams?)\b/i;
+// A draft is written before anything is posted, so a sentence that reports
+// what a test, experiment or launch produced is invented unless a verified
+// fact says the same thing. Each pattern is past-tense or possessive on
+// purpose: "we are testing X" and "tell us your result" must stay allowed.
+const INVENTED_RESULT = new RegExp(
+  [
+    String.raw`\b(?:our|my)\s+(?:(?:\d+[- ]?(?:hour|hr|day|week|month)s?|first|early|initial|latest|real|actual)[- ]?\s*)?(?:results?|findings)\b`,
+    String.raw`\bin\s+(?:one|an?|our|my|a recent|the first|an early)\s+(?:\w+\s+)?(?:experiment|test|trial|pilot)\b`,
+    String.raw`\b(?:we|i)\s+(?:ran|tested|measured|saw|found)\b[^.!?\n]{0,90}\b(?:experiment|tests?|trial|pilot|results?|uptick|spike|increase|lift|jump)\b`,
+    String.raw`\b(?:activity|engagement|traffic|signups?|sign-ups?|replies|responses?|conversions?|clicks|interest)\s+(?:picked up|jumped|grew|doubled|tripled|spiked|rose|increased|climbed|took off|went up)\b`,
+    String.raw`\b(?:the\s+)?(?:experiment|test|trial|pilot)\s+(?:showed|proved|revealed|confirmed|worked|paid off|delivered)\b`,
+  ].join("|"),
+  "i"
+);
 const REGULATED_PROMISE =
   /\b(?:guarantee(?:d|s)?|ensure(?:s|d)?|avoid(?:ing)? losses|prevent(?:s|ing)? losses|sidestep(?:s|ping)? (?:a )?(?:fall|drop|loss)|beat(?:s|ing)? the market|get rich|predict(?:s|ing)? (?:the )?market|protect(?:s|ing)?[^.\n]{0,35}(?:loss|drop|fall))\b/i;
 
@@ -308,6 +323,20 @@ export function auditDraftSafety(
           "Performance or traction number is unsupported",
           excerpt,
           "Use a verified number from the product profile or remove it."
+        )
+      );
+    }
+  }
+
+  if (INVENTED_RESULT.test(text)) {
+    const excerpt = sentenceFor(text, INVENTED_RESULT);
+    if (!isSupported(excerpt, corpus)) {
+      add(
+        issue(
+          "invented-result",
+          "Reports a result that is not in the verified facts",
+          excerpt,
+          "Nothing has been posted yet. Remove the claim, or confirm the result in the Fact Ledger first."
         )
       );
     }

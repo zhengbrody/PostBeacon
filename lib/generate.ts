@@ -14,7 +14,28 @@ import type {
 } from "./types";
 
 /** Bump when the content prompt changes (recorded on every output). */
-export const GENERATE_PROMPT_VERSION = "g4";
+export const GENERATE_PROMPT_VERSION = "g5";
+
+/**
+ * What the draft prompt is told about the success contract. Only the goal and
+ * the signal go in, so the draft can invite the right kind of response. The
+ * target number and the evaluation window are left out on purpose: they
+ * describe how a test will be judged later, and a model that sees "72h" next
+ * to a goal has written it up as a result that already happened.
+ */
+export function contractForPrompt(successContract?: SuccessContract): string {
+  if (!successContract) {
+    return "No goal is set. Do not invent a target, and do not report any result.";
+  }
+  const signal =
+    successContract.primarySignal === "custom"
+      ? successContract.customSignalLabel?.trim() || "the founder's own signal"
+      : successContract.primarySignal;
+  return `This post has NOT been published and no experiment has run. There are no results to report.
+Goal the founder will judge it by later: ${successContract.primaryGoal}
+Response to invite: ${signal}
+Use this only to decide what the post asks the reader to do. Never describe the goal, a target or a time window as something that already happened.`;
+}
 
 export interface PlatformGeneration {
   posts: PlatformPost[];
@@ -61,14 +82,14 @@ ${ANTI_AI_RULES}
 
 Competitor test: if a sentence could describe a competitor unchanged, add a product-specific fact or cut it.${
       ledger
-        ? "\n\nFact discipline: state ESTABLISHED facts freely; hedge INFERRED ones; never invent numbers, identities, quotes, experiences, users, limitations, or outcome claims. If a specific is missing, remove the unsupported sentence — NEVER leave a placeholder in ready-to-post copy."
+        ? "\n\nFact discipline: state ESTABLISHED facts freely; hedge INFERRED ones; never invent numbers, identities, quotes, experiences, users, limitations, or outcome claims. Do not say or imply that a test, experiment or launch was run, or what came of it, unless an ESTABLISHED fact says so. If a specific is missing, remove the unsupported sentence — NEVER leave a placeholder in ready-to-post copy."
         : ""
     }`,
     user: `PRODUCT PROFILE:
 ${JSON.stringify(profile, null, 2)}
 
-EXPERIMENT SUCCESS CONTRACT:
-${successContract ? JSON.stringify(successContract, null, 2) : "Not configured. Do not invent a target."}${ledger ? `\n\n${ledger}` : ""}
+PLANNED EXPERIMENT (not run yet):
+${contractForPrompt(successContract)}${ledger ? `\n\n${ledger}` : ""}
 
 Write ${p.postCount} ready-to-post piece(s) for ${p.name}. Each must read like a real person native to ${p.name} wrote it, and be copy-paste ready${
       p.longForm ? " — write the FULL piece, not an outline" : ""
