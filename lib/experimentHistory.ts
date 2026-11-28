@@ -1,3 +1,4 @@
+import { normalizeOutreach } from "./outreach";
 import { normalizeWeeklyTask, normalizeWeeklyTaskHistory } from "./weeklyTask";
 import type {
   Experiment,
@@ -158,6 +159,9 @@ export function migrateWorkspaceHistory(workspace: WorkspaceState): WorkspaceSta
       : {}),
     ...(workspace.weeklyTaskHistory !== undefined
       ? { weeklyTaskHistory: normalizeWeeklyTaskHistory(workspace.weeklyTaskHistory) }
+      : {}),
+    ...(workspace.outreach !== undefined
+      ? { outreach: normalizeOutreach(workspace.outreach) }
       : {}),
     ...(workspace.plannedExperiments
       ? { plannedExperiments: normalizePlannedExperiments(workspace.plannedExperiments) }

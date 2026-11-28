@@ -386,6 +386,14 @@ cross-origin 403. Aggregate product-health reporting is operator-only at `/api/m
 Redeploy: `npx vercel --prod --yes`. Push env from `.env.local`: `~/push-env.sh`.
 
 ## Status / changelog
+- **2026-11-28, M27.2 outreach (beta)**: New "People to contact" list beside the
+  Marketing agent plan (`lib/outreach.ts`, `/api/outreach`, `OutreachCard`). The founder
+  adds a person (own label, optional public link, the need they described) or takes one
+  from a research source; one OpenAI request drafts up to five short messages from
+  verified facts; the founder sends by hand and records sent / reply. PostBeacon sends
+  nothing and does not search for people. Label and link never reach a model. Stored in
+  `workspace.outreach` (≤20), so owner-only RLS, export, deletion and retention already
+  apply; no migration. See `docs/M27.2-outreach.md` for checks and what is not verified.
 - **2026-10-27 production release accepted (Buffer OFF)**: Application revision
   `ec6e29b` is READY at `postbeacon.app` through
   `dpl_79X252qADUvm5xuhXSpxXQvUSnNW`; GitHub CI run `40643770186` passed every gate.

@@ -38,6 +38,7 @@ import type {
   WeeklyTaskIntake,
 } from "./types";
 import type { WeeklyTaskProposalResponse } from "./weeklyTaskServer";
+import type { OutreachDraftResponse } from "./outreachServer";
 
 export interface UsageInfo {
   enabled: boolean;
@@ -136,6 +137,8 @@ export function boundedCopilotRequest(body: CopilotRequest): CopilotRequest {
           // The weekly task is sent only by its own explicit planning request.
           weeklyTask: undefined,
           weeklyTaskHistory: undefined,
+          // People the founder contacts are never model context for Copilot.
+          outreach: undefined,
         }
       : undefined,
   };
@@ -320,6 +323,20 @@ export const api = {
     expectedUserId: string,
     signal?: AbortSignal
   ) => post<WeeklyTaskProposalResponse>("/api/weekly-task", body, signal, expectedUserId),
+  /** One explicit request that drafts messages for the people on the list. */
+  outreach: (
+    body: {
+      provider: "openai";
+      profile: ProductProfile;
+      facts: Fact[];
+      successContract?: SuccessContract;
+      productUrl?: string;
+      people: { alias: string; need: string }[];
+      bannedClaims?: string[];
+    },
+    expectedUserId: string,
+    signal?: AbortSignal
+  ) => post<OutreachDraftResponse>("/api/outreach", body, signal, expectedUserId),
   usage: async (): Promise<UsageInfo> => {
     const res = await fetch("/api/usage", { headers: { ...(await authHeader()) } });
     return res.json();

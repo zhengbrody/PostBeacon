@@ -1,6 +1,7 @@
 "use client";
 
 import { WeeklyTaskCard } from "@/components/app/results/WeeklyTaskCard";
+import { OutreachCard } from "@/components/app/results/OutreachCard";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useLaunchFlow, type Step } from "@/hooks/useLaunchFlow";
@@ -402,6 +403,7 @@ function AppFlow({
             productUrl={f.url}
             demo={f.demo}
           />
+          {f.successContract && <OutreachCard controller={f.outreach} />}
           <EvidenceReview facts={f.facts}>
             {f.analysisReceipt && (
               <SourceCoverageReceipt
@@ -483,6 +485,7 @@ function AppFlow({
           onQueueOpportunity={f.queueOpportunity}
           growthAgent={f.growthAgent}
           weeklyTask={f.weeklyTask}
+          outreach={f.outreach}
           onReviewAgent={f.reviewAgentResearch}
           projectId={f.projectId}
           onCompleteSetup={() => f.setStep("profile")}

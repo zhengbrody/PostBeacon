@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { useWeeklyTask } from "./useWeeklyTask";
+import { useOutreach } from "./useOutreach";
 import { useGrowthAgent } from "./useGrowthAgent";
 import { createAsyncScope, StaleRequestError } from "@/lib/asyncScope";
 import { clearDraft, loadDraft } from "@/lib/storage";
@@ -77,6 +78,12 @@ export function useLaunchFlow(accountId?: string | null) {
   const [error, setError] = useState("");
   const [paywall, setPaywall] = useState<"auth" | "limit" | null>(null);
   const weeklyTask = useWeeklyTask(
+    state,
+    dispatch,
+    accountId,
+    availProviders.includes("openai")
+  );
+  const outreach = useOutreach(
     state,
     dispatch,
     accountId,
@@ -796,6 +803,7 @@ export function useLaunchFlow(accountId?: string | null) {
     researchOpportunities,
     growthAgent,
     weeklyTask,
+    outreach,
     reviewAgentResearch,
     clearOpportunityResearch: () => dispatch({ type: "OPPORTUNITY_RESEARCH_CLEARED" }),
     queueOpportunity: (

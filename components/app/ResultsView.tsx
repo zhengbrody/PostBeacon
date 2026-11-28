@@ -10,6 +10,8 @@ import { FailuresCard } from "@/components/app/results/FailuresCard";
 import { TodayTab } from "@/components/app/results/TodayTab";
 import { WeeklyTaskCard } from "@/components/app/results/WeeklyTaskCard";
 import type { WeeklyTaskController } from "@/hooks/useWeeklyTask";
+import { OutreachCard } from "@/components/app/results/OutreachCard";
+import type { OutreachController } from "@/hooks/useOutreach";
 import { PlanReport } from "@/components/app/results/PlanReport";
 import { TimelineTab } from "@/components/app/results/TimelineTab";
 import { normalizeTrackedUrl } from "@/lib/trackedUrl";
@@ -100,6 +102,7 @@ export function ResultsView({
   onQueueOpportunity,
   growthAgent,
   weeklyTask,
+  outreach,
   onReviewAgent,
   projectId,
   ownerId,
@@ -149,6 +152,7 @@ export function ResultsView({
   onResearchOpportunities: (input: TrialResearchInput, deepseekConsent?: boolean) => void;
   growthAgent: GrowthAgentControls;
   weeklyTask: WeeklyTaskController;
+  outreach: OutreachController;
   onReviewAgent: (id: string) => void;
   projectId: string;
   ownerId?: string | null;
@@ -536,6 +540,9 @@ export function ResultsView({
           productUrl={productUrl ?? ""}
           demo={demo}
         />
+      )}
+      {surface === "today" && !printing && profile && workspace.successContract && (
+        <OutreachCard controller={outreach} />
       )}
 
       {surface === "today" &&

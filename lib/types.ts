@@ -482,6 +482,35 @@ export interface WorkspaceState {
   auditLog?: AuditEntry[]; // M16 — copilot proposals and their fates (≤100)
   weeklyTask?: WeeklyTask; // M27.1 — the one current weekly task
   weeklyTaskHistory?: WeeklyTaskRecord[]; // finished tasks (≤20)
+  outreach?: OutreachContact[]; // people the founder decided to contact (≤20)
+}
+
+/* ---------- Outreach: people the founder contacts personally ---------- */
+export type OutreachStatus = "new" | "drafted" | "sent" | "replied" | "no-reply";
+
+/**
+ * One person or public thread the founder chose to answer. PostBeacon never
+ * sends the message: "sent" and "replied" are the founder's own report.
+ * `label` and `url` identify a third party and are never sent to a model.
+ */
+export interface OutreachContact {
+  id: string;
+  revision: number; // bumped on every accepted change; commands carry it
+  label: string;
+  url?: string;
+  need: string; // what this person said they need, in the founder's words or a quote
+  origin: "founder" | "research";
+  sourceId?: string; // research source it came from
+  status: OutreachStatus;
+  message?: string;
+  messageSource?: "agent" | "founder" | "example";
+  factIds?: string[];
+  reply?: string; // founder's note on what came back
+  createdAt: string;
+  updatedAt: string;
+  sentAt?: string;
+  closedAt?: string;
+  example?: boolean; // fictional demo data; never saved into a real project
 }
 
 /* ---------- M27.1 weekly task: one reviewed, verifiable product task ---------- */
