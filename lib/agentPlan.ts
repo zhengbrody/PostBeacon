@@ -13,7 +13,15 @@ import type { Fact, MarketingStrategy, SuccessContract, WorkspaceState } from ".
  * their own, and nothing in this plan publishes anything.
  */
 export type AgentStepId =
-  "read" | "confirm" | "channel" | "drafts" | "publish" | "measure" | "reach" | "improve";
+  | "read"
+  | "confirm"
+  | "channel"
+  | "drafts"
+  | "publish"
+  | "measure"
+  | "research"
+  | "reach"
+  | "improve";
 
 export type AgentStepStatus = "done" | "running" | "ready" | "needs-you" | "waiting";
 export type AgentAction = "strategy" | "generate";
@@ -226,6 +234,29 @@ export function deriveAgentPlan(input: AgentPlanInput): AgentPlan {
     view: input.hasProfile ? "profile" : undefined,
   };
 
+  // Research is recorded work, never a claim of demand: sources are counted
+  // only when their quote was actually found or supplied by the founder.
+  const research = workspace.opportunityResearch?.example
+    ? undefined
+    : workspace.opportunityResearch;
+  const quoted = (research?.sources ?? []).filter(
+    (source) =>
+      source.verification === "quote-found" || source.verification === "user-provided"
+  ).length;
+  const find: AgentStep = {
+    id: "research",
+    owner: "agent",
+    title: "Find where people describe the problem",
+    status: research ? "done" : input.hasResult ? "ready" : "waiting",
+    detail: research
+      ? `Last research: ${plural(quoted, "source")} with a real quote, ${plural(research.opportunities.length, "proposed invitation")}. A proposal is a hypothesis, not proof of demand.`
+      : input.hasResult
+        ? "Optional: in the workspace, give the agent a place to check and it reads only what you allow."
+        : "Opens in the workspace once the drafts exist.",
+    modelRequests: 0,
+    view: input.hasResult ? "results" : undefined,
+  };
+
   const people = outreachSummary(workspace.outreach);
   const reach: AgentStep = {
     id: "reach",
@@ -248,7 +279,7 @@ export function deriveAgentPlan(input: AgentPlanInput): AgentPlan {
   };
 
   const path = [read, confirm, channel, drafts, publish, measure];
-  const steps = [...path, reach, improve];
+  const steps = [...path, find, reach, improve];
   return {
     steps,
     current: path.find((step) => step.status !== "done"),
