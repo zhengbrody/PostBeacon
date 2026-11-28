@@ -4,6 +4,7 @@ import {
   type WeeklyTaskCommand,
   type WeeklyTaskContext,
 } from "@/lib/weeklyTask";
+import { applyOutreachCommand, type OutreachCommand } from "@/lib/outreach";
 import { PLATFORMS } from "@/lib/platforms";
 import {
   answerFact,
@@ -220,6 +221,7 @@ export type FlowAction =
     }
   | { type: "OPPORTUNITY_RESEARCH_CLEARED" }
   | { type: "WEEKLY_TASK_COMMAND"; projectId: string; command: WeeklyTaskCommand }
+  | { type: "OUTREACH_COMMAND"; projectId: string; command: OutreachCommand }
   | {
       type: "OPPORTUNITY_QUEUED";
       researchId: string;
@@ -376,6 +378,11 @@ function transition(s: FlowState, a: FlowAction): FlowState {
       // Example data belongs to the demo only, however it reached storage.
       if (!a.demo && workspace.weeklyTask?.example)
         workspace = { ...workspace, weeklyTask: undefined };
+      if (!a.demo && workspace.outreach?.some((c) => c.example))
+        workspace = {
+          ...workspace,
+          outreach: workspace.outreach.filter((c) => !c.example),
+        };
       if (!workspace.successContract && p.profile?.conversionGoal?.trim()) {
         workspace = {
           ...workspace,
@@ -473,6 +480,11 @@ function transition(s: FlowState, a: FlowAction): FlowState {
             ? { weeklyTask: s.workspace.weeklyTask }
             : {}),
           ...(!s.demo ? { weeklyTaskHistory: s.workspace.weeklyTaskHistory } : {}),
+          // People already contacted stay on record across a re-analysis;
+          // unsent drafts answered the old facts and are dropped.
+          ...(!s.demo && s.workspace.outreach?.some((c) => c.sentAt)
+            ? { outreach: s.workspace.outreach.filter((c) => c.sentAt) }
+            : {}),
           ...(a.profile.conversionGoal?.trim()
             ? { successContract: defaultSuccessContract(a.profile.conversionGoal) }
             : {}),
@@ -999,6 +1011,14 @@ function transition(s: FlowState, a: FlowAction): FlowState {
     case "WEEKLY_TASK_COMMAND": {
       if (a.projectId !== s.projectId) return s;
       const applied = applyWeeklyTaskCommand(s.workspace, a.command, weeklyTaskContext(s));
+      return applied.ok ? { ...s, workspace: { ...s.workspace, ...applied.next } } : s;
+    }
+    case "OUTREACH_COMMAND": {
+      if (a.projectId !== s.projectId) return s;
+      const applied = applyOutreachCommand(s.workspace, a.command, {
+        facts: s.facts,
+        profile: s.profile,
+      });
       return applied.ok ? { ...s, workspace: { ...s.workspace, ...applied.next } } : s;
     }
     case "OPPORTUNITY_QUEUED": {

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { idleWeeklyTask } from "./helpers/weeklyTask";
+import { idleOutreach, idleWeeklyTask } from "./helpers/weeklyTask";
 import { act, createElement, type ComponentProps } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -496,6 +496,7 @@ describe("publish receipt waits for canonical workspace acceptance", () => {
       onClearOpportunityResearch: vi.fn(),
       onQueueOpportunity: vi.fn(),
       weeklyTask: idleWeeklyTask(),
+      outreach: idleOutreach(),
       growthAgent: {
         runs: [],
         enabled: false,

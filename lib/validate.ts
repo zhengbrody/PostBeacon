@@ -186,6 +186,21 @@ export const weeklyTaskBodySchema = z.object({
   bannedClaims: z.array(s(200)).max(20).default([]),
 });
 
+/** Outreach — one request drafts up to five personal messages. The body carries
+ *  each person's stated need only: no name, handle or link reaches a model. */
+export const outreachBodySchema = z.object({
+  provider: z.literal("openai"),
+  profile: profileSchema,
+  facts: z.array(factSchema).max(60),
+  successContract: successContractSchema.optional(),
+  productUrl: s(2048).optional(),
+  people: z
+    .array(z.object({ alias: z.string().regex(/^c[1-5]$/), need: s(400).min(8) }))
+    .min(1)
+    .max(5),
+  bannedClaims: z.array(s(200)).max(20).default([]),
+});
+
 /** Output provenance stamp (M13). */
 const generationMetaSchema = z.object({
   provider: providerSchema,

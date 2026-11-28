@@ -1,3 +1,4 @@
+import { outreachSummary } from "./outreach";
 import { dueCheckpoints } from "./today";
 import type { Fact, MarketingStrategy, SuccessContract, WorkspaceState } from "./types";
 
@@ -12,7 +13,7 @@ import type { Fact, MarketingStrategy, SuccessContract, WorkspaceState } from ".
  * their own, and nothing in this plan publishes anything.
  */
 export type AgentStepId =
-  "read" | "confirm" | "channel" | "drafts" | "publish" | "measure" | "improve";
+  "read" | "confirm" | "channel" | "drafts" | "publish" | "measure" | "reach" | "improve";
 
 export type AgentStepStatus = "done" | "running" | "ready" | "needs-you" | "waiting";
 export type AgentAction = "strategy" | "generate";
@@ -225,8 +226,29 @@ export function deriveAgentPlan(input: AgentPlanInput): AgentPlan {
     view: input.hasProfile ? "profile" : undefined,
   };
 
+  const people = outreachSummary(workspace.outreach);
+  const reach: AgentStep = {
+    id: "reach",
+    owner: "you",
+    title: "Contact people who described the problem",
+    status: !improveReady
+      ? "waiting"
+      : people.toReview > 0 || people.awaiting > 0
+        ? "needs-you"
+        : people.sent > 0
+          ? "done"
+          : "ready",
+    detail: !improveReady
+      ? "Needs the confirmed facts and goal first."
+      : people.total === 0
+        ? "Optional, and available now: add someone, the agent drafts the message, you send it."
+        : `On the list: ${people.toReview} to review, ${people.awaiting} awaiting a reply, ${people.replied} replied. The agent never sends.`,
+    modelRequests: 0,
+    view: input.hasProfile ? (input.hasResult ? "results" : "profile") : undefined,
+  };
+
   const path = [read, confirm, channel, drafts, publish, measure];
-  const steps = [...path, improve];
+  const steps = [...path, reach, improve];
   return {
     steps,
     current: path.find((step) => step.status !== "done"),

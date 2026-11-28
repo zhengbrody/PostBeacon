@@ -143,6 +143,35 @@ describe("deriveAgentPlan", () => {
   });
 });
 
+describe("deriveAgentPlan: contacting people", () => {
+  const person = (status: string) => ({ status }) as never;
+  const withPeople = (...statuses: string[]) => ({
+    ...analyzed,
+    successContract: contract,
+    workspace: { experiments: [], taskLog: [], outreach: statuses.map(person) },
+  });
+  it("waits for the confirmed goal, then is available beside the path", () => {
+    expect(step(analyzed, "reach").status).toBe("waiting");
+    const ready = plan({ ...analyzed, successContract: contract });
+    expect(ready.steps.find((s) => s.id === "reach")).toMatchObject({
+      status: "ready",
+      owner: "you",
+      modelRequests: 0,
+    });
+    // It never becomes the current step and never gives the agent an action.
+    expect(ready.current?.id).toBe("channel");
+    expect(ready.steps.find((s) => s.id === "reach")?.action).toBeUndefined();
+  });
+  it("needs the founder while a message is unsent or a reply is awaited", () => {
+    expect(step(withPeople("new"), "reach").status).toBe("needs-you");
+    expect(step(withPeople("replied", "sent"), "reach").status).toBe("needs-you");
+    expect(step(withPeople("sent"), "reach").detail).toContain("1 awaiting a reply");
+  });
+  it("is done only when every contacted person is closed", () => {
+    expect(step(withPeople("replied", "no-reply"), "reach").status).toBe("done");
+  });
+});
+
 describe("nextAgentRunStep", () => {
   const goal = { ...analyzed, successContract: contract };
   const ranked = { ...goal, strategy, selectedCount: 1 };

@@ -381,6 +381,14 @@ export const DATA_CATEGORIES: DataCategory[] = [
       "Included in account export. Delete project or account removes authorization and associated tasks; provider-side records follow the vendors' own policies",
   },
   {
+    what: "People you decide to contact (your own label for each person, an optional public link, the need they described, your message, and your note of any reply)",
+    where:
+      "Supabase with your project, same owner-only rules. When you ask for a drafted message, OpenAI receives the described need and your verified product facts only: never the label or the link",
+    why: "Draft a personal message you review and send yourself. PostBeacon sends nothing and does not search for people or their contact details",
+    retention: "With its project. Do not record private details about another person",
+    deletion: "Remove a person from the list, or delete the project",
+  },
+  {
     what: "Prompts to the AI model (page text, profile, plan context, pasted feedback)",
     where: deepseekAutomaticFallbackEnabled()
       ? "Sent to your primary model; on availability/credit/rate-limit failure, another configured provider (including DeepSeek during this beta) may receive the retry"
