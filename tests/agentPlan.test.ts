@@ -172,6 +172,41 @@ describe("deriveAgentPlan: contacting people", () => {
   });
 });
 
+describe("deriveAgentPlan: research", () => {
+  const source = (verification: string) => ({ verification });
+  const researched = (example = false) => ({
+    ...analyzed,
+    successContract: contract,
+    strategy,
+    selectedCount: 1,
+    hasResult: true,
+    workspace: {
+      experiments: [],
+      taskLog: [],
+      opportunityResearch: {
+        example,
+        sources: [source("quote-found"), source("fetch-failed"), source("user-provided")],
+        opportunities: [{}],
+      },
+    } as never,
+  });
+  it("opens only in the workspace and never becomes the current step", () => {
+    expect(step(analyzed, "research").status).toBe("waiting");
+    const ready = plan({ ...researched(), workspace: { experiments: [], taskLog: [] } });
+    expect(ready.steps.find((s) => s.id === "research")?.status).toBe("ready");
+    expect(ready.current?.id).toBe("publish");
+  });
+  it("counts only sources whose quote was really found, and calls proposals hypotheses", () => {
+    const done = step(researched(), "research");
+    expect(done.status).toBe("done");
+    expect(done.detail).toContain("2 sources with a real quote, 1 proposed invitation");
+    expect(done.detail).toContain("not proof of demand");
+  });
+  it("ignores fictional example research", () => {
+    expect(step(researched(true), "research").status).toBe("ready");
+  });
+});
+
 describe("nextAgentRunStep", () => {
   const goal = { ...analyzed, successContract: contract };
   const ranked = { ...goal, strategy, selectedCount: 1 };
