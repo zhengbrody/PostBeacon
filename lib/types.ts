@@ -480,6 +480,81 @@ export interface WorkspaceState {
   opportunityResearch?: OpportunityResearch;
   taskLog: TaskRecord[];
   auditLog?: AuditEntry[]; // M16 — copilot proposals and their fates (≤100)
+  weeklyTask?: WeeklyTask; // M27.1 — the one current weekly task
+  weeklyTaskHistory?: WeeklyTaskRecord[]; // finished tasks (≤20)
+}
+
+/* ---------- M27.1 weekly task: one reviewed, verifiable product task ---------- */
+
+/** planning → proposed → building → verifying → verified. Code owns every transition. */
+export type WeeklyTaskStatus =
+  "planning" | "proposed" | "building" | "verifying" | "verified";
+
+/** "product-improvement" needs a verified product fact; the other two are the
+ * honest options when evidence is thin. */
+export type WeeklyTaskKind = "product-improvement" | "validate-demand" | "usability-check";
+
+export interface WeeklyTaskIntake {
+  pain: string; // the user pain this week should address, in the founder's words
+  successSignal: string; // what observable result would count
+  hoursAvailable: number; // realistic time this week
+}
+
+export interface WeeklyTaskProposal {
+  kind: WeeklyTaskKind;
+  title: string;
+  rationale: string; // why this, why now — a hypothesis, never observed demand
+  factIds: string[]; // verified ledger facts only; resolved by code
+  minimalScope: string[];
+  assumptions: string[];
+  nonGoals: string[];
+  acceptance: string[]; // observable scenarios the founder can check
+  tests: string[]; // test requirements for the coding agent
+  unknowns: string[]; // what the evidence does not establish
+}
+
+export type WeeklyTaskScenarioResult = "passed" | "failed" | "not-checked";
+
+export interface WeeklyTaskEvidence {
+  changeSummary: string; // what actually changed, written by the founder
+  proof: string; // what was observed when checking the acceptance scenarios
+  proofUrl?: string; // optional public link; never fetched or verified by PostBeacon
+  results: WeeklyTaskScenarioResult[]; // one per acceptance scenario, same order
+  submittedAt: string;
+}
+
+export interface WeeklyTask {
+  id: string;
+  /** Bumps on every accepted change; a command carrying an older value is refused. */
+  revision: number;
+  status: WeeklyTaskStatus;
+  intake: WeeklyTaskIntake;
+  /** Exact product/fact/contract version the proposal was written against. */
+  contextKey?: string;
+  proposal?: WeeklyTaskProposal;
+  proposalSource?: "model" | "founder" | "example";
+  founderEdited?: boolean;
+  meta?: ProviderRunMeta;
+  confirmedAt?: string;
+  /** Claims the brief cites, frozen at confirmation so later ledger edits cannot rewrite it. */
+  confirmedFacts?: { id: string; claim: string }[];
+  progress: { at: string; note: string }[]; // founder-reported, never evidence
+  evidence?: WeeklyTaskEvidence;
+  verifiedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+  example?: boolean; // fictional demo data
+  /** Phase-2 seam: the trial experiment prepared from this task. Unused in M27.1. */
+  linkedPlannedExperimentId?: string;
+}
+
+/** A finished task, kept small: enough to show "what did we do last week". */
+export interface WeeklyTaskRecord {
+  id: string;
+  title: string;
+  kind: WeeklyTaskKind;
+  outcome: "verified" | "abandoned";
+  endedAt: string;
 }
 
 export type TestedVariable = "hook" | "cta" | "venue" | "angle" | "exploratory";

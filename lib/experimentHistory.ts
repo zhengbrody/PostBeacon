@@ -1,3 +1,4 @@
+import { normalizeWeeklyTask, normalizeWeeklyTaskHistory } from "./weeklyTask";
 import type {
   Experiment,
   ExperimentVerdict,
@@ -151,6 +152,13 @@ export function migrateWorkspaceHistory(workspace: WorkspaceState): WorkspaceSta
   return {
     ...workspace,
     opportunityResearch: normalizeOpportunityResearch(workspace.opportunityResearch),
+    // Only touch these keys when present, so older saves keep their exact shape.
+    ...(workspace.weeklyTask !== undefined
+      ? { weeklyTask: normalizeWeeklyTask(workspace.weeklyTask) }
+      : {}),
+    ...(workspace.weeklyTaskHistory !== undefined
+      ? { weeklyTaskHistory: normalizeWeeklyTaskHistory(workspace.weeklyTaskHistory) }
+      : {}),
     ...(workspace.plannedExperiments
       ? { plannedExperiments: normalizePlannedExperiments(workspace.plannedExperiments) }
       : {}),

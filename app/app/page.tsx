@@ -1,10 +1,14 @@
 "use client";
 
+import { WeeklyTaskCard } from "@/components/app/results/WeeklyTaskCard";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useLaunchFlow, type Step } from "@/hooks/useLaunchFlow";
 import { useAutosave } from "@/hooks/useAutosave";
 import { Stepper } from "@/components/app/Stepper";
+import { AgentPlanCard } from "@/components/app/AgentPlanCard";
+import { deriveAgentPlan, type AgentAction } from "@/lib/agentPlan";
+import { useAgentRun } from "@/hooks/useAgentRun";
 import { UrlStep } from "@/components/app/UrlStep";
 import { ProfileForm } from "@/components/app/ProfileForm";
 import { FactLedger } from "@/components/app/FactLedger";
@@ -212,9 +216,46 @@ function AppFlow({
   if (f.strategy) reachable.push("strategy");
   if (f.result) reachable.push("results");
 
+  const agentPlan = deriveAgentPlan({
+    url: f.url,
+    hasProfile: Boolean(f.profile),
+    facts: f.facts,
+    successContract: f.successContract,
+    strategy: f.strategy,
+    selectedCount: f.selected.length,
+    hasResult: Boolean(f.result),
+    workspace: f.workspace,
+    loading: f.loading,
+    demo: f.demo,
+    now: new Date(),
+  });
+  const runAgentStep = (action: AgentAction) => {
+    if (action === "strategy") void f.buildStrategy();
+    else if (f.demo) f.openPreparedDemo();
+    else void f.generate();
+  };
+  const agentRun = useAgentRun({
+    plan: agentPlan,
+    loading: f.loading,
+    failed: Boolean(f.error) || Boolean(f.paywall),
+    run: runAgentStep,
+  });
+
   return (
     <>
       <Stepper step={f.step} enabled={reachable} onNavigate={f.setStep} />
+
+      <AgentPlanCard
+        plan={agentPlan}
+        view={f.step}
+        loading={f.loading}
+        demo={f.demo}
+        onRun={runAgentStep}
+        agentRun={agentRun}
+        onOpen={(view) => {
+          if (reachable.includes(view)) f.setStep(view);
+        }}
+      />
 
       {previewHandoff && f.step === "input" && !f.demo && (
         <div className="no-print mb-6 rounded-xl border border-accent-700/50 bg-accent-950/20 p-4 sm:p-5">
@@ -350,6 +391,17 @@ function AppFlow({
               if (profile) f.setProfile({ ...profile, publisherVoice });
             }}
           />
+          {/* Shortest path to value: one task needs the facts and the goal above,
+              not the full channel plan. Same card and state as on Today. */}
+          <WeeklyTaskCard
+            key={`weekly:${f.demo}:${f.weeklyTask.task?.id ?? ""}`}
+            controller={f.weeklyTask}
+            workspace={f.workspace}
+            facts={f.facts}
+            productName={f.profile.name}
+            productUrl={f.url}
+            demo={f.demo}
+          />
           <EvidenceReview facts={f.facts}>
             {f.analysisReceipt && (
               <SourceCoverageReceipt
@@ -430,6 +482,7 @@ function AppFlow({
           onClearOpportunityResearch={f.clearOpportunityResearch}
           onQueueOpportunity={f.queueOpportunity}
           growthAgent={f.growthAgent}
+          weeklyTask={f.weeklyTask}
           onReviewAgent={f.reviewAgentResearch}
           projectId={f.projectId}
           onCompleteSetup={() => f.setStep("profile")}

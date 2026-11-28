@@ -35,7 +35,9 @@ import type {
   SuccessContract,
   OpportunityResearch,
   TrialResearchInput,
+  WeeklyTaskIntake,
 } from "./types";
+import type { WeeklyTaskProposalResponse } from "./weeklyTaskServer";
 
 export interface UsageInfo {
   enabled: boolean;
@@ -131,6 +133,9 @@ export function boundedCopilotRequest(body: CopilotRequest): CopilotRequest {
           taskLog: [],
           auditLog: [],
           opportunityResearch: undefined,
+          // The weekly task is sent only by its own explicit planning request.
+          weeklyTask: undefined,
+          weeklyTaskHistory: undefined,
         }
       : undefined,
   };
@@ -302,6 +307,19 @@ export const api = {
     },
     signal?: AbortSignal
   ) => post<OpportunityResearch>("/api/opportunities", body, signal),
+  /** One explicit weekly-task proposal. Owner-bound: a changed session stops it. */
+  weeklyTask: (
+    body: {
+      provider: "openai";
+      profile: ProductProfile;
+      facts: Fact[];
+      successContract?: SuccessContract;
+      intake: WeeklyTaskIntake;
+      bannedClaims?: string[];
+    },
+    expectedUserId: string,
+    signal?: AbortSignal
+  ) => post<WeeklyTaskProposalResponse>("/api/weekly-task", body, signal, expectedUserId),
   usage: async (): Promise<UsageInfo> => {
     const res = await fetch("/api/usage", { headers: { ...(await authHeader()) } });
     return res.json();

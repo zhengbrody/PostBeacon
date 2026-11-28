@@ -216,3 +216,54 @@ describe("the demo passes its own bar (showcase must be executable)", () => {
     }
   });
 });
+
+describe("auditDraftSafety — results that never happened", () => {
+  const founder: ProductProfile = { ...profile, publisherVoice: "founder" };
+  const codes = (body: string, hook?: string, facts: Fact[] = []) =>
+    auditDraftSafety(post(body, hook), facts, founder).issues.map((item) => item.code);
+
+  it("blocks the draft the real agent run produced on 2026-11-27", () => {
+    const report = auditDraftSafety(
+      post(
+        "In one experiment, activity picked up in just 72 hours. Here is how the fact ledger works.",
+        "Experiments with Verified Facts: Our 72-Hour Result"
+      ),
+      [],
+      founder
+    );
+    expect(report.ready).toBe(false);
+    expect(report.issues.map((item) => item.code)).toContain("invented-result");
+  });
+
+  it.each<[string, string, string?]>([
+    ["possessive result in the title", "Here is what changed.", "Our 72-Hour Result"],
+    ["a test that was never run", "In an early test, founders replied faster."],
+    ["a reported lift", "We ran this for a week and saw a clear uptick."],
+    ["activity that never moved", "Replies doubled once the title changed."],
+    ["an experiment verdict", "The experiment showed founders want fewer channels."],
+  ])("blocks %s", (_name, body, hook) => {
+    expect(codes(body, hook)).toContain("invented-result");
+  });
+
+  it.each([
+    [
+      "an invitation to test",
+      "Run one small experiment this week and tell us your result.",
+    ],
+    [
+      "a plan, not a report",
+      "We are testing whether one channel is enough. Reply if you want in.",
+    ],
+    ["how the product works", "PostBeacon records your results after 24 and 72 hours."],
+    ["ordinary product copy", "We tried to keep setup down to two clicks."],
+  ])("allows %s", (_name, body) => {
+    expect(codes(body)).not.toContain("invented-result");
+  });
+
+  it("allows a result the founder has confirmed in the fact ledger", () => {
+    const confirmed = fact("In one experiment, replies doubled within 72 hours");
+    expect(
+      codes("In one experiment, replies doubled within 72 hours.", undefined, [confirmed])
+    ).not.toContain("invented-result");
+  });
+});
